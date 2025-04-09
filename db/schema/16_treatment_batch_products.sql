@@ -1,0 +1,7 @@
+CREATE TABLE treatment_batch_products (
+    id INT PRIMARY KEY IDENTITY(1,1),
+    batch_id INT NOT NULL,
+    product_id INT NOT NULL UNIQUE,  -- Each product can only be in one batch
+    FOREIGN KEY (batch_id) REFERENCES treatment_batches(id),
+    FOREIGN KEY (product_id) REFERENCES product_tracking(id)
+);
