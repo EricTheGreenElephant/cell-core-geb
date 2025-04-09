@@ -1,0 +1,43 @@
+name: Deploy SQL to Azure
+
+on:
+  push:
+    branches:
+      - dev  # Dev auto-deploy
+    tags:
+      - 'v*' # Prod only on version tags like v1.0.0
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Install SQLCMD
+        run: |
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y mssql-tools unixodbc-dev
+          echo 'export PATH="$PATH:/opt/mssql-tools/bin:$PATH"' >> $GITHUB_ENV
+
+      - name: Deploy schema
+        env:
+          DB_SERVER: ${{ secrets.AZURE_SQL_SERVER }}
+          DB_NAME: ${{ secrets.AZURE_SQL_DATABASE }}
+          DB_USER: ${{ secrets.AZURE_SQL_USERNAME }}
+          DB_PASS: ${{ secrets.AZURE_SQL_PASSWORD }}
+        run: |
+          sqlcmd -S $DB_SERVER -d $DB_NAME -U $DB_USER -P $DB_PASS -i db/migrations/001_initial_schema.sql
+
+      - name: Seed dev data (only in dev)
+        if: github.ref == 'refs/heads/dev'
+        env:
+          DB_SERVER: ${{ secrets.AZURE_SQL_SERVER }}
+          DB_NAME: ${{ secrets.AZURE_SQL_DATABASE }}
+          DB_USER: ${{ secrets.AZURE_SQL_USERNAME }}
+          DB_PASS: ${{ secrets.AZURE_SQL_PASSWORD }}
+        run: |
+          for file in db/seed/*.sql; do
+            sqlcmd -S $DB_SERVER -d $DB_NAME -U $DB_USER -P $DB_PASS -i "$file"
+          done
