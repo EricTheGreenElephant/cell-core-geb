@@ -9,6 +9,6 @@ CREATE TABLE post_treatment_inspections (
         CHECK (final_result IN ('Approved for Sale', 'Internal Use', 'Rejected')),
     notes NVARCHAR(255),
 
-    FOREIGN KEY (product_id) REFERENCES product_tracking(id),
-    FOREIGN KEY (inspected_by) REFERENCES users(id)
+    CONSTRAINT fk_post_qc_product FOREIGN KEY (product_id) REFERENCES product_tracking(id),
+    CONSTRAINT fk_post_qc_user FOREIGN KEY (inspected_by) REFERENCES users(id)
 );

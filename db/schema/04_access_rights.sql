@@ -5,8 +5,8 @@ CREATE TABLE access_rights (
     access_level NVARCHAR(20) NOT NULL
         CHECK (access_level IN ('Read', 'Write', 'Admin')),
 
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (area_id) REFERENCES application_areas(id),
+    CONSTRAINT fk_access_user FOREIGN KEY (user_id) REFERENCES users(id),
+    CONSTRAINT fk_access_area FOREIGN KEY (area_id) REFERENCES application_areas(id),
 
     CONSTRAINT uc_user_area UNIQUE (user_id, area_id)  -- prevent duplicates
 );

@@ -5,7 +5,8 @@ CREATE TABLE product_harvest (
     printed_by INT NOT NULL,
     print_date DATETIME2,
     print_status NVARCHAR(50) DEFAULT 'Queued',
-    FOREIGN KEY (request_id) REFERENCES product_requests(id),
-    FOREIGN KEY (filament_tracking_id) REFERENCES filament_tracking(id),
-    FOREIGN KEY (printed_by) REFERENCES users(id)
+
+    CONSTRAINT fk_harvest_request FOREIGN KEY (request_id) REFERENCES product_requests(id),
+    CONSTRAINT fk_harvest_filament_mounting FOREIGN KEY (filament_mounting_id) REFERENCES filament_mounting(id),
+    CONSTRAINT fk_harvest_user FOREIGN KEY (printed_by) REFERENCES users(id)
 );

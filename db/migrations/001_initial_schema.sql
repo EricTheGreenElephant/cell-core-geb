@@ -77,50 +77,101 @@ BEGIN
 END;
 
 -- ========== FILAMENT TRACKING ==========
+-- IF OBJECT_ID('filaments', 'U') IS NULL
+-- BEGIN
+--     CREATE TABLE filaments (
+--         id INT PRIMARY KEY IDENTITY(1,1),
+--         name NVARCHAR(100) NOT NULL,
+--         location_id INT NOT NULL,
+--         weight_grams DECIMAL(10,2) NOT NULL,
+--         material_type NVARCHAR(50) NOT NULL,
+--         diameter_mm DECIMAL(4,2) NOT NULL DEFAULT 1.75,
+--         created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+
+--         CONSTRAINT fk_filament_location FOREIGN KEY (location_id) REFERENCES storage_locations(id)
+--     );
+-- END;
+
+-- IF OBJECT_ID('filament_quality_control', 'U') IS NULL
+-- BEGIN
+--     CREATE TABLE filament_quality_control (
+--         id INT PRIMARY KEY IDENTITY(1,1),
+--         filament_id INT NOT NULL,
+--         inspected_by INT NOT NULL,
+--         inspection_date DATETIME2 NOT NULL DEFAULT GETDATE(),
+--         result NVARCHAR(10) NOT NULL CHECK (result IN ('Pass', 'Fail')),
+--         notes NVARCHAR(255),
+
+--         CONSTRAINT fk_qc_user FOREIGN KEY (inspected_by) REFERENCES users(id),
+--         CONSTRAINT fk_qc_filament FOREIGN KEY (filament_id) REFERENCES filaments(id)
+--     );
+-- END;
+
+-- IF OBJECT_ID('filament_tracking', 'U') IS NULL
+-- BEGIN
+--     CREATE TABLE filament_tracking (
+--         id INT PRIMARY KEY IDENTITY(1,1),
+--         filament_id INT NOT NULL,
+--         printer_id INT,
+--         user_id INT NOT NULL,
+--         status NVARCHAR(50) NOT NULL,
+--         status_date DATETIME2 NOT NULL DEFAULT GETDATE(),
+--         notes NVARCHAR(255),
+
+--         CONSTRAINT fk_tracking_filament FOREIGN KEY (filament_id) REFERENCES filaments(id),
+--         CONSTRAINT fk_tracking_printer FOREIGN KEY (printer_id) REFERENCES printers(id),
+--         CONSTRAINT fk_tracking_user FOREIGN KEY (user_id) REFERENCES users(id)
+--     );
+-- END;
+
 IF OBJECT_ID('filaments', 'U') IS NULL
 BEGIN
     CREATE TABLE filaments (
         id INT PRIMARY KEY IDENTITY(1,1),
-        name NVARCHAR(100) NOT NULL,
+        serial_number NVARCHAR(100) NOT NULL UNIQUE,
         location_id INT NOT NULL,
         weight_grams DECIMAL(10,2) NOT NULL,
         material_type NVARCHAR(50) NOT NULL,
-        diameter_mm DECIMAL(4,2) NOT NULL DEFAULT 1.75,
         created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+        received_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+        received_by INT NOT NULL,
+        qc_result NVARCHAR(10) NOT NULL CHECK (qc_result in ('PASS', 'FAIL')),
 
-        CONSTRAINT fk_filament_location FOREIGN KEY (location_id) REFERENCES storage_locations(id)
+        CONSTRAINT fk_filament_location
+            FOREIGN KEY (location_id) REFERENCES storage_locations(id),
+        CONSTRAINT fk_filament_user FOREIGN KEY (received_by) REFERENCES users(id)
     );
 END;
 
-IF OBJECT_ID('filament_quality_control', 'U') IS NULL
+IF OBJECT_ID('filament_acclimatization', 'U') IS NULL
 BEGIN
-    CREATE TABLE filament_quality_control (
-        id INT PRIMARY KEY IDENTITY(1,1),
-        filament_id INT NOT NULL,
-        inspected_by INT NOT NULL,
-        inspection_date DATETIME2 NOT NULL DEFAULT GETDATE(),
-        result NVARCHAR(10) NOT NULL CHECK (result IN ('Pass', 'Fail')),
-        notes NVARCHAR(255),
+    CREATE TABLE filament_acclimatization(
+        id INT PRIMARY KEY IDENTITY,
+        filament_id INT NOT NULL UNIQUE,
+        moved_by INT NOT NULL,
+        moved_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+        ready_at AS DATEADD(DAY, 2, moved_at) PERSISTED,
+        status NVARCHAR(50) NOT NULL DEFAULT 'In Acclimatization',
 
-        CONSTRAINT fk_qc_user FOREIGN KEY (inspected_by) REFERENCES users(id),
-        CONSTRAINT fk_qc_filament FOREIGN KEY (filament_id) REFERENCES filaments(id)
+        CONSTRAINT fk_accl_fila FOREIGN KEY (filament_id) REFERENCES filaments(id),
+        CONSTRAINT fk_accl_user FOREIGN KEY (moved_by) REFERENCES users(id)
     );
 END;
 
-IF OBJECT_ID('filament_tracking', 'U') IS NULL
+IF OBJECT_ID('filament_mounting', 'U') IS NULL
 BEGIN
-    CREATE TABLE filament_tracking (
-        id INT PRIMARY KEY IDENTITY(1,1),
-        filament_id INT NOT NULL,
-        printer_id INT,
-        user_id INT NOT NULL,
-        status NVARCHAR(50) NOT NULL,
-        status_date DATETIME2 NOT NULL DEFAULT GETDATE(),
-        notes NVARCHAR(255),
+    CREATE TABLE filament_mounting(
+        id INT PRIMARY KEY IDENTITY,
+        filament_id INT NOT NULL UNIQUE,
+        printer_id INT NOT NULL,
+        mounted_by INT NOT NULL,
+        mounted_at DATETIME2 DEFAULT GETDATE(),
+        remaining_weight DECIMAL(10,2) NOT NULL,
+        status NVARCHAR(50) NOT NULL DEFAULT 'In Use',
 
-        CONSTRAINT fk_tracking_filament FOREIGN KEY (filament_id) REFERENCES filaments(id),
-        CONSTRAINT fk_tracking_printer FOREIGN KEY (printer_id) REFERENCES printers(id),
-        CONSTRAINT fk_tracking_user FOREIGN KEY (user_id) REFERENCES users(id)
+        CONSTRAINT fk_mount_filament FOREIGN KEY (filament_id) REFERENCES filaments(id),
+        CONSTRAINT fk_mount_printer FOREIGN KEY (printer_id) REFERENCES printers(id),
+        CONSTRAINT fk_mount_user FOREIGN KEY (mounted_by) REFERENCES users(id)
     );
 END;
 
@@ -156,14 +207,30 @@ BEGIN
     CREATE TABLE product_harvest (
         id INT PRIMARY KEY IDENTITY(1,1),
         request_id INT NOT NULL,
-        filament_tracking_id INT NOT NULL,
+        filament_mounting_id INT NOT NULL,
         printed_by INT NOT NULL,
         print_date DATETIME2,
-        status NVARCHAR(50) DEFAULT 'Queued',
+        print_status NVARCHAR(50) DEFAULT 'Queued',
 
         CONSTRAINT fk_harvest_request FOREIGN KEY (request_id) REFERENCES product_requests(id),
-        CONSTRAINT fk_harvest_filament_tracking FOREIGN KEY (filament_tracking_id) REFERENCES filament_tracking(id),
+        CONSTRAINT fk_harvest_filament_mounting FOREIGN KEY (filament_mounting_id) REFERENCES filament_mounting(id),
         CONSTRAINT fk_harvest_user FOREIGN KEY (printed_by) REFERENCES users(id)
+    );
+END;
+
+IF OBJECT_ID('filament_usage_log', 'U') IS NULL
+BEGIN
+    CREATE TABLE filament_usage_log (
+        id INT PRIMARY KEY IDENTITY,
+        filament_id INT NOT NULL,
+        harvest_id INT NOT NULL,
+        used_grams DECIMAL(6, 2) NOT NULL,
+        deducted_by INT NOT NULL,
+        deducted_at DATETIME2 DEFAULT GETDATE(),
+
+        CONSTRAINT fk_usage_filament FOREIGN KEY (filament_id) REFERENCES filaments(id),
+        CONSTRAINT fk_usage_user FOREIGN KEY (deducted_by) REFERENCES users(id),
+        CONSTRAINT fk_usage_product FOREIGN KEY (harvest_id) REFERENCES product_harvest(id)
     );
 END;
 
@@ -260,6 +327,7 @@ BEGIN
         order_date DATETIME2 NOT NULL DEFAULT GETDATE(),
         order_creator_id INT NOT NULL,
         status NVARCHAR(20) NOT NULL CHECK (status IN ('Processing', 'Shipped', 'Completed', 'Canceled')),
+        updated_at DATETIME2 DEFAULT GETDATE(),
 
         CONSTRAINT fk_order_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
         CONSTRAINT fk_order_creator FOREIGN KEY (order_creator_id) REFERENCES users(id)
@@ -277,6 +345,7 @@ BEGIN
         ship_date DATETIME2,
         delivery_date DATETIME2,
         status NVARCHAR(20) NOT NULL CHECK (status IN ('Pending', 'Shipped', 'In Transit', 'Delivered', 'Returned', 'Canceled')),
+        updated_at DATETIME2 DEFAULT GETDATE(),
         tracking_number NVARCHAR(50),
         carrier NVARCHAR(50),
 

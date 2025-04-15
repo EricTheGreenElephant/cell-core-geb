@@ -6,6 +6,6 @@ CREATE TABLE product_requests (
     status NVARCHAR(50) DEFAULT 'Pending',
     requested_at DATETIME2 DEFAULT GETDATE(),
     notes NVARCHAR(255),
-    FOREIGN KEY (requested_by) REFERENCES users(id),
-    FOREIGN KEY (product_id) REFERENCES products(id)
+    CONSTRAINT fk_request_user FOREIGN KEY (requested_by) REFERENCES users(id),
+    CONSTRAINT fk_request_product FOREIGN KEY (product_id) REFERENCES products(id)
 );
