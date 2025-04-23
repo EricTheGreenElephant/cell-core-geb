@@ -66,9 +66,6 @@ BEGIN
         id INT PRIMARY KEY IDENTITY(1,1),
         name NVARCHAR(100) NOT NULL UNIQUE,
         location_id INT NOT NULL,
-        manufacturer NVARCHAR(100),
-        model NVARCHAR(100),
-        serial_number NVARCHAR(100),
         status NVARCHAR(50) NOT NULL DEFAULT 'Active',
         created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
 
@@ -151,7 +148,7 @@ BEGIN
         moved_by INT NOT NULL,
         moved_at DATETIME2 NOT NULL DEFAULT GETDATE(),
         ready_at AS DATEADD(DAY, 2, moved_at) PERSISTED,
-        status NVARCHAR(50) NOT NULL DEFAULT 'In Acclimatization',
+        status NVARCHAR(50) NOT NULL CHECK (status in ('In Acclimatization', 'In Production')),
 
         CONSTRAINT fk_accl_fila FOREIGN KEY (filament_id) REFERENCES filaments(id),
         CONSTRAINT fk_accl_user FOREIGN KEY (moved_by) REFERENCES users(id)
@@ -166,12 +163,15 @@ BEGIN
         printer_id INT NOT NULL,
         mounted_by INT NOT NULL,
         mounted_at DATETIME2 DEFAULT GETDATE(),
+        unmounted_at DATETIME2 NULL,
+        unmounted_by INT NULL,
         remaining_weight DECIMAL(10,2) NOT NULL,
         status NVARCHAR(50) NOT NULL DEFAULT 'In Use',
 
         CONSTRAINT fk_mount_filament FOREIGN KEY (filament_id) REFERENCES filaments(id),
         CONSTRAINT fk_mount_printer FOREIGN KEY (printer_id) REFERENCES printers(id),
-        CONSTRAINT fk_mount_user FOREIGN KEY (mounted_by) REFERENCES users(id)
+        CONSTRAINT fk_mount_user FOREIGN KEY (mounted_by) REFERENCES users(id),
+        CONSTRAINT fk_mounting_unmounted_by FOREIGN KEY (unmounted_by) REFERENCES(users(id))
     );
 END;
 
@@ -192,7 +192,7 @@ BEGIN
         id INT PRIMARY KEY IDENTITY(1,1),
         requested_by INT NOT NULL,
         product_id INT NOT NULL,
-        quantity INT NOT NULL,
+        lot_number NVARCHAR(50) NOT NULL;
         status NVARCHAR(50) DEFAULT 'Pending',
         requested_at DATETIME2 DEFAULT GETDATE(),
         notes NVARCHAR(255),
@@ -242,7 +242,7 @@ BEGIN
         inspected_by INT NOT NULL,
         inspected_at DATETIME2 DEFAULT GETDATE(),
         weight_grams DECIMAL(6,2) NOT NULL,
-        pressure_drop DECIMAL(6,2) NOT NULL,
+        pressure_drop DECIMAL(6,3) NOT NULL,
         visual_pass BIT NOT NULL,
         inspection_result NVARCHAR(20) NOT NULL CHECK (inspection_result IN ('Passed', 'B-Ware', 'Waste')),
         notes NVARCHAR(255),

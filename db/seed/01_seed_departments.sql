@@ -3,6 +3,6 @@ BEGIN
     INSERT INTO departments (department_name) VALUES
     ('Production'),
     ('Quality Control'),
-    ('Shipping'),
-    ('Engineering');
+    ('Sales'),
+    ('Logistics');
 END;
