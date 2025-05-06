@@ -8,7 +8,7 @@ require_login()
 require_access("Quality Control", minimum_level="Write")
 show_user_sidebar()
 
-st.title("Quality Control")
+st.title("Quality Management")
 
 tab1, tab2 = st.tabs(["Product QC", "Treatment QC"])
 

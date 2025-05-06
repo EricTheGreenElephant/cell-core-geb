@@ -1,13 +1,20 @@
 import pyodbc
 from utils.db import db_connection
 
+
+def get_all_filament_statuses():
+    with db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM v_filament_status ORDER BY filament_id")
+        cols = [col[0] for col in cursor.description]
+        return [dict(zip(cols, row)) for row in cursor.fetchall()]
+    
 def get_active_filaments():
     with db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT
                 f.serial_number,
-                f.material_type,
                 f.qc_result,
                 f.weight_grams AS initial_weight,
                 f.received_at,
@@ -25,7 +32,6 @@ def get_active_filaments():
             
             SELECT 
                 f.serial_number,
-                f.material_type,
                 f.qc_result,
                 f.weight_grams AS initial_weight,
                 f.received_at,
@@ -47,7 +53,6 @@ def get_archived_filaments():
         cursor.execute("""
             SELECT 
                 f.serial_number,
-                f.material_type,
                 f.qc_result,
                 f.weight_grams AS initial_weight,
                 fm.remaining_weight,
@@ -71,7 +76,6 @@ def get_in_use_filaments():
         cursor.execute("""
             SELECT
                 f.serial_number,
-                f.material_type,
                 f.qc_result,
                 f.weight_grams AS initial_weight,
                 fm.remaining_weight,
@@ -93,11 +97,9 @@ def get_filaments():
                 SELECT
                     f.id,
                     f.serial_number,
-                    f.material_type,
                     f.weight_grams AS initial_weight,
                     fm.remaining_weight,
                     f.qc_result,
-                    f.created_at,
                     f.received_at,
                     loc.location_name AS storage_location,
                     u.display_name AS received_by,
@@ -141,14 +143,14 @@ def get_storage_locations():
         print(f"[DB ERROR] Failed to fetch locations: {e}")
         return []
     
-def insert_filament(serial_number, material_type, weight_grams, location_id, qc_result, received_by):
+def insert_filament(serial_number, weight_grams, location_id, qc_result, received_by):
     try: 
         with db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                        INSERT INTO filaments (serial_number, material_type, weight_grams, location_id, qc_result, received_by)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                        """, (serial_number, material_type, weight_grams, location_id, qc_result, received_by))
+                        INSERT INTO filaments (serial_number, weight_grams, location_id, qc_result, received_by)
+                        VALUES (?, ?, ?, ?, ?)
+                        """, (serial_number, weight_grams, location_id, qc_result, received_by))
             conn.commit()
     except pyodbc.Error as e:
         raise RuntimeError(f"[DB INSERT ERROR] {e}")
@@ -158,7 +160,7 @@ def get_acclimatized_filaments():
         with db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT f.id, f.serial_number, f.material_type, f.weight_grams,
+                SELECT f.id, f.serial_number, f.weight_grams,
                     a.id AS acclimatization_id, a.ready_at, loc.location_name
                 FROM filament_acclimatization a
                 JOIN filaments f ON a.filament_id = f.id
@@ -181,16 +183,17 @@ def get_available_printers():
         with db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                        SELECT p.id, p.name
-                        FROM printers p
-                        WHERE NOT EXISTS (
-                            SELECT 1
-                            FROM filament_mounting fm
-                            WHERE fm.printer_id = p.id
-                        )
-                        ORDER BY p.name
-                    """)
-            return cursor.fetchall()
+                SELECT p.id, p.name
+                FROM printers p
+                WHERE p.status = 'Active'
+                AND p.id NOT IN (
+                    SELECT printer_id
+                    FROM filament_mounting
+                    WHERE unmounted_at IS NULL
+                )
+            """)
+            cols = [col[0] for col in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
     except pyodbc.Error as e:
         print(f"[DB ERROR] Failed to fetch printers: {e}")
         return []
@@ -261,23 +264,25 @@ def get_filaments_not_acclimatizing():
     with db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT f.id, f.serial_number, f.material_type
+            SELECT f.id, f.serial_number
             FROM filaments f
-            WHERE f.id NOT IN (
-                SELECT filament_id
-                FROM filament_acclimatization
-                WHERE status IN ('In Acclimatization', 'In Production')
-            )
+            WHERE f.qc_result = 'PASS'
+                AND f.id NOT IN (
+                    SELECT filament_id
+                    FROM filament_acclimatization
+                    WHERE status IN ('In Acclimatization', 'In Production')
+                )
         """)
-        return cursor.fetchall()
+        cols = [col[0] for col in cursor.description]
+        return [dict(zip(cols, row)) for row in cursor.fetchall()]
     
 def insert_filament_acclimatization(filament_id: int, user_id: int):
     try:
         with db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO filament_acclimatization (filament_id, status, moved_at, ready_at, moved_by)
-                VALUES (?, 'In Acclimatization', GETDATE(), DATEADD(DAY, 2, GETDATE()), ?)
+                INSERT INTO filament_acclimatization (filament_id, status, moved_at, moved_by)
+                VALUES (?, 'In Acclimatization', GETDATE(), ?)
             """, (filament_id, user_id))
             conn.commit()
     except Exception as e:

@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 from data.qc import get_printed_products, insert_product_qc
 
 
@@ -19,11 +20,11 @@ def render_qc_form():
     selected = product_map[selection]
 
     avg_weight = selected["average_weight"]
-    tolerance = selected["percentage_change"]
-    weight_low = avg_weight * (1 - tolerance)
-    weight_high = avg_weight * (1 + tolerance)
+    tolerance = selected["buffer_weight"]
+    weight_low = avg_weight - tolerance
+    weight_high = avg_weight + tolerance
 
-    st.markdown(f"**Target Weight:** {avg_weight:.2f}g ± {tolerance*100:.1f}%")
+    st.markdown(f"**Target Weight:** {avg_weight:.2f}g ± {tolerance}g")
     st.markdown(f"**Accepted Range:** {weight_low:.2f}g to {weight_high:.2f}g")
 
     weight = st.number_input("Measured Weight (g)", min_value=0.0, format="%.2f")
@@ -31,20 +32,19 @@ def render_qc_form():
     visual = st.radio("Visual Check", ["Pass", "Fail"])
 
     # Validation messages
-    suggested_result = "Passed"
+    result = "Passed"
     if weight > 0:
         if weight < weight_low or weight > weight_high:
             st.error("Weight outside acceptable range.")
-            suggested_result = "B-Ware"
+            result = "B-Ware"
     if visual == "Fail":
-        suggested_result = "B-Ware"
+        result = "B-Ware"
     if pressure >= 6:
-        suggested_result = "Waste"
+        st.error("Pressure above the acceptable tolerance.")
+        result = "Waste"
 
-    st.markdown(f"**Suggested Result:** `{suggested_result}`")
+    st.markdown(f"**Final QC Result:** `{result}`")
     with st.form("qc_form"):       
-        # Manual override with default set to suggestion
-        result = st.selectbox("Overall QC Result", ["Passed", "B-Ware", "Waste"])
         notes = st.text_area("Notes (optional)", max_chars=255)
 
         submitted = st.form_submit_button("Submit QC")
@@ -52,8 +52,6 @@ def render_qc_form():
         if submitted:
             if weight == 0.0 or pressure == 0.0:
                 st.warning("Please enter a valid weight and pressure before submitting.")
-            elif suggested_result != result:
-                st.warning("The suggested result and entered result do not match. Please check.")
             else:
                 try:
                     user_id = st.session_state.get("user_id")
@@ -67,6 +65,8 @@ def render_qc_form():
                         notes=notes
                     )
                     st.success("QC submitted successfully.")
+                    time.sleep(1.5)
+                    st.rerun()
                 except Exception as e:
                     st.error("Failed to submit QC.")
                     st.exception(e)

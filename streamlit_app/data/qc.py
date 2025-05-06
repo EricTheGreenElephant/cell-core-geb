@@ -9,7 +9,7 @@ def get_printed_products():
                         pr.id AS request_id,
                         pt.name AS product_type,
                         pt.average_weight,
-                        pt.percentage_change,
+                        pt.buffer_weight,
                         pr.lot_number,
                         ph.print_date
                     FROM product_harvest ph 

@@ -73,54 +73,6 @@ BEGIN
     );
 END;
 
--- ========== FILAMENT TRACKING ==========
--- IF OBJECT_ID('filaments', 'U') IS NULL
--- BEGIN
---     CREATE TABLE filaments (
---         id INT PRIMARY KEY IDENTITY(1,1),
---         name NVARCHAR(100) NOT NULL,
---         location_id INT NOT NULL,
---         weight_grams DECIMAL(10,2) NOT NULL,
---         material_type NVARCHAR(50) NOT NULL,
---         diameter_mm DECIMAL(4,2) NOT NULL DEFAULT 1.75,
---         created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
-
---         CONSTRAINT fk_filament_location FOREIGN KEY (location_id) REFERENCES storage_locations(id)
---     );
--- END;
-
--- IF OBJECT_ID('filament_quality_control', 'U') IS NULL
--- BEGIN
---     CREATE TABLE filament_quality_control (
---         id INT PRIMARY KEY IDENTITY(1,1),
---         filament_id INT NOT NULL,
---         inspected_by INT NOT NULL,
---         inspection_date DATETIME2 NOT NULL DEFAULT GETDATE(),
---         result NVARCHAR(10) NOT NULL CHECK (result IN ('Pass', 'Fail')),
---         notes NVARCHAR(255),
-
---         CONSTRAINT fk_qc_user FOREIGN KEY (inspected_by) REFERENCES users(id),
---         CONSTRAINT fk_qc_filament FOREIGN KEY (filament_id) REFERENCES filaments(id)
---     );
--- END;
-
--- IF OBJECT_ID('filament_tracking', 'U') IS NULL
--- BEGIN
---     CREATE TABLE filament_tracking (
---         id INT PRIMARY KEY IDENTITY(1,1),
---         filament_id INT NOT NULL,
---         printer_id INT,
---         user_id INT NOT NULL,
---         status NVARCHAR(50) NOT NULL,
---         status_date DATETIME2 NOT NULL DEFAULT GETDATE(),
---         notes NVARCHAR(255),
-
---         CONSTRAINT fk_tracking_filament FOREIGN KEY (filament_id) REFERENCES filaments(id),
---         CONSTRAINT fk_tracking_printer FOREIGN KEY (printer_id) REFERENCES printers(id),
---         CONSTRAINT fk_tracking_user FOREIGN KEY (user_id) REFERENCES users(id)
---     );
--- END;
-
 IF OBJECT_ID('filaments', 'U') IS NULL
 BEGIN
     CREATE TABLE filaments (
@@ -128,8 +80,6 @@ BEGIN
         serial_number NVARCHAR(100) NOT NULL UNIQUE,
         location_id INT NOT NULL,
         weight_grams DECIMAL(10,2) NOT NULL,
-        material_type NVARCHAR(50) NOT NULL,
-        created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
         received_at DATETIME2 NOT NULL DEFAULT GETDATE(),
         received_by INT NOT NULL,
         qc_result NVARCHAR(10) NOT NULL CHECK (qc_result in ('PASS', 'FAIL')),
@@ -182,7 +132,7 @@ BEGIN
         id INT PRIMARY KEY IDENTITY(1,1),
         name NVARCHAR(100) NOT NULL UNIQUE,
         average_weight DECIMAL(6,2) NOT NULL,
-        percentage_change DECIMAL(5,4) NOT NULL
+        buffer_weight DECIMAL(4,2) NOT NULL
     );
 END;
 

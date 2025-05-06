@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 from data.production import get_pending_requests, get_mountable_filament_mounts, insert_product_harvest, cancel_product_request
 
 
@@ -15,10 +16,10 @@ def render_harvest_form():
         with st.expander(f"🧾 Request #{unit['id']} – {unit['product_type']} (Lot: {unit['lot_number']})"):
             st.markdown(f"**Requested by:** {unit['requested_by']}  \n**Date:** {unit['requested_at']}")
 
-            # Calculate required weight with buffer
+            # Calculate required weight with tolerated buffer weight and additional buffer  
             avg = unit["average_weight"]
-            pct = unit["percentage_change"]
-            required_weight = avg * (1 + pct) + 10
+            buffer = unit["buffer_weight"]
+            required_weight = avg + buffer + 10
             
             # Filter available printers based on weight
             mounts = get_mountable_filament_mounts(required_weight)
@@ -45,6 +46,8 @@ def render_harvest_form():
                         user_id = st.session_state.get("user_id")
                         insert_product_harvest(request_id=unit['id'], filament_mount_id=mount_id, printed_by=user_id)
                         st.success("Product marked as harvested.")
+                        time.sleep(1.5)
+                        st.rerun()
                     except Exception as e:
                         st.error("Error fulfilling request.")
                         st.exception(e)

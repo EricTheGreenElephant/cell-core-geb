@@ -2,8 +2,7 @@ import streamlit as st
 from data.filament import get_mounted_filaments, unmount_filament
 
 def render_unmount_form():
-    st.divider()
-    st.markdown("### Unmount Filament")
+    st.markdown("Unmount Filament")
 
     try:
         mounted = get_mounted_filaments()

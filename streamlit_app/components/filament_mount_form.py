@@ -2,7 +2,7 @@ import streamlit as st
 from data.filament import get_acclimatized_filaments, get_available_printers, insert_filament_mount
 
 def render_mount_form():
-    st.subheader("Mount Acclimatized Filament")
+    st.markdown("Mount Acclimatized Filament")
 
     filaments = get_acclimatized_filaments()
     printers = get_available_printers()
@@ -12,11 +12,11 @@ def render_mount_form():
         return
     
     filament_options = {
-        f"{f['serial_number']} ({f['material_type']}, {f['weight_grams']}g)": (f["id"], f["acclimatization_id"])
+        f"{f['serial_number']} ({f['weight_grams']}g)": (f["id"], f["acclimatization_id"])
         for f in filaments
     }
 
-    printer_options = {p[1]: p[0] for p in printers}
+    printer_options = {p["name"]: p["id"] for p in printers}
 
     if not printer_options:
         st.info("No available printers. All printers are currently in use.")

@@ -44,7 +44,7 @@ def get_pending_requests():
                         pr.status,
                         pr.requested_at,
                         pt.average_weight,
-                        pt.percentage_change
+                        pt.buffer_weight
                     FROM product_requests pr
                     JOIN product_types pt ON pt.id = pr.product_id
                     JOIN users u ON u.id = pr.requested_by
