@@ -86,16 +86,16 @@ def get_mountable_filament_mounts(required_weight: float):
         return [dict(zip(cols, row)) for row in cursor.fetchall()]
     
 
-def insert_product_harvest(request_id, filament_mount_id, printed_by):
+def insert_product_harvest(request_id, filament_mount_id, printed_by, lid_id):
     with db_connection() as conn:
         cursor = conn.cursor()
 
         # Insert into product_harvest
         cursor.execute("""
-                    INSERT INTO product_harvest (request_id, filament_mounting_id, printed_by, print_date, print_status)
+                    INSERT INTO product_harvest (request_id, filament_mounting_id, printed_by, print_date, print_status, lid_id)
                     OUTPUT INSERTED.id
-                    VALUES (?, ?, ?, GETDATE(), 'Printed')
-                """, (request_id, filament_mount_id, printed_by))
+                    VALUES (?, ?, ?, GETDATE(), 'Printed', ?)
+                """, (request_id, filament_mount_id, printed_by, lid_id))
         harvest_id = cursor.fetchone()[0]
         
         # Insert into product_tracking
@@ -124,3 +124,14 @@ def cancel_product_request(request_id):
             conn.commit()
     except pyodbc.Error as e:
         raise RuntimeError(f"[DB UPDATE ERROR] {e}")
+    
+def get_available_lid_batches():
+    with db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, serial_number
+            FROM lids
+            WHERE qc_result = 'PASS'
+            ORDER BY received_at DESC
+        """)
+        return [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]

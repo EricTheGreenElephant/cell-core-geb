@@ -136,9 +136,14 @@ def get_storage_locations():
     try:
         with db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, location_name FROM storage_locations ORDER BY location_name")
-            rows = cursor.fetchall()
-            return rows
+            cursor.execute("""
+                SELECT id, location_name, location_type, description 
+                FROM storage_locations 
+                ORDER BY location_name
+            """)
+            cols = [col[0] for col in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
+            
     except pyodbc.Error as e:
         print(f"[DB ERROR] Failed to fetch locations: {e}")
         return []

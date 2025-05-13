@@ -5,7 +5,17 @@ from components.status_tracker import render_status_tracker
 from components.request_form import render_product_request_form
 from components.harvest_form import render_harvest_form
 from components.qc_form import render_qc_form
+from components.toggle import toggle_button
 
+
+if "show_inventory" not in st.session_state:
+    st.session_state.show_inventory = False
+
+if "show_requests" not in st.session_state:
+    st.session_state.show_requests = False
+
+if "show_qc_requests" not in st.session_state:
+    st.session_state.show_qc_requests = False
 
 st.title("Production Management")
 
@@ -23,7 +33,9 @@ access_level = st.session_state["access"]["Production"]
 tab1, tab2, tab3, tab4 = st.tabs(["Inventory", "New Request", "Harvest Requests", "Product QC"])
 
 with tab1:
-    render_status_tracker()
+    toggle_button("show_inventory", "Show Inventory", "Hide Inventory")
+    if st.session_state.get("show_inventory", False):
+        render_status_tracker()
 
 with tab2:
     if access_level in ("Write", "Admin"):
@@ -33,12 +45,16 @@ with tab2:
 
 with tab3:
     if access_level in ("Write", "Admin"):
-        render_harvest_form()
+        toggle_button("show_requests", "Retrieve Requests", "Hide Requests")
+        if st.session_state.get("show_requests", False):
+            render_harvest_form()
     else:
         st.warning("🔒 You do not have permission to view Harvest Requests.")
 
 with tab4:
     if access_level in ("Write", "Admin"):
-        render_qc_form()
+        toggle_button("show_qc_requests", "Retrieve QC Requests", "Hide QC Requests")
+        if st.session_state.get("show_qc_requests", False):
+            render_qc_form()
     else:
         st.warning("🔒 You do not have permission to view Product QC")

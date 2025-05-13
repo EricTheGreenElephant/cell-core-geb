@@ -73,6 +73,22 @@ BEGIN
     );
 END;
 
+IF OBJECT_ID('lids', 'U') IS NULL
+BEGIN 
+    CREATE TABLE lids (
+        id INT PRIMARY KEY IDENTITY(1,1),
+        serial_number NVARCHAR(100) NOT NULL UNIQUE,
+        location_id INT NOT NULL,
+        received_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+        received_by INT NOT NULL,
+        qc_result NVARCHAR(10) NOT NULL CHECK (qc_result in ('PASS', 'FAIL')),
+
+        CONSTRAINT fk_lid_location
+            FOREIGN KEY (location_id) REFERENCES storage_locations(id),
+        CONSTRAINT fk_lid_user FOREIGN KEY (received_by) REFERENCES users(id)
+    );
+END;
+
 IF OBJECT_ID('filaments', 'U') IS NULL
 BEGIN
     CREATE TABLE filaments (
@@ -157,12 +173,14 @@ BEGIN
     CREATE TABLE product_harvest (
         id INT PRIMARY KEY IDENTITY(1,1),
         request_id INT NOT NULL,
+        lid_id INT NOT NULL,
         filament_mounting_id INT NOT NULL,
         printed_by INT NOT NULL,
         print_date DATETIME2,
         print_status NVARCHAR(50) DEFAULT 'Queued',
 
         CONSTRAINT fk_harvest_request FOREIGN KEY (request_id) REFERENCES product_requests(id),
+        CONSTRAINT fk_lid_id FOREIGN KEY (lid_id) REFERENCES lids(id),
         CONSTRAINT fk_harvest_filament_mounting FOREIGN KEY (filament_mounting_id) REFERENCES filament_mounting(id),
         CONSTRAINT fk_harvest_user FOREIGN KEY (printed_by) REFERENCES users(id)
     );
@@ -194,7 +212,7 @@ BEGIN
         weight_grams DECIMAL(6,2) NOT NULL,
         pressure_drop DECIMAL(6,3) NOT NULL,
         visual_pass BIT NOT NULL,
-        inspection_result NVARCHAR(20) NOT NULL CHECK (inspection_result IN ('Passed', 'B-Ware', 'Waste')),
+        inspection_result NVARCHAR(20) NOT NULL CHECK (inspection_result IN ('Passed', 'B-Ware', 'Waste', 'Quarantine')),
         notes NVARCHAR(255),
 
         CONSTRAINT fk_qc_print_job FOREIGN KEY (harvest_id) REFERENCES product_harvest(id),

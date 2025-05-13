@@ -9,7 +9,7 @@ CREATE TABLE product_quality_control (
     visual_pass BIT NOT NULL,
 
     inspection_result NVARCHAR(20) NOT NULL
-        CHECK (inspection_result IN ('Passed', 'B-Ware', 'Waste')),
+        CHECK (inspection_result IN ('Passed', 'B-Ware', 'Waste', 'Quarantine')),
 
     notes NVARCHAR(255),
 

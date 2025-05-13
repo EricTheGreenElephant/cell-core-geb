@@ -31,6 +31,14 @@ def render_qc_form():
     pressure = st.number_input("Pressure Drop (mbar)", min_value=0.0, format="%.2f")
     visual = st.radio("Visual Check", ["Pass", "Fail"])
 
+    # Conditional formatting for result
+    color_map = {
+        "Passed": "green",
+        "B-Ware": "orange",
+        "Quarantine": "blue",
+        "Waste": "red"
+    }
+
     # Validation messages
     result = "Passed"
     if weight > 0:
@@ -38,12 +46,18 @@ def render_qc_form():
             st.error("Weight outside acceptable range.")
             result = "B-Ware"
     if visual == "Fail":
-        result = "B-Ware"
+        # Manual choice after visual inspection fail
+        st.markdown("###### *** Visual inspection fail requires manual selection. ***")
+        result = st.selectbox("Inspection Result:", ["B-Ware", "Quarantine"])
     if pressure >= 6:
         st.error("Pressure above the acceptable tolerance.")
         result = "Waste"
 
-    st.markdown(f"**Final QC Result:** `{result}`")
+    # Set conditional color 
+    color = color_map.get(result, "black")
+
+    st.markdown(f"<p><strong>Final QC Result:</strong> <span style='color:{color}'>{result}</span></p>", unsafe_allow_html=True)
+    
     with st.form("qc_form"):       
         notes = st.text_area("Notes (optional)", max_chars=255)
 

@@ -48,6 +48,7 @@ def insert_product_qc(harvest_id, inspected_by, weight_grams, pressure_drop, vis
         new_status = {
             "Passed": "QC Passed",
             "B-Ware": "QC B-Ware",
+            "Quarantine": "QC Quarantine",
             "Waste": "QC Failed"
         }.get(inspection_result, "QC Completed")
 

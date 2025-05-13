@@ -10,7 +10,10 @@ def render_add_filament_form():
 
     # Get storage locations
     locations = get_storage_locations()
-    location_options = {f"{name} (ID {loc_id})": loc_id for loc_id, name in locations}
+    location_options = {
+        f"{loc['location_name']} --- (Type: {loc['location_type']}) (Desc.: {loc['description']})": loc['id'] 
+        for loc in locations
+        }
 
     if not user_id:
         st.error("User must be logged in to add filaments.")

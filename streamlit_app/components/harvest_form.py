@@ -1,6 +1,6 @@
 import streamlit as st
 import time
-from data.production import get_pending_requests, get_mountable_filament_mounts, insert_product_harvest, cancel_product_request
+from data.production import get_pending_requests, get_mountable_filament_mounts, insert_product_harvest, cancel_product_request, get_available_lid_batches
 
 
 def render_harvest_form():
@@ -34,6 +34,14 @@ def render_harvest_form():
 
             with st.form(f"form_unit_{unit['id']}"):
                 selected_mount = st.selectbox("Assign Printer with Filament", list(mount_options.keys()), key=f"mount_{unit['id']}")
+                lid_batches = get_available_lid_batches()
+                if lid_batches:
+                    lid_options = {f"{l['serial_number']}": l["id"] for l in lid_batches}
+                    selected_lid = st.selectbox("Select Lid Batch", options=list(lid_options.keys()), key=f"lid_{unit['id']}")
+                    lid_id = lid_options[selected_lid]
+                else:
+                    st.warning("No passing lid batches available.")
+                    lid_id = None
                 cols = st.columns([1, 1])
                 with cols[0]:
                     submitted = st.form_submit_button("✅ Harvest Product")
@@ -44,7 +52,7 @@ def render_harvest_form():
                     try:
                         mount_id = mount_options[selected_mount]
                         user_id = st.session_state.get("user_id")
-                        insert_product_harvest(request_id=unit['id'], filament_mount_id=mount_id, printed_by=user_id)
+                        insert_product_harvest(request_id=unit['id'], filament_mount_id=mount_id, printed_by=user_id, lid_id=lid_id)
                         st.success("Product marked as harvested.")
                         time.sleep(1.5)
                         st.rerun()
