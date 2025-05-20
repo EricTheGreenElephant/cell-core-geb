@@ -25,7 +25,7 @@ SELECT pt.id AS tracking_id,
     p.name as printer,
 
     tbi.batch_id AS treatment_batch_id,
-    pti.final_result AS post_treatment_result,
+    pti.qc_result AS post_treatment_result,
 
     s.id AS shipment_id,
     s.status AS shipment_status,

@@ -13,6 +13,7 @@ def render_add_lid_form():
         # Fetch storage location options
         locations = get_storage_locations()
         location_dict = {
+            # Label that appears in dropdown with key selection
             f"{loc['location_type']}: {loc['location_name']} --- Description: {loc['description']}": loc['id'] 
             for loc in locations
             }
