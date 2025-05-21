@@ -2,6 +2,12 @@ import pyodbc
 from utils.db import db_connection
 
 
+VALID_TABLES = {
+    "Filaments": "filaments",
+    "Products": "product_tracking",
+    "Lids": "lids"
+}
+
 def get_product_record(tracking_id):
     try:
         with db_connection() as conn:
@@ -67,7 +73,7 @@ def get_all_product_ids():
     try: 
         with db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id FROM product_tracking  ORDER BY id")
+            cursor.execute("SELECT id FROM product_tracking ORDER BY id")
             rows = cursor.fetchall()
             return [{"id": row[0]} for row in rows]
     except pyodbc.Error as e:
@@ -87,7 +93,12 @@ def get_record_by_id(table_name: str, record_id: int):
     try:
         with db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(f"SELECT * FROM {table_name} WHERE id = ?", (record_id,))
+
+            if table_name not in VALID_TABLES:
+                raise ValueError("Invalidd table name")
+            
+            safe_table = VALID_TABLES[table_name]
+            cursor.execute(f"SELECT * FROM {safe_table} WHERE id = ?", (record_id,))
             row = cursor.fetchone()
             if not row:
                 return None
@@ -100,13 +111,16 @@ def update_record_with_audit(table_name: str, record_id: int, changes: dict, use
     try:
         with db_connection() as conn:
             cursor = conn.cursor()
-
+            if table_name not in VALID_TABLES:
+                raise ValueError("Invalidd table name")
+            
+            safe_table = VALID_TABLES[table_name]
             for field, change in changes.items():
                 old_value = change["old"]
                 new_value = change["new"]
 
                 # 1. Update field in table
-                query = f"UPDATE {table_name} SET {field} = ? WHERE id = ?"
+                query = f"UPDATE {safe_table} SET {field} = ? WHERE id = ?"
                 cursor.execute(query, (new_value, record_id))
 
                 # 2. Insert audit Log entry

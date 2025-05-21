@@ -1,5 +1,6 @@
 import streamlit as st
 from data.filament import insert_filament, get_storage_locations
+from models.filament_models import FilamentCreate
 
 def render_add_filament_form():
     st.markdown("Add New Filament")
@@ -39,7 +40,14 @@ def render_add_filament_form():
                     st.error("User must be logged in to receive filament.")
                     return 
                 
-                insert_filament(serial_number, weight_grams, location_id, qc_result, received_by)
+                filament_data = FilamentCreate(
+                    serial_number=serial_number.strip(),
+                    weight_grams=weight_grams,
+                    location_id=location_id,
+                    qc_result=qc_result,
+                    received_by=received_by
+                )
+                insert_filament(filament_data)
                 st.success(f"Filament spool '{serial_number}' added successfully.")
             except Exception as e:
                 st.error("Failed to add filament.")

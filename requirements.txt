@@ -3,3 +3,4 @@ pyodbc
 python-dotenv
 pandas
 streamlit-aggrid
+pydantic

@@ -1,6 +1,6 @@
 import pyodbc
 from utils.db import db_connection
-
+from models.filament_models import FilamentInUse, FilamentCreate
 
 def get_all_filament_statuses():
     with db_connection() as conn:
@@ -75,19 +75,26 @@ def get_in_use_filaments():
         cursor = conn.cursor()
         cursor.execute("""
             SELECT
+                f.id,
                 f.serial_number,
                 f.qc_result,
                 f.weight_grams AS initial_weight,
                 fm.remaining_weight,
                 p.name AS printer_name,
-                fm.mounted_at
+                fm.mounted_at,
+                f.received_at,
+                u.display_name AS received_by,
+                sl.location_name
             FROM filaments f
             JOIN filament_mounting fm ON f.id = fm.filament_id
             JOIN printers p ON fm.printer_id = p.id
+            LEFT JOIN users u ON f.received_by = u.id
+            LEFT JOIN storage_locations sl ON f.location_id = sl.id
             WHERE fm.unmounted_at IS NULL
         """)
         cols = [col[0] for col in cursor.description]
-        return [dict(zip(cols, row)) for row in cursor.fetchall()]
+        rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
+        return [FilamentInUse(**row) for row in rows]
     
 def get_filaments():
     try:
@@ -148,14 +155,15 @@ def get_storage_locations():
         print(f"[DB ERROR] Failed to fetch locations: {e}")
         return []
     
-def insert_filament(serial_number, weight_grams, location_id, qc_result, received_by):
+# def insert_filament(serial_number, weight_grams, location_id, qc_result, received_by):
+def insert_filament(data: FilamentCreate):
     try: 
         with db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                         INSERT INTO filaments (serial_number, weight_grams, location_id, qc_result, received_by)
                         VALUES (?, ?, ?, ?, ?)
-                        """, (serial_number, weight_grams, location_id, qc_result, received_by))
+                        """, (data.serial_number, data.weight_grams, data.location_id, data.qc_result, data.received_by))
             conn.commit()
     except pyodbc.Error as e:
         raise RuntimeError(f"[DB INSERT ERROR] {e}")

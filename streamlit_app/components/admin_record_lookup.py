@@ -1,5 +1,4 @@
 import streamlit as st
-# from data.admin_tools import get_product_record, update_product_field
 from data.admin_tools import (
     get_all_filaments,
     get_all_product_ids,
@@ -61,31 +60,3 @@ def render_admin_record_lookup():
     except Exception as e:
         st.error("Failed to load or update record.")
         st.exception(e)
-
-
-    # tracking_id = st.text_input("Enter Tracking ID", placeholder="e.g., 1054")
-
-    # if tracking_id:
-    #     try:
-    #         record = get_product_record(tracking_id)
-    #         if not record:
-    #             st.warning("No record found with that tracking ID.")
-    #             return
-            
-    #         st.json(record)
-
-    #         st.markdown("### Update Field")
-    #         field_to_edit = st.selectbox("Select field to update", list(record.keys()))
-    #         new_value = st.text_input(f"Enter new value for '{field_to_edit}'")
-
-    #         if st.button("Update Record"):
-    #             user_id = st.session_state.get("user_id")
-    #             success = update_product_field(tracking_id, field_to_edit, new_value, user_id)
-    #             if success:
-    #                 st.success("Record updated successfully.")
-    #                 st.rerun()
-    #             else:
-    #                 st.error("Failed to update record. Check logs or permissions.")
-    #     except Exception as e:
-    #         st.error("Something went wrong.")
-    #         st.exception(e)
