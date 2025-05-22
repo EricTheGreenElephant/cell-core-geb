@@ -1,8 +1,8 @@
 import time
 import streamlit as st
 from data.logistics import get_qc_products_needing_storage, assign_storage_to_products, get_post_treatment_products_needing_storage
-from data.filament import get_storage_locations
-
+from services.filament_service import get_storage_locations
+from db.orm_session import get_session
 
 def render_storage_assignment_form():
     st.subheader("Assign Storage Location to Printed Bottles")
@@ -22,7 +22,8 @@ def render_storage_assignment_form():
             st.info("No printed bottles require storage.")
             return 
         
-        locations = get_storage_locations()
+        with get_session() as db:
+            locations = get_storage_locations(db)
         if not locations:
             st.warning("No storage locations available.")
             return

@@ -1,12 +1,15 @@
 import streamlit as st
-from data.filament import get_all_filament_statuses
+from services.filament_service import get_all_filament_statuses
+from db.orm_session import get_session
 
 
 def render_health_status():
     st.markdown("### Filament Health Status")
 
     try:
-        all_filaments = get_all_filament_statuses()
+        with get_session() as db:
+            all_filaments = get_all_filament_statuses(db)
+            
         in_use = [f for f in all_filaments if f["current_status"] == "In Use"]
 
         if not in_use:

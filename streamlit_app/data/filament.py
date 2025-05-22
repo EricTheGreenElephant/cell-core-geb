@@ -1,6 +1,6 @@
 import pyodbc
 from utils.db import db_connection
-from models.filament_models import FilamentInUse, FilamentCreate
+from streamlit_app.schemas.filament_schemas import FilamentInUse, FilamentCreate
 
 def get_all_filament_statuses():
     with db_connection() as conn:

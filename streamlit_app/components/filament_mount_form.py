@@ -1,11 +1,19 @@
 import streamlit as st
-from data.filament import get_acclimatized_filaments, get_available_printers, insert_filament_mount
+from services.filament_service import (
+    get_acclimatized_filaments,
+    get_available_printers,
+    insert_filament_mount
+)
+from db.orm_session import get_session
+from schemas.printer_schemas import PrinterOut
+
 
 def render_mount_form():
     st.markdown("Mount Acclimatized Filament")
 
-    filaments = get_acclimatized_filaments()
-    printers = get_available_printers()
+    with get_session() as db:
+        filaments = get_acclimatized_filaments(db)
+        printers: list[PrinterOut] = get_available_printers(db)
 
     if not filaments:
         st.info("No filaments have completed acclimatization.")
@@ -33,7 +41,8 @@ def render_mount_form():
                 user_id = st.session_state.get("user_id")
                 filament_id, acclimatization_id = filament_options[selected_filament]
                 printer_id = printer_options[selected_printer]
-                insert_filament_mount(filament_id, printer_id, user_id, acclimatization_id)
+                with get_session() as db:
+                    insert_filament_mount(db, filament_id, printer_id, user_id, acclimatization_id)
                 st.success("Filament mounted successfully!")
             except Exception as e:
                 st.error("Failed to mount filament.")

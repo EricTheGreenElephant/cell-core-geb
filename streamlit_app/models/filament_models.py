@@ -1,50 +1,50 @@
-from pydantic import BaseModel, field_validator
-from datetime import datetime
-from typing import Optional, Literal
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
+from datetime import datetime, timezone
+from db.base import Base
 
 
-class FilamentBase(BaseModel):
-    id: int
-    serial_number: str
-    weight_grams: float
-    qc_result: str
-    received_at: datetime
-    received_by: Optional[str] = None
-    location_name: Optional[str] = None
+class Filament(Base):
+    __tablename__ = 'filaments'
+    id = Column(Integer, primary_key=True)
+    serial_number = Column(String, nullable=False)
+    weight_grams = Column(Float, nullable=False)
+    location_id = Column(Integer, ForeignKey('storage_locations.id'))
+    qc_result = Column(String)
+    received_by = Column(Integer, ForeignKey('users.id'))
+    received_at = Column(DateTime, default=datetime.now(timezone.utc))
+
+    received_user = relationship("User", back_populates="received_filaments")
+    location = relationship("StorageLocation", back_populates="filaments")
+    mountings = relationship("FilamentMounting", back_populates="filament")
+    acclimatizations = relationship("FilamentAcclimatization", back_populates="filament")
 
 
-class FilamentInUse(FilamentBase):
-    remaining_weight: Optional[float]
-    printer_name: Optional[str]
-    mounted_at: Optional[datetime]
+class FilamentMounting(Base):
+    __tablename__ = 'filament_mounting'
+    id = Column(Integer, primary_key=True)
+    filament_id = Column(Integer, ForeignKey('filaments.id'))
+    printer_id = Column(Integer, ForeignKey('printers.id'))
+    mounted_by = Column(Integer, ForeignKey('users.id'))
+    remaining_weight = Column(Float)
+    mounted_at = Column(DateTime, default=datetime.now(timezone.utc))
+    unmounted_at = Column(DateTime, nullable=True)
+    unmounted_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    status = Column(String)
+
+    filament = relationship("Filament", back_populates="mountings")
+    printer = relationship("Printer", back_populates="mountings")
+    mounted_by_user = relationship("User", back_populates="mounted_filaments", foreign_keys=[mounted_by])
+    unmounted_by_user = relationship("User", back_populates="unmounted_filaments", foreign_keys=[unmounted_by])
 
 
-class FilamentArchived(FilamentBase):
-    remaining_weight: Optional[float]
-    printer_name: Optional[str]
-    mounted_at: Optional[datetime]
-    unmounted_at: Optional[datetime]
-    unmounted_by: Optional[str]
+class FilamentAcclimatization(Base):
+    __tablename__ = 'filament_acclimatization'
+    id = Column(Integer, primary_key=True)
+    filament_id = Column(Integer, ForeignKey('filaments.id'))
+    status = Column(String)
+    moved_at = Column(DateTime, default=datetime.now(timezone.utc))
+    moved_by = Column(Integer, ForeignKey('users.id'))
+    ready_at = Column(DateTime, nullable=True)
 
-
-class FilamentMountCreate(BaseModel):
-    filament_id: int
-    printer_id: int
-    mounted_by: int
-    acclimatization_id: int
-
-
-class FilamentCreate(BaseModel):
-    serial_number: str
-    weight_grams: float
-    location_id: int
-    qc_result: str
-    received_by: int
-
-    @field_validator("qc_result")
-    @classmethod
-    def validate_qc(cls, v):
-        allowed = {"PASS", "FAIL"}
-        if v not in allowed:
-            raise ValueError("qc_result must be PASS or FAIL")
-        return v
+    filament = relationship("Filament", back_populates="acclimatizations")

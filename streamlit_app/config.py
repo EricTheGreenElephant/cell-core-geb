@@ -18,13 +18,14 @@ if DB_AUTH_METHOD.lower() == "windows":
         f"Database={DB_NAME};"
         f"Trusted_Connection=yes;"
     )
-# else:
-    # SQL Auth fallback    DB_USER = os.getenv("DB_USER")
-    # DB_PASSWORD = os.getenv("DB_PASSWORD")
-    # CONNECTION_STRING = (
-    #     f"Driver={{ODBC Driver 17 for SQL Server}};"
-    #     f"Server={DB_SERVER};"
-    #     f"Database={DB_NAME};"
-    #     f"UID={DB_USER};"
-    #     f"PWD={DB_PASSWORD};"
-    # )
+else:
+    # SQL Auth fallback    
+    DB_USER = os.getenv("DB_USER")
+    DB_PASSWORD = os.getenv("DB_PASSWORD")
+    CONNECTION_STRING = (
+        f"Driver={{ODBC Driver 17 for SQL Server}};"
+        f"Server={DB_SERVER};"
+        f"Database={DB_NAME};"
+        f"UID={DB_USER};"
+        f"PWD={DB_PASSWORD};"
+    )

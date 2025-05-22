@@ -1,7 +1,8 @@
 import time
 import streamlit as st
-from data.filament import get_storage_locations
+from services.filament_service import get_storage_locations
 from data.lids import insert_lid
+from db.orm_session import get_session
 
 
 def render_add_lid_form():
@@ -11,7 +12,8 @@ def render_add_lid_form():
         serial_number = st.text_input("Serial Number")
 
         # Fetch storage location options
-        locations = get_storage_locations()
+        with get_session() as db:
+            locations = get_storage_locations(db)
         location_dict = {
             # Label that appears in dropdown with key selection
             f"{loc['location_type']}: {loc['location_name']} --- Description: {loc['description']}": loc['id'] 

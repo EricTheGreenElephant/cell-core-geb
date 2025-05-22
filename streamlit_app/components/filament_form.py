@@ -1,6 +1,8 @@
 import streamlit as st
-from data.filament import insert_filament, get_storage_locations
-from models.filament_models import FilamentCreate
+from schemas.filament_schemas import FilamentCreate
+from services.filament_service import insert_filament, get_storage_locations
+from schemas.storage_location_schemas import StorageLocationOut
+from db.orm_session import get_session
 
 def render_add_filament_form():
     st.markdown("Add New Filament")
@@ -10,9 +12,11 @@ def render_add_filament_form():
     user_name = st.session_state.get("display_name")
 
     # Get storage locations
-    locations = get_storage_locations()
+    with get_session() as db:
+        locations: list[StorageLocationOut] = get_storage_locations(db)
+
     location_options = {
-        f"{loc['location_name']} --- (Type: {loc['location_type']}) (Desc.: {loc['description']})": loc['id'] 
+        f"{loc.location_name} --- (Type: {loc.location_type}) (Desc.: {loc.description})": loc.id 
         for loc in locations
         }
 
@@ -33,21 +37,16 @@ def render_add_filament_form():
 
         if submitted:
             try:
-                location_id = location_options[location_label]
-                received_by = st.session_state.get("user_id")
-
-                if not received_by:
-                    st.error("User must be logged in to receive filament.")
-                    return 
-                
+                location_id = location_options[location_label]                
                 filament_data = FilamentCreate(
                     serial_number=serial_number.strip(),
                     weight_grams=weight_grams,
                     location_id=location_id,
                     qc_result=qc_result,
-                    received_by=received_by
+                    received_by=user_id
                 )
-                insert_filament(filament_data)
+                with get_session() as db:
+                    insert_filament(db, filament_data)
                 st.success(f"Filament spool '{serial_number}' added successfully.")
             except Exception as e:
                 st.error("Failed to add filament.")

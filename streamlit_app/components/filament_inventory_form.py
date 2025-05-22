@@ -1,11 +1,13 @@
 import streamlit as st
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder
-from data.filament import get_all_filament_statuses
+from services.filament_service import get_all_filament_statuses
+from db.orm_session import get_session
 
 def render_filament_inventory():
     try:
-        all_filaments = get_all_filament_statuses()
+        with get_session() as db:
+            all_filaments = get_all_filament_statuses(db)
 
         if all_filaments:
             df_filaments = pd.DataFrame(all_filaments)
