@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Computed
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from db.base import Base
@@ -45,6 +45,6 @@ class FilamentAcclimatization(Base):
     status = Column(String)
     moved_at = Column(DateTime, default=datetime.now(timezone.utc))
     moved_by = Column(Integer, ForeignKey('users.id'))
-    ready_at = Column(DateTime, nullable=True)
+    ready_at = Column(DateTime, Computed("DATEADD(DAY, 2, moved_at)", persisted=True))
 
     filament = relationship("Filament", back_populates="acclimatizations")

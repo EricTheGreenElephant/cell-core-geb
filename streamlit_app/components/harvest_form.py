@@ -1,12 +1,19 @@
 import streamlit as st
 import time
-from data.production import get_pending_requests, get_mountable_filament_mounts, insert_product_harvest, cancel_product_request, get_available_lid_batches
-
+from services.production_services import (
+    get_pending_requests,
+    insert_product_harvest,
+    cancel_product_request
+)
+from services.lid_services import get_available_lid_batches
+from services.filament_service import get_mountable_filament_mounts
+from db.orm_session import get_session
 
 def render_harvest_form():
     st.subheader("Fulfill Product Request")
 
-    pending = get_pending_requests()
+    with get_session() as db:
+        pending = get_pending_requests(db)
 
     if not pending:
         st.info("No pending product requests")
@@ -22,7 +29,9 @@ def render_harvest_form():
             required_weight = avg + buffer + 10
             
             # Filter available printers based on weight
-            mounts = get_mountable_filament_mounts(required_weight)
+            with get_session() as db:
+                mounts = get_mountable_filament_mounts(db, required_weight)
+
             if not mounts:
                 st.info("No active mounted printers have enough filament available to fulfill this request.")
                 continue 
@@ -34,7 +43,10 @@ def render_harvest_form():
 
             with st.form(f"form_unit_{unit['id']}"):
                 selected_mount = st.selectbox("Assign Printer with Filament", list(mount_options.keys()), key=f"mount_{unit['id']}")
-                lid_batches = get_available_lid_batches()
+                
+                with get_session() as db:
+                    lid_batches = get_available_lid_batches(db)
+
                 if lid_batches:
                     lid_options = {f"{l['serial_number']}": l["id"] for l in lid_batches}
                     selected_lid = st.selectbox("Select Lid Batch", options=list(lid_options.keys()), key=f"lid_{unit['id']}")
@@ -52,7 +64,14 @@ def render_harvest_form():
                     try:
                         mount_id = mount_options[selected_mount]
                         user_id = st.session_state.get("user_id")
-                        insert_product_harvest(request_id=unit['id'], filament_mount_id=mount_id, printed_by=user_id, lid_id=lid_id)
+                        with get_session() as db:
+                            insert_product_harvest(
+                                db,
+                                request_id=unit['id'], 
+                                filament_mount_id=mount_id, 
+                                printed_by=user_id, 
+                                lid_id=lid_id
+                            )
                         st.success("Product marked as harvested.")
                         time.sleep(1.5)
                         st.rerun()
@@ -61,7 +80,8 @@ def render_harvest_form():
                         st.exception(e)
                 elif cancel:
                     try:
-                        cancel_product_request(unit['id'])
+                        with get_session() as db:
+                            cancel_product_request(db, unit['id'])
                         st.warning("Product request has been cancelled.")
                     except Exception as e:
                         st.error("Failed to cancel.")

@@ -1,12 +1,15 @@
 import streamlit as st
-from data.lids import get_lid_inventory
+from services.lid_services import get_lid_inventory
+from db.orm_session import get_session
 
 
 def render_lid_inventory():
     st.markdown("Lid Inventory")
 
     try:
-        lids = get_lid_inventory()
+        with get_session() as db:
+            lids = get_lid_inventory(db)
+            
         if lids:
             st.dataframe(lids, use_container_width=True)
         else:

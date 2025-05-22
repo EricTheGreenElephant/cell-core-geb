@@ -17,8 +17,9 @@ from schemas.filament_schemas import (
 )
 from schemas.storage_location_schemas import StorageLocationOut
 from schemas.printer_schemas import PrinterOut
+from utils.db_transaction import transactional
 
-
+@transactional
 def insert_filament(db: Session, data: FilamentCreate) -> FilamentOut:
     new_filament = Filament(**data.model_dump())
     db.add(new_filament)
@@ -26,16 +27,19 @@ def insert_filament(db: Session, data: FilamentCreate) -> FilamentOut:
     db.refresh(new_filament)
     return FilamentOut.model_validate(new_filament)
 
+@transactional
 def get_storage_locations(db: Session) -> list[StorageLocationOut]:
     locations = db.scalars(select(StorageLocation).order_by(StorageLocation.location_name)).all()
     return [StorageLocationOut.model_validate(loc) for loc in locations]
 
+@transactional
 def get_all_filament_statuses(db: Session) -> list[dict]:
     sql = "SELECT * FROM v_filament_status ORDER BY filament_id"
     result = db.execute(text(sql))
     cols = result.keys()
     return [dict(zip(cols, row)) for row in result.fetchall()]
 
+@transactional
 def get_filaments_not_acclimatizing(db: Session) -> list[dict]:
     sql = """
         SELECT f.id, f.serial_number
@@ -50,6 +54,7 @@ def get_filaments_not_acclimatizing(db: Session) -> list[dict]:
     cols = result.keys()
     return [dict(zip(cols, row)) for row in result.fetchall()]
 
+@transactional
 def insert_filament_acclimatization(db: Session, filament_id: int, user_id: int):
     accl = FilamentAcclimatization(
         filament_id=filament_id,
@@ -60,6 +65,7 @@ def insert_filament_acclimatization(db: Session, filament_id: int, user_id: int)
     db.add(accl)
     db.commit()
 
+@transactional
 def get_acclimatized_filaments(db: Session) -> list[dict]:
     sql = """
         SELECT f.id, f.serial_number, f.weight_grams,
@@ -78,6 +84,7 @@ def get_acclimatized_filaments(db: Session) -> list[dict]:
     cols = result.keys()
     return [dict(zip(cols, row)) for row in result.fetchall()]
 
+@transactional
 def get_available_printers(db: Session) -> list[PrinterOut]:
     subquery = select(FilamentMounting.printer_id).where(FilamentMounting.unmounted_at.is_(None))
     stmt = (
@@ -88,6 +95,7 @@ def get_available_printers(db: Session) -> list[PrinterOut]:
     printers = db.scalars(stmt).all()
     return [PrinterOut.model_validate(p) for p in printers]
 
+@transactional
 def insert_filament_mount(
         db: Session,
         filament_id: int,
@@ -116,6 +124,7 @@ def insert_filament_mount(
     db.execute(stmt)
     db.commit()
 
+@transactional
 def get_mounted_filaments(db: Session) -> list[dict]:
     sql = """
         SELECT
@@ -133,6 +142,7 @@ def get_mounted_filaments(db: Session) -> list[dict]:
     cols = result.keys()
     return [dict(zip(cols, row)) for row in result.fetchall()]
 
+@transactional
 def unmount_filament(db: Session, mount_id: int, user_id: int):
     stmt = (
         update(FilamentMounting)
@@ -145,3 +155,21 @@ def unmount_filament(db: Session, mount_id: int, user_id: int):
     )
     db.execute(stmt)
     db.commit()
+
+@transactional
+def get_mountable_filament_mounts(db: Session, required_weight: float) -> list[dict]:
+    sql = """
+        SELECT
+            fm.id,
+            f.serial_number,
+            p.name AS printer_name,
+            fm.remaining_weight
+        FROM filament_mounting fm
+        JOIN filaments f ON fm.printer_id = f.id
+        JOIN printers p ON fm.printer_id = p.id
+        WHERE fm.remaining_weight >= :weight
+            AND fm.unmounted_at IS NULL
+    """
+    result = db.execute(text(sql), {"weight": required_weight})
+    cols = result.keys()
+    return [dict(zip(cols, row)) for row in result.fetchall()]
