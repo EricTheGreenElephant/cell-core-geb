@@ -1,7 +1,7 @@
 import streamlit as st
-from components.lids_inventory_form import render_lid_inventory
-from components.lids_add_form import render_add_lid_form
-from components.toggle import toggle_button
+from components.lids.lids_inventory_form import render_lid_inventory
+from components.lids.lids_add_form import render_add_lid_form
+from components.common.toggle import toggle_button
 from utils.session import require_access, require_login
 from utils.auth import show_user_sidebar
 

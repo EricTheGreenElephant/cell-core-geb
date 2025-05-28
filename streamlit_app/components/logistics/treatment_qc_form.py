@@ -1,12 +1,13 @@
 import time 
 import streamlit as st
 from random import sample
-from data.logistics import (
+from services.logistics_services import (
     get_shipped_batches,
     get_products_by_batch_id,
     update_post_treatment_qc,
     mark_batch_as_inspected
 )
+from db.orm_session import get_session
 
 
 color_map = {
@@ -28,7 +29,8 @@ def render_treatment_qc_form():
     st.subheader("Treatment Quality Control")
 
     try:
-        batches = get_shipped_batches()
+        with get_session() as db:
+            batches = get_shipped_batches(db)
         if not batches:
             st.info("No returned batches available for inspection.")
             return
@@ -37,7 +39,9 @@ def render_treatment_qc_form():
         selected_label = st.selectbox("Select Treatment Batch", list(batch_options.keys()))
         batch_id = batch_options[selected_label]
 
-        products = get_products_by_batch_id(batch_id)
+        with get_session() as db:
+            products = get_products_by_batch_id(db, batch_id)
+
         total = len(products)
         sample_size = max(2, round(0.05 * total))
         # Sets the random sample to prevent re-randomizing product selection when user changes visual pass option
@@ -103,8 +107,9 @@ def render_treatment_qc_form():
         if st.button("Finalize Inspection"):
             try:
                 inspector = st.session_state.get("user_id")
-                update_post_treatment_qc(full_qc, inspector)
-                mark_batch_as_inspected(batch_id)
+                with get_session() as db:
+                    update_post_treatment_qc(db, full_qc, inspector)
+                    mark_batch_as_inspected(db, batch_id)
                 st.success("Treatment QC completed successfully.")
                 time.sleep(1.5)
                 st.rerun()

@@ -1,10 +1,10 @@
 import streamlit as st
 from utils.session import require_access, require_login
 from utils.auth import show_user_sidebar
-from components.logistics_form import render_logistics_form
-from components.storage_assignment_form import render_storage_assignment_form
-from components.treatment_qc_form import render_treatment_qc_form
-from components.toggle import toggle_button
+from components.logistics.logistics_form import render_logistics_form
+from components.logistics.storage_assignment_form import render_storage_assignment_form
+from components.logistics.treatment_qc_form import render_treatment_qc_form
+from components.common.toggle import toggle_button
 
 
 if "create_batch" not in st.session_state:

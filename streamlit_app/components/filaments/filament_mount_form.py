@@ -24,7 +24,7 @@ def render_mount_form():
         for f in filaments
     }
 
-    printer_options = {p["name"]: p["id"] for p in printers}
+    printer_options = {p.name: p.id for p in printers}
 
     if not printer_options:
         st.info("No available printers. All printers are currently in use.")

@@ -1,8 +1,8 @@
 import streamlit as st
 from utils.session import require_login, require_access
 from utils.auth import show_user_sidebar
-from components.admin_record_lookup import render_admin_record_lookup
-from components.toggle import toggle_button
+from components.common.admin_record_lookup import render_admin_record_lookup
+from components.common.toggle import toggle_button
 
 
 if "retrieve_record" not in st.session_state:

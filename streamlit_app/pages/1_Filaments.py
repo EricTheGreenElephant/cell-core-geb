@@ -1,13 +1,17 @@
 import streamlit as st
 from utils.session import require_access, require_login
 from utils.auth import show_user_sidebar
-from components.filament_form import render_add_filament_form
-from components.filament_mount_form import render_mount_form
-from components.filament_unmount_form import render_unmount_form
-from components.filament_acclimatize_form import render_acclimatizing_form
-from components.filament_health_form import render_health_status
-from components.filament_inventory_form import render_filament_inventory
-from components.toggle import toggle_button
+from components.filaments.filament_form import render_add_filament_form
+from components.filaments.filament_mount_form import render_mount_form
+from components.filaments.filament_unmount_form import render_unmount_form
+from components.filaments.filament_acclimatize_form import render_acclimatizing_form
+from components.filaments.filament_health_form import render_health_status
+from components.filaments.filament_inventory_form import render_filament_inventory
+from components.filaments.restore_mount_form import render_restore_mount_form
+from components.filaments.filament_edit_form import render_edit_filament_tab
+from components.filaments.filament_mount_edit_form import render_edit_mount_form
+from components.filaments.restore_acclimatization_form import render_restore_acclimatization_form
+from components.common.toggle import toggle_button
 
 
 if "show_active_inventory" not in st.session_state:
@@ -25,6 +29,12 @@ if "show_unmount_form" not in st.session_state:
 if "show_acclimatize_form" not in st.session_state:
     st.session_state.show_acclimatize_form = False
 
+if "show_edit_filament_form" not in st.session_state:
+    st.session_state.show_edit_filament_form = False
+
+if "show_mount_edit_form" not in st.session_state:
+    st.session_state.show_mount_edit_form = False
+
 st.title("🧪Filament Management")
 
 # --- User logout ---
@@ -35,7 +45,7 @@ require_login()
 user_level = require_access("Filament Inventory", minimum_level="Read")
 
 # --- Page structure ---
-tab1, tab2 , tab3 = st.tabs(["Inventory", "Add Filament", "Mount Filament"])
+tab1, tab2 , tab3, tab4 = st.tabs(["Inventory", "Add Filament", "Mount Filament", "Edit Filament"])
 
 with tab1:
     # Show individual status
@@ -75,3 +85,20 @@ with tab3:
         toggle_button("show_acclimatize_form", "Move to Acclimatization", "Hide Acclimatization Form")
         if st.session_state.get("show_acclimatize_form", False):
             render_acclimatizing_form()
+
+with tab4:
+    if user_level in ("Write", "Admin"):
+        toggle = st.selectbox(
+            label="Edit Data", 
+            options=["Select an option...", "Filament", "Mounted", "Unmounted", "Acclimatization"],
+            index=0
+        )
+        match toggle:
+            case "Filament":
+                render_edit_filament_tab()
+            case "Mounted":
+                render_edit_mount_form()
+            case "Unmounted":
+                render_restore_mount_form()
+            case "Acclimatization":
+                render_restore_acclimatization_form()

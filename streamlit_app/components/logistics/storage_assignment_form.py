@@ -1,6 +1,6 @@
 import time
 import streamlit as st
-from data.logistics import get_qc_products_needing_storage, assign_storage_to_products, get_post_treatment_products_needing_storage
+from services.logistics_services import get_qc_products_needing_storage, assign_storage_to_products, get_post_treatment_products_needing_storage
 from services.filament_service import get_storage_locations
 from db.orm_session import get_session
 
@@ -13,16 +13,16 @@ def render_storage_assignment_form():
     )
 
     try:
-        if mode == "Post-Harvest QC":
-            products = get_qc_products_needing_storage()
-        else:
-            products = get_post_treatment_products_needing_storage()
-
-        if not products:
-            st.info("No printed bottles require storage.")
-            return 
-        
         with get_session() as db:
+            if mode == "Post-Harvest QC":
+                products = get_qc_products_needing_storage(db)
+            else:
+                products = get_post_treatment_products_needing_storage(db)
+
+            if not products:
+                st.info("No printed bottles require storage.")
+                return 
+        
             locations = get_storage_locations(db)
         if not locations:
             st.warning("No storage locations available.")
@@ -53,7 +53,9 @@ def render_storage_assignment_form():
                     else:
                         status = "In Interim Storage"
 
-                    assign_storage_to_products(selected_ids, selected_loc_id, status)
+                    with get_session() as db:
+                        assign_storage_to_products(db, selected_ids, selected_loc_id, status)
+
                     st.success("Storage assignment complete.")
                     time.sleep(1.5)
                     st.rerun()

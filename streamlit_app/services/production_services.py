@@ -1,10 +1,16 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, select
 from datetime import datetime
-from models.production_models import ProductRequest, ProductHarvest, ProductTracking
+from models.production_models import ProductRequest, ProductHarvest, ProductTracking, ProductType
 from schemas.production_schemas import ProductRequestCreate
 from utils.db_transaction import transactional
 
+
+
+@transactional
+def get_product_types(db: Session) -> list[tuple[int, str]]:
+    stmt = select(ProductType.id, ProductType.name).order_by(ProductType.name)
+    return db.execute(stmt).all()
 
 @transactional
 def generate_lot_number() -> str:

@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import select, update, func, text
 from datetime import datetime, timezone
+from services.audit_services import update_record_with_audit
 from models.filament_models import (
     Filament,
     FilamentMounting,
@@ -12,11 +13,11 @@ from models.users_models import User
 from schemas.filament_schemas import (
     FilamentCreate,
     FilamentOut,
-    FilamentMountOut,
     FilamentAcclimatizationOut
 )
 from schemas.storage_location_schemas import StorageLocationOut
 from schemas.printer_schemas import PrinterOut
+from schemas.audit_schemas import FieldChangeAudit
 from utils.db_transaction import transactional
 
 @transactional
@@ -75,6 +76,24 @@ def get_acclimatized_filaments(db: Session) -> list[dict]:
         JOIN storage_locations loc ON f.location_id = loc.id
         WHERE a.ready_at <= GETDATE()
         AND a.status = 'In Acclimatization'
+        AND NOT EXISTS (
+            SELECT 1 FROM filament_mounting m WHERE m.filament_id = f.id
+        )
+        ORDER BY a.ready_at ASC
+    """
+    result = db.execute(text(sql))
+    cols = result.keys()
+    return [dict(zip(cols, row)) for row in result.fetchall()]
+
+@transactional
+def restore_acclimatizing_filaments(db: Session) -> list[dict]:
+    sql = """
+        SELECT f.id, f.serial_number, f.weight_grams,
+            a.id AS acclimatization_id, a.ready_at, loc.location_name
+        FROM filament_acclimatization a
+        JOIN filaments f ON a.filament_id = f.id
+        JOIN storage_locations loc ON f.location_id = loc.id
+        WHERE a.status = 'In Acclimatization'
         AND NOT EXISTS (
             SELECT 1 FROM filament_mounting m WHERE m.filament_id = f.id
         )
@@ -173,3 +192,50 @@ def get_mountable_filament_mounts(db: Session, required_weight: float) -> list[d
     result = db.execute(text(sql), {"weight": required_weight})
     cols = result.keys()
     return [dict(zip(cols, row)) for row in result.fetchall()]
+
+@transactional
+def update_filament_fields(
+    db: Session,
+    filament_id: int,
+    updates: dict[str, tuple],
+    reason: str,
+    user_id: int
+):
+    for field, (old_value, new_value) in updates.items():
+        audit = FieldChangeAudit(
+            table="filaments",
+            record_id=filament_id,
+            field=field,
+            old_value=old_value,
+            new_value=new_value,
+            reason=reason,
+            changed_by=user_id
+        )
+        update_record_with_audit(db, audit)
+    db.commit()
+
+@transactional
+def get_filaments(db: Session) -> list[FilamentOut]:
+    filaments = db.scalars(select(Filament).order_by(Filament.id)).all()
+    return [FilamentOut.model_validate(f) for f in filaments]
+
+@transactional
+def delete_filament_acclimatization(db: Session, acclimatization_id: int, reason: str, user_id: int):
+    accl = db.get(FilamentAcclimatization, acclimatization_id)
+    if not accl:
+        raise ValueError("Acclimatization record not found")
+    
+    for field in ["status", "moved_at", "moved_by"]:
+        value = getattr(accl, field)
+        audit = FieldChangeAudit(
+            table="filament_acclimatization",
+            record_id=acclimatization_id,
+            field=field,
+            old_value=str(value),
+            new_value="DELETED",
+            reason=reason,
+            changed_by=user_id
+        )
+        update_record_with_audit(db, audit, update=False)
+    db.delete(accl)
+    db.commit()

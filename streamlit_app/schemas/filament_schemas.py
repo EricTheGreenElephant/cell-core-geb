@@ -23,20 +23,6 @@ class FilamentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class FilamentMountOut(BaseModel):
-    id: int
-    filament_id: int
-    printer_id: int
-    mounted_by: int
-    remaining_weight: float
-    mounted_at: datetime
-    unmounted_at: Optional[datetime] = None
-    unmounted_by: Optional[int] = None
-    status: Optional[str] = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class FilamentAcclimatizationOut(BaseModel):
     id: int
     filament_id: int

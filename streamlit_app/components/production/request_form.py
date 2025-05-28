@@ -1,10 +1,14 @@
 import streamlit as st
-from data.production import get_product_types, insert_product_request
+from services.production_services import get_product_types, insert_product_request
+from schemas.production_schemas import ProductRequestCreate
+from db.orm_session import get_session
 
 def render_product_request_form():
     st.markdown("Submit New Product Request")
 
-    product_types = get_product_types()
+    with get_session() as db:
+        product_types = get_product_types(db)
+
     product_options = {name: id for id, name in product_types}
 
     if not product_options:
@@ -26,7 +30,15 @@ def render_product_request_form():
                     return
                 
                 product_id = product_options[product_choice]
-                insert_product_request(user_id, product_id, quantity, notes)
+                payload = ProductRequestCreate(
+                    requested_by=user_id,
+                    product_id=product_id,
+                    quantity=quantity,
+                    notes=notes
+                )
+
+                with get_session() as db:
+                    insert_product_request(db, payload)
 
                 st.success("Product request submitted successfully!")
             except Exception as e:

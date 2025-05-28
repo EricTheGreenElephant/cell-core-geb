@@ -1,7 +1,11 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
+from datetime import datetime
+
 
 class UserOut(BaseModel):
     id: int
     display_name: str
+    created_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True

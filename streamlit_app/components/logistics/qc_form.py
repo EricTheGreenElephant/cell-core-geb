@@ -1,12 +1,15 @@
 import streamlit as st
 import time
-from data.qc import get_printed_products, insert_product_qc
+from services.qc_services import get_printed_products, insert_product_qc
+from schemas.qc_schemas import ProductQCInput
+from db.orm_session import get_session
 
 
 def render_qc_form():
     st.subheader("Quality Control - Printed Products")
 
-    printed = get_printed_products()
+    with get_session() as db:
+        printed = get_printed_products(db)
     if not printed:
         st.info("No printed products waiting for QC.")
         return
@@ -69,7 +72,7 @@ def render_qc_form():
             else:
                 try:
                     user_id = st.session_state.get("user_id")
-                    insert_product_qc(
+                    payload = ProductQCInput(
                         harvest_id=selected["harvest_id"],
                         inspected_by=user_id,
                         weight_grams=weight,
@@ -78,6 +81,8 @@ def render_qc_form():
                         inspection_result=result,
                         notes=notes
                     )
+                    with get_session() as db:
+                        insert_product_qc(db=db, data=payload)
                     st.success("QC submitted successfully.")
                     time.sleep(1.5)
                     st.rerun()

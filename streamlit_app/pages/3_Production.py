@@ -1,11 +1,11 @@
 import streamlit as st
 from utils.session import require_login, require_access
 from utils.auth import show_user_sidebar
-from components.status_tracker import render_status_tracker
-from components.request_form import render_product_request_form
-from components.harvest_form import render_harvest_form
-from components.qc_form import render_qc_form
-from components.toggle import toggle_button
+from components.production.status_tracker import render_status_tracker
+from components.production.request_form import render_product_request_form
+from components.production.harvest_form import render_harvest_form
+from components.logistics.qc_form import render_qc_form
+from components.common.toggle import toggle_button
 
 
 if "show_inventory" not in st.session_state:

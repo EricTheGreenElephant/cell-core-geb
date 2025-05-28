@@ -1,7 +1,8 @@
 import time
 import streamlit as st
-from data.logistics import get_qc_passed_products, create_treatment_batch
-
+from services.logistics_services import get_qc_passed_products, create_treatment_batch
+from schemas.logistics_schemas import TreatmentBatchCreate, TreatmentProductData
+from db.orm_session import get_session
 
 def render_logistics_form():
     st.subheader("📦 Create Treatment Batch")
@@ -9,7 +10,8 @@ def render_logistics_form():
     user_id = st.session_state.get("user_id")
 
     try:
-        products = get_qc_passed_products()
+        with get_session() as db:
+            products = get_qc_passed_products(db)
 
         if not products:
             st.info("No products available for treatment.")
@@ -47,18 +49,30 @@ def render_logistics_form():
         notes = st.text_area("Optional Notes", max_chars=250)
 
         if st.button("Create Treatment Batch") and to_include:
-            tracking_data = [
-                {
-                    "tracking_id": p["Tracking ID"],
-                    "surface_treat": p["Surface Treat"],
-                    "sterilize": p["Sterilize"]
-                }
-                for p in to_include
-            ]
-            create_treatment_batch(user_id, tracking_data, notes)
-            st.success("Treatment batch created successfully.")
-            time.sleep(1.5)
-            st.rerun()
+            try:
+                tracking_data = [
+                    TreatmentProductData(
+                        tracking_id=p["Tracking ID"],
+                        surface_treat=p["Surface Treat"],
+                        sterilize=p["Sterilize"]
+                    ) for p in to_include
+                ]
+
+                payload = TreatmentBatchCreate(
+                    sent_by=user_id,
+                    tracking_data=tracking_data,
+                    notes=notes
+                )
+
+                with get_session() as db:
+                    create_treatment_batch(db, payload)
+
+                st.success("Treatment batch created successfully.")
+                time.sleep(1.5)
+                st.rerun()
+            except Exception as e:
+                st.error("failed to create treatment batch.")
+                st.exception(e)
     
     except Exception as e:
         st.error("Failed to load products.")
