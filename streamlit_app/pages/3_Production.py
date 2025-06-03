@@ -4,7 +4,10 @@ from utils.auth import show_user_sidebar
 from components.production.status_tracker import render_status_tracker
 from components.production.request_form import render_product_request_form
 from components.production.harvest_form import render_harvest_form
+from components.production.harvest_edit_form import render_harvest_edit_form
+from components.production.harvest_undo_form import render_harvest_undo_form
 from components.logistics.qc_form import render_qc_form
+from components.logistics.qc_edit_form import render_qc_edit_form
 from components.common.toggle import toggle_button
 
 
@@ -30,7 +33,7 @@ require_access("Production", minimum_level="Read")
 access_level = st.session_state["access"]["Production"]
 
 # --- Page structure ---
-tab1, tab2, tab3, tab4 = st.tabs(["Inventory", "New Request", "Harvest Requests", "Product QC"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Inventory", "New Request", "Harvest Requests", "Product QC", "Edit Products"])
 
 with tab1:
     toggle_button("show_inventory", "Show Inventory", "Hide Inventory")
@@ -58,3 +61,18 @@ with tab4:
             render_qc_form()
     else:
         st.warning("🔒 You do not have permission to view Product QC")
+
+with tab5:
+    if access_level in ("Write", "Admin"):
+        toggle = st.selectbox(
+            label="Edit Data",
+            options=["Select Option...", "Undo Harvest", "Edit Harvest Data", "Edit QC Data"],
+            index=0 
+        )
+        match toggle:
+            case "Undo Harvest":
+                render_harvest_undo_form()
+            case "Edit Harvest Data":
+                render_harvest_edit_form()
+            case "Edit QC Data":
+                render_qc_edit_form()

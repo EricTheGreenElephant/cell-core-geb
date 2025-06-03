@@ -26,7 +26,7 @@ require_login()
 user_level = require_access("Logistics", minimum_level="Read")
 
 # --- Page structure ---
-tab1, tab2, tab3 = st.tabs(["Inventory", "Enter Lid Batch", "Enter Lid Batch"])
+tab1, tab2, tab3 = st.tabs(["Inventory", "Enter Lid Batch", "Edit Lid Batch"])
 
 with tab1:
     toggle_button("show_lid_inventory", "Show Lid Inventory", "Hide Lid Inventory")

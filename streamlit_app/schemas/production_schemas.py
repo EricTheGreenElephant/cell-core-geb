@@ -21,3 +21,15 @@ class ProductRequestOut(BaseModel):
     buffer_weight: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class HarvestedProductOut(BaseModel):
+    harvest_id: int
+    request_id: int
+    product_type: str
+    filament_serial: str
+    printer_name: str
+    lid_serial: str
+    printed_by: str
+    print_date: datetime
+    print_status: str

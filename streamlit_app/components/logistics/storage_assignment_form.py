@@ -29,7 +29,7 @@ def render_storage_assignment_form():
             return
         
         location_map = {
-            f"{loc['location_name']} --- Description: {loc['description']}": loc['id']
+            f"{loc.location_name} --- Description: {loc.description}": loc.id
             for loc in locations
         }
         selected_location = st.selectbox("Select Storage Location", list(location_map.keys()))
@@ -45,7 +45,7 @@ def render_storage_assignment_form():
             if submitted:
                 try:
                     selected_loc_id = location_map[selected_location]
-                    selected_desc = next((loc['description'] or '').lower() for loc in locations if loc['id'] == selected_loc_id)
+                    selected_desc = next((loc.description or '').lower() for loc in locations if loc.id == selected_loc_id)
 
                     # Set status based on description
                     if "quarantine" in selected_desc:
