@@ -9,5 +9,6 @@ ALLOWED_AUDIT_TABLES = {
     "product_tracking",
     "treatment_batches",
     "treatment_batch_products",
+    "post_treatment_inspections",
     "users"
 }

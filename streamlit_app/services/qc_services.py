@@ -158,3 +158,48 @@ def update_qc_fields(
             {"status": new_status, "h_id": harvest_id}
         )
     db.commit()
+
+@transactional
+def get_completed_post_treatment_qc(db: Session) -> list[dict]:
+    sql = """
+        SELECT
+            pti.id AS inspection_id,
+            pti.product_id,
+            pt.name AS product_type,
+            pti.surface_treated,
+            pti.sterilized,
+            pti.visual_pass,
+            pti.qc_result,
+            pti.inspected_by,
+            pti.inspected_at
+        FROM post_treatment_inspections pti
+        JOIN product_tracking t ON pti.product_id = t.id
+        JOIN product_harvest ph ON t.harvest_id = ph.id
+        JOIN product_requests pr on ph.request_id = pr.id
+        JOIN product_types pt ON pr.product_id = pt.id
+        ORDER BY pti.inspected_at DESC
+    """
+    result = db.execute(text(sql))
+    cols = result.keys()
+    return [dict(zip(cols, row)) for row in result.fetchall()]
+
+@transactional
+def update_post_treatment_qc_fields(
+    db: Session,
+    inspection_id: int,
+    updates: dict[str, tuple],
+    reason: str,
+    user_id: int
+):
+    for field, (old_value, new_value) in updates.items():
+        audit = FieldChangeAudit(
+            table="post_treatment_inspections",
+            record_id=inspection_id,
+            field=field,
+            old_value=old_value,
+            new_value=new_value,
+            reason=reason,
+            changed_by=user_id
+        )
+        update_record_with_audit(db, audit)
+    db.commit()

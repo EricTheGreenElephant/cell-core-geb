@@ -66,7 +66,7 @@ with tab5:
     if access_level in ("Write", "Admin"):
         toggle = st.selectbox(
             label="Edit Data",
-            options=["Select Option...", "Undo Harvest", "Edit Harvest Data", "Edit QC Data"],
+            options=["Select an option...", "Undo Harvest", "Edit Harvest Data", "Edit QC Data"],
             index=0 
         )
         match toggle:

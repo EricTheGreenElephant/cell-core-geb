@@ -2,6 +2,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from models.logistics_models import TreatmentBatch, TreatmentBatchProduct
 from schemas.logistics_schemas import TreatmentBatchCreate
+from schemas.audit_schemas import FieldChangeAudit
+from services.audit_services import update_record_with_audit
 from utils.db_transaction import transactional
 
 
@@ -205,4 +207,102 @@ def mark_batch_as_inspected(db: Session, batch_id: int):
         """),
         {"id": batch_id}
     )
+    db.commit()
+
+@transactional
+def get_stored_products(db: Session) -> list[dict]:
+    sql = """
+        SELECT
+            t.id AS tracking_id,
+            ph.id AS harvest_id,
+            pt.name AS product_type,
+            t.current_status,
+            sl.id AS location_id,
+            sl.location_name,
+            sl.description
+        FROM product_tracking t
+        JOIN product_harvest ph ON t.harvest_id = ph.id
+        JOIN product_requests pr ON ph.request_id = pr.id
+        JOIN product_types pt ON pr.product_id = pt.id
+        JOIN storage_locations sl ON t.location_id = sl.id
+        WHERE t.current_status IN ('In Interim Storage', 'In Quarantine')
+    """
+    result = db.execute(text(sql))
+    cols = result.keys()
+    return [dict(zip(cols, row)) for row in result.fetchall()]
+
+@transactional
+def update_tracking_storage(
+    db: Session,
+    tracking_id: int,
+    updates: dict[str, tuple],
+    reason: str,
+    user_id: int
+):
+    for field, (old_value, new_value) in updates.items():
+        audit = FieldChangeAudit(
+            table="product_tracking",
+            record_id=tracking_id,
+            field=field,
+            old_value=old_value,
+            new_value=new_value,
+            reason=reason,
+            changed_by=user_id
+        )
+        update_record_with_audit(db, audit)
+    db.commit()
+
+@transactional
+def remove_product_from_batch(
+    db: Session, 
+    batch_product_id: int, 
+    product_id: int,
+    user_id: int,
+    reason: str
+):
+    audit = FieldChangeAudit(
+        table="treatment_batch_products",
+        record_id=batch_product_id,
+        field="DELETED",
+        old_value="No",
+        new_value="Yes",
+        reason=reason,
+        changed_by=user_id
+    )
+    update_record_with_audit(db, audit, update=False)
+
+    db.execute(
+        text("DELETE FROM treatment_batch_products WHERE id = :id"),
+        {"id": batch_product_id}    
+    )
+
+    db.execute(
+        text("""
+            UPDATE product_tracking
+            SET current_status = 'In Interim Storage', last_updated_at = GETDATE()
+            WHERE id = :pid
+        """),
+        {"pid": product_id}
+    )
+    db.commit()
+
+@transactional
+def update_treatment_batch_fields(
+    db: Session,
+    batch_product_id: int,
+    updates: dict[str, tuple],
+    reason: str,
+    user_id: int
+):
+    for field, (old_value, new_value) in updates.items():
+        audit = FieldChangeAudit(
+            table="treatment_batch_products",
+            record_id=batch_product_id,
+            field=field,
+            old_value=old_value,
+            new_value=new_value,
+            reason=reason,
+            changed_by=user_id
+        )
+        update_record_with_audit(db, audit)
     db.commit()
