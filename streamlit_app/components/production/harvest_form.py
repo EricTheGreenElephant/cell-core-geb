@@ -20,7 +20,7 @@ def render_harvest_form():
         return
 
     for unit in pending:
-        with st.expander(f"🧾 Request #{unit['id']} – {unit['product_type']} (Lot: {unit['lot_number']})"):
+        with st.expander(f"🧾 Request #{unit['id']} - {unit['product_type']} (Lot: {unit['lot_number']})"):
             st.markdown(f"**Requested by:** {unit['requested_by']}  \n**Date:** {unit['requested_at']}")
 
             # Calculate required weight with tolerated buffer weight and additional buffer  
@@ -54,13 +54,25 @@ def render_harvest_form():
                 else:
                     st.warning("No passing lid batches available.")
                     lid_id = None
-                cols = st.columns([1, 1])
-                with cols[0]:
-                    submitted = st.form_submit_button("✅ Harvest Product")
-                with cols[1]:
-                    cancel = st.form_submit_button("❌ Cancel Product")
+
+                seal_id = st.text_input("Input the seal id number", max_chars=50, key=f"seal_{unit['id']}")
+
+                # col_spacer is a column added only for width spacing
+                col1, col2, col_spacer = st.columns([0.5, 0.5, 1])
+                with col1:
+                    submitted = st.form_submit_button("✅ Harvest Product", use_container_width=True)
+                with col2:
+                    cancel = st.form_submit_button("❌ Cancel Product", use_container_width=True)
 
                 if submitted:
+                    if not seal_id.strip():
+                        st.warning("Please enter seal id.")
+                        return
+                    
+                    if not lid_id:
+                        st.warning("Please select a lid.")
+                        return
+                    
                     try:
                         mount_id = mount_options[selected_mount]
                         user_id = st.session_state.get("user_id")
@@ -70,7 +82,8 @@ def render_harvest_form():
                                 request_id=unit['id'], 
                                 filament_mount_id=mount_id, 
                                 printed_by=user_id, 
-                                lid_id=lid_id
+                                lid_id=lid_id, 
+                                seal_id=seal_id
                             )
                         st.success("Product marked as harvested.")
                         time.sleep(1.5)

@@ -44,10 +44,12 @@ def render_treatment_qc_form():
 
         total = len(products)
         sample_size = max(2, round(0.05 * total))
+        actual_sample_size = min(sample_size, total)
+
         # Sets the random sample to prevent re-randomizing product selection when user changes visual pass option
         sample_key = f"sample_batch_{batch_id}"
         if sample_key not in st.session_state:
-            st.session_state[sample_key] = sample(products, sample_size)
+            st.session_state[sample_key] = sample(products, actual_sample_size)
         random_sample = st.session_state[sample_key]
 
         st.markdown(f"**Randomly Selected for Visual Inspection: {sample_size} of {total} products**")

@@ -5,6 +5,7 @@ from models.production_models import ProductRequest, ProductHarvest, ProductTrac
 from schemas.production_schemas import ProductRequestCreate
 from schemas.audit_schemas import FieldChangeAudit
 from services.audit_services import update_record_with_audit
+from services.tracking_service import generate_tracking_id
 from utils.db_transaction import transactional
 
 
@@ -52,20 +53,23 @@ def get_pending_requests(db: Session) -> list[dict]:
     return [dict(zip(cols, row)) for row in result.fetchall()]
 
 @transactional
-def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int, printed_by: int, lid_id: int):
+def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int, printed_by: int, lid_id: int, seal_id: str):
     harvest = ProductHarvest(
         request_id=request_id,
         filament_mounting_id=filament_mount_id,
         printed_by=printed_by,
-        print_status="Printed",
-        lid_id=lid_id
+        lid_id=lid_id,
+        seal_id=seal_id
     )
     db.add(harvest)
     db.flush()
 
+    tracking_id = generate_tracking_id(db)
+
     tracking = ProductTracking(
         harvest_id=harvest.id,
-        current_status="Printed"
+        tracking_id=tracking_id,
+        current_stage_id=1
     )
     db.add(tracking)
 
@@ -96,8 +100,7 @@ def get_harvested_products(db: Session) -> list[dict]:
             p.name AS printer_name,
             l.serial_number AS lid_serial,
             u.display_name AS printed_by,
-            ph.print_date,
-            ph.print_status
+            ph.print_date
         FROM product_harvest ph
         JOIN product_requests pr ON ph.request_id = pr.id
         JOIN product_types pt ON pr.product_id = pt.id

@@ -23,3 +23,39 @@ class TreatmentBatchOut(BaseModel):
     notes: Optional[str]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TreatmentBatchProductCandidate(BaseModel):
+    tracking_id: int
+    current_stage_name: str
+    last_updated_at: datetime
+    harvest_id: int
+    product_type: str
+    inspection_result: str
+    location_name: Optional[str]
+
+    class Config: 
+        orm_mode = True
+
+
+class PostHarvestStorageCandidate(BaseModel):
+    tracking_id: int
+    current_stage_name: str
+    location_id: Optional[int]
+    harvest_id: int
+    last_updated_at: datetime
+    inspection_result: str
+    filament_serial: str
+    product_type: str
+    printed_by: Optional[str]
+    print_date: Optional[datetime]
+
+    class Config:
+        orm_mode = True
+
+
+class PostTreatmentStorageCandidate(BaseModel):
+    tracking_id: int
+    harvest_id: int
+    product_type: str
+    inspection_result: Optional[str]

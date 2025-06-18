@@ -12,12 +12,12 @@ class Filament(Base):
     location_id = Column(Integer, ForeignKey('storage_locations.id'))
     qc_result = Column(String)
     received_by = Column(Integer, ForeignKey('users.id'))
-    received_at = Column(DateTime, default=datetime.now(timezone.utc))
+    received_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
-    received_user = relationship("User", back_populates="received_filaments")
-    location = relationship("StorageLocation", back_populates="filaments")
-    mountings = relationship("FilamentMounting", back_populates="filament")
-    acclimatizations = relationship("FilamentAcclimatization", back_populates="filament")
+    received_user = relationship("models.users_models.User", back_populates="received_filaments")
+    location = relationship("models.storage_locations_models.StorageLocation", back_populates="filaments")
+    mountings = relationship("models.filament_models.FilamentMounting", back_populates="filament")
+    acclimatizations = relationship("models.filament_models.FilamentAcclimatization", back_populates="filament")
 
 
 class FilamentMounting(Base):
@@ -27,15 +27,15 @@ class FilamentMounting(Base):
     printer_id = Column(Integer, ForeignKey('printers.id'))
     mounted_by = Column(Integer, ForeignKey('users.id'))
     remaining_weight = Column(Float)
-    mounted_at = Column(DateTime, default=datetime.now(timezone.utc))
+    mounted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     unmounted_at = Column(DateTime, nullable=True)
     unmounted_by = Column(Integer, ForeignKey('users.id'), nullable=True)
-    status = Column(String)
+    status = Column(String, nullable=False, default='In Use')
 
-    filament = relationship("Filament", back_populates="mountings")
-    printer = relationship("Printer", back_populates="mountings")
-    mounted_by_user = relationship("User", back_populates="mounted_filaments", foreign_keys=[mounted_by])
-    unmounted_by_user = relationship("User", back_populates="unmounted_filaments", foreign_keys=[unmounted_by])
+    filament = relationship("models.filament_models.Filament", back_populates="mountings")
+    printer = relationship("models.printers_models.Printer", back_populates="mountings")
+    mounted_by_user = relationship("models.users_models.User", back_populates="mounted_filaments", foreign_keys=[mounted_by])
+    unmounted_by_user = relationship("models.users_models.User", back_populates="unmounted_filaments", foreign_keys=[unmounted_by])
 
 
 class FilamentAcclimatization(Base):
@@ -43,8 +43,8 @@ class FilamentAcclimatization(Base):
     id = Column(Integer, primary_key=True)
     filament_id = Column(Integer, ForeignKey('filaments.id'))
     status = Column(String)
-    moved_at = Column(DateTime, default=datetime.now(timezone.utc))
+    moved_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     moved_by = Column(Integer, ForeignKey('users.id'))
     ready_at = Column(DateTime, Computed("DATEADD(DAY, 2, moved_at)", persisted=True))
 
-    filament = relationship("Filament", back_populates="acclimatizations")
+    filament = relationship("models.filament_models.Filament", back_populates="acclimatizations")

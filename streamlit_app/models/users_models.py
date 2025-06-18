@@ -14,6 +14,8 @@ class User(Base):
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 
-    received_filaments = relationship("Filament", back_populates="received_user", foreign_keys="Filament.received_by")
-    mounted_filaments = relationship("FilamentMounting", back_populates="mounted_by_user", foreign_keys="FilamentMounting.mounted_by")
-    unmounted_filaments = relationship("FilamentMounting", back_populates="unmounted_by_user", foreign_keys="FilamentMounting.unmounted_by")
+    received_filaments = relationship("models.filament_models.Filament", back_populates="received_user", foreign_keys="Filament.received_by")
+    mounted_filaments = relationship("models.filament_models.FilamentMounting", back_populates="mounted_by_user", foreign_keys="FilamentMounting.mounted_by")
+    unmounted_filaments = relationship("models.filament_models.FilamentMounting", back_populates="unmounted_by_user", foreign_keys="FilamentMounting.unmounted_by")
+    received_lids = relationship("models.lid_models.Lid", back_populates="receiver", foreign_keys="Lid.received_by")
+    post_treatment_inspections = relationship("PostTreatmentInspection", back_populates="inspector")

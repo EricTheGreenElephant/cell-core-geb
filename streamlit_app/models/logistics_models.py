@@ -13,7 +13,7 @@ class TreatmentBatch(Base):
     notes = Column(String)
     status = Column(String, default='Shipped', nullable=False)
 
-    products = relationship("TreatmentBatchProduct", back_populates="batch")
+    products = relationship("models.logistics_models.TreatmentBatchProduct", back_populates="batch")
 
 
 class TreatmentBatchProduct(Base):
@@ -25,4 +25,5 @@ class TreatmentBatchProduct(Base):
     surface_treat = Column(Boolean, nullable=False)
     sterilize = Column(Boolean, nullable=False)
 
-    batch = relationship("TreatmentBatch", back_populates="products")
+    batch = relationship("models.logistics_models.TreatmentBatch", back_populates="products")
+    product = relationship("models.production_models.ProductTracking", back_populates="treatment_batch_product")

@@ -48,7 +48,6 @@ def get_filaments_not_acclimatizing(db: Session) -> list[dict]:
         WHERE f.qc_result = 'PASS'
         AND f.id NOT IN (
             SELECT filament_id FROM filament_acclimatization
-            WHERE status IN ('In Acclimatization', 'In Production')
         )
     """
     result = db.execute(text(sql))
@@ -59,7 +58,7 @@ def get_filaments_not_acclimatizing(db: Session) -> list[dict]:
 def insert_filament_acclimatization(db: Session, filament_id: int, user_id: int):
     accl = FilamentAcclimatization(
         filament_id=filament_id,
-        status="In Acclimatization",
+        status="Acclimatizing",
         moved_at=datetime.now(timezone.utc),
         moved_by=user_id
     )
@@ -75,7 +74,7 @@ def get_acclimatized_filaments(db: Session) -> list[dict]:
         JOIN filaments f ON a.filament_id = f.id
         JOIN storage_locations loc ON f.location_id = loc.id
         WHERE a.ready_at <= GETDATE()
-        AND a.status = 'In Acclimatization'
+        AND a.status = 'Acclimatizing'
         AND NOT EXISTS (
             SELECT 1 FROM filament_mounting m WHERE m.filament_id = f.id
         )
@@ -93,7 +92,7 @@ def restore_acclimatizing_filaments(db: Session) -> list[dict]:
         FROM filament_acclimatization a
         JOIN filaments f ON a.filament_id = f.id
         JOIN storage_locations loc ON f.location_id = loc.id
-        WHERE a.status = 'In Acclimatization'
+        WHERE a.status = 'Acclimatizing'
         AND NOT EXISTS (
             SELECT 1 FROM filament_mounting m WHERE m.filament_id = f.id
         )
@@ -138,7 +137,7 @@ def insert_filament_mount(
     stmt = (
         update(FilamentAcclimatization)
         .where(FilamentAcclimatization.id == acclimatization_id)
-        .values(status='In Production')
+        .values(status='Complete')
     )
     db.execute(stmt)
     db.commit()

@@ -32,4 +32,14 @@ class HarvestedProductOut(BaseModel):
     lid_serial: str
     printed_by: str
     print_date: datetime
-    print_status: str
+    
+
+class ProductTrackingRead(BaseModel):
+    id: int
+    tracking_id: str
+    harvest_id: int
+    current_stage_id: int
+    last_updated_at: datetime
+
+    class Config:
+        orm_mode = True

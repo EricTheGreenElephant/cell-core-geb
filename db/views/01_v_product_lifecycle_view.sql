@@ -1,7 +1,7 @@
 CREATE VIEW v_product_lifecycle AS
 SELECT 
     pt.id AS product_id,
-    pt.current_status,
+    lc.stage_name AS current_status,
     pt.last_updated_at,
     loc.location_name,
 
@@ -27,7 +27,7 @@ SELECT
     tb.id AS treatment_batch_id,
     tb.status AS treatment_status,
     tb.sent_at AS treatment_sent_at,
-    pti.final_result AS final_qc_result,
+    pti.qc_result AS final_qc_result,
     pti.sterilized AS treatment_sterilized,
 
     -- Shipment info
@@ -39,6 +39,7 @@ SELECT
     s.carrier
 
 FROM product_tracking pt
+LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
 LEFT JOIN storage_locations loc ON pt.location_id = loc.id
 
 -- Harvest & user

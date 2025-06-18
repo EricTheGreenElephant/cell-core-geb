@@ -20,12 +20,12 @@ def render_logistics_form():
         options = [
             {
                 "Include": True,
-                "Tracking ID": p["tracking_id"],
-                "Current Status": p["current_status"],
-                "Harvest ID": p["harvest_id"],
-                "Product Type": p["product_type"],
-                "Location": p["location_name"],
-                "QC Result": p["inspection_result"],
+                "Tracking ID": p.tracking_id,
+                "Current Status": p.current_stage_name,
+                "Harvest ID": p.harvest_id,
+                "Product Type": p.product_type,
+                "Location": p.location_name,
+                "QC Result": p.inspection_result,
                 "Surface Treat": True,
                 "Sterilize": True
             }
