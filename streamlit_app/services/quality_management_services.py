@@ -6,6 +6,7 @@ from models.users_models import User
 from models.product_quality_control_models import ProductQualityControl, PostTreatmentInspection
 from models.storage_locations_models import StorageLocation
 from schemas.quality_management_schemas import ProductQMReview, PostTreatmentApprovalCandidate
+from services.tracking_service import log_product_status_change
 from utils.db_transaction import transactional
 
 
@@ -91,7 +92,7 @@ def get_post_treatment_qm_candidates(db: Session) -> list[PostTreatmentApprovalC
     return [PostTreatmentApprovalCandidate(**row._mapping) for row in results]
 
 @transactional
-def approve_products_for_treatment(db: Session, tracking_ids: list[int]):
+def approve_products_for_treatment(db: Session, tracking_ids: list[int], user_id: int):
     if not tracking_ids:
         return
     
@@ -100,18 +101,42 @@ def approve_products_for_treatment(db: Session, tracking_ids: list[int]):
     if not new_stage_id:
         raise ValueError("Target stage QMTreatmentApproval not found!")
     
-    update_stmt = text("""
-        UPDATE product_tracking
-        SET current_stage_id = :new_stage_id,
-            last_updated_at = GETDATE()
-        WHERE id IN :tracking_ids
-    """).bindparams(bindparam("tracking_ids", expanding=True))
+    for tracking_id in tracking_ids:
+        from_stage_id = db.scalar(
+            text("SELECT current_stage_id FROM product_tracking WHERE id = :tracking_id"),
+            {"tracking_id": tracking_id}
+        )
+    
+        db.execute(
+            text("""
+                UPDATE product_tracking
+                SET current_stage_id = :new_stage_id,
+                    last_updated_at = GETDATE()
+                WHERE id = :tracking_id
+            """),
+            {"new_stage_id": new_stage_id, "tracking_id": tracking_id}
+        )
 
-    db.execute(update_stmt, {"new_stage_id": new_stage_id, "tracking_ids": tuple(tracking_ids)})
+        log_product_status_change(
+            db=db,
+            product_id=tracking_id,
+            from_stage_id=from_stage_id,
+            to_stage_id=new_stage_id,
+            reason="QM Approved for Treatment",
+            user_id=user_id
+        )
+    # update_stmt = text("""
+    #     UPDATE product_tracking
+    #     SET current_stage_id = :new_stage_id,
+    #         last_updated_at = GETDATE()
+    #     WHERE id IN :tracking_ids
+    # """).bindparams(bindparam("tracking_ids", expanding=True))
+
+    # db.execute(update_stmt, {"new_stage_id": new_stage_id, "tracking_ids": tuple(tracking_ids)})
     db.commit()
 
 @transactional
-def approve_products_for_sales(db: Session, tracking_ids: list[int]):
+def approve_products_for_sales(db: Session, tracking_ids: list[int], user_id: int):
     if not tracking_ids:
         return
     
@@ -121,14 +146,37 @@ def approve_products_for_sales(db: Session, tracking_ids: list[int]):
     if not target_stage_id:
         raise ValueError("Target stage QMSalesApproval not found!")
     
-    update_stmt = text("""
-        UPDATE product_tracking
-        SET current_stage_id = :new_stage_id,
-            last_updated_at = GETDATE()
-        WHERE id IN :tracking_ids
-    """).bindparams(bindparam("tracking_ids", expanding=True))
+    for tracking_id in tracking_ids:
+        from_stage_id = db.scalar(
+            text("SELECT current_stage_id FROM product_tracking WHERE id = :tracking_id"),
+            {"tracking_id": tracking_id}
+        )
+        db.execute(
+            text("""
+                UPDATE product_tracking
+                SET current_stage_id = :new_stage_id,
+                    last_updated_at = GETDATE()
+                WHERE id = :tracking_id
+            """),
+            {"new_stage_id": target_stage_id, "tracking_id": tracking_id}
+        )
 
-    db.execute(update_stmt, {"new_stage_id": target_stage_id, "tracking_ids": tracking_ids})
+        log_product_status_change(
+            db=db,
+            product_id=tracking_id,
+            from_stage_id=from_stage_id,
+            to_stage_id=target_stage_id,
+            reason="QM Approved for Sales",
+            user_id=user_id
+        )
+    # update_stmt = text("""
+    #     UPDATE product_tracking
+    #     SET current_stage_id = :new_stage_id,
+    #         last_updated_at = GETDATE()
+    #     WHERE id IN :tracking_ids
+    # """).bindparams(bindparam("tracking_ids", expanding=True))
+
+    # db.execute(update_stmt, {"new_stage_id": target_stage_id, "tracking_ids": tracking_ids})
     db.commit()
 
 @transactional

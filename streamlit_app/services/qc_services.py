@@ -3,6 +3,7 @@ from sqlalchemy import text
 from schemas.qc_schemas import ProductQCInput
 from schemas.audit_schemas import FieldChangeAudit
 from services.audit_services import update_record_with_audit
+from services.tracking_service import log_product_status_change
 from utils.db_transaction import transactional
 
 
@@ -51,22 +52,38 @@ def insert_product_qc(db: Session, data: ProductQCInput):
         }
     )
 
-    # new_status = {
-    #     "Passed": 2,
-    #     "B-Ware": 2,
-    #     "Quarantine": 9,
-    #     "Waste": 10
-    # }.get(data.inspection_result, 2)
     stage_code = "HarvestQCComplete"
+    new_stage_id = db.scalar(
+        text("SELECT id FROM lifecycle_stages WHERE stage_code = :code"),
+        {"code": stage_code}
+    )
+    tracking_id, current_stage_id = db.execute(
+        text("""
+            SELECT id, current_stage_id
+            FROM product_tracking
+            WHERE harvest_id = :h_id
+        """),
+        {"h_id": data.harvest_id}
+    ).one()
+
     db.execute(
         text("""
             UPDATE product_tracking
             SET 
-                current_stage_id = (SELECT id FROM lifecycle_stages WHERE stage_code = :stage_code), 
+                current_stage_id = :stage_id, 
                 last_updated_at = GETDATE()
             WHERE harvest_id = :h_id
         """),
-        {"stage_code": stage_code, "h_id": data.harvest_id}
+        {"stage_id": new_stage_id, "h_id": data.harvest_id}
+    )
+
+    log_product_status_change(
+        db=db,
+        product_id=tracking_id,
+        from_stage_id=current_stage_id,
+        to_stage_id=new_stage_id,
+        reason="QC Complete",
+        user_id=data.inspected_by
     )
 
     db.execute(

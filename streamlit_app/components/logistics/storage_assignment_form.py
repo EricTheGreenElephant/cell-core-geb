@@ -97,9 +97,10 @@ def render_storage_assignment_form():
                             new_stage_code = "InInterimStorage"
 
                         assignments.append((tracking_id, location_id, new_stage_code))
+                        user_id = st.session_state.get("user_id")
                     
                     with get_session() as db:
-                            assign_storage_to_products(db, assignments)
+                            assign_storage_to_products(db, assignments, user_id)
 
                     st.success("Storage assignment complete.")
                     time.sleep(1.5)

@@ -10,6 +10,7 @@ from models.users_models import User
 from schemas.logistics_schemas import TreatmentBatchCreate, TreatmentBatchProductCandidate, PostHarvestStorageCandidate, PostTreatmentStorageCandidate
 from schemas.audit_schemas import FieldChangeAudit
 from services.audit_services import update_record_with_audit
+from services.tracking_service import log_product_status_change
 from utils.db_transaction import transactional
 
 
@@ -85,7 +86,17 @@ def create_treatment_batch(db: Session, data: TreatmentBatchCreate):
     if not offsite_id:
          raise ValueError("Offsite storage location not found.")
     
+    stmt_stage = select(LifecycleStages.id).where(LifecycleStages.stage_code == "InTreatment")
+    new_stage_id = db.scalar(stmt_stage)
+    if not new_stage_id:
+        raise ValueError("Target stage InTreatment not found!")
+    
     for item in data.tracking_data:
+        from_stage_id = db.scalar(
+            text("SELECT current_stage_id FROM product_tracking WHERE id = :tracking_id"),
+            {"tracking_id": item.tracking_id}
+        )
+
         product = TreatmentBatchProduct(
             batch_id=batch.id,
             product_id=item.tracking_id,
@@ -93,16 +104,26 @@ def create_treatment_batch(db: Session, data: TreatmentBatchCreate):
             sterilize=bool(item.sterilize)
         )
         db.add(product)
+
         db.execute(
             text("""
                  UPDATE product_tracking
                  SET 
-                    current_stage_id = (SELECT id FROM lifecycle_stages WHERE stage_code = 'InTreatment'),
+                    current_stage_id = :new_stage_id,
                     location_id = :offsite_id,
                     last_updated_at = GETDATE()
-                 WHERE id = :id
+                 WHERE id = :tracking_id
                 """),
-                {"offsite_id": offsite_id, "id": item.tracking_id}
+                {"new_stage_id": new_stage_id, "offsite_id": offsite_id, "tracking_id": item.tracking_id}
+        )
+
+        log_product_status_change(
+            db=db,
+            product_id=item.tracking_id,
+            from_stage_id=from_stage_id,
+            to_stage_id=new_stage_id,
+            reason="Sent for Treatment (batch creation)",
+            user_id=data.sent_by
         )
         
     db.commit()
@@ -208,21 +229,40 @@ def get_post_treatment_products_needing_storage(db: Session) -> list[PostTreatme
     return [PostTreatmentStorageCandidate(**row._mapping) for row in results]
 
 @transactional
-def assign_storage_to_products(db: Session, assignments: list[tuple[str, int, str]]):
+def assign_storage_to_products(db: Session, assignments: list[tuple[str, int, str]], user_id: int):
     for tracking_id, location_id, stage_code in assignments:
+        from_stage_id = db.scalar(
+            text("SELECT current_stage_id FROM product_tracking WHERE id = :tracking_id"),
+                {"tracking_id": tracking_id}
+        )
+
+        to_stage_id = db.scalar(
+            text("SELECT id FROM lifecycle_stages WHERE stage_code = :code"),
+            {"code": stage_code}
+        )
+
         db.execute(
             text("""
                 UPDATE product_tracking
                 SET 
                     location_id = :location_id, 
-                    current_stage_id = (SELECT id FROM lifecycle_stages WHERE stage_code = :stage_code), 
+                    current_stage_id = :stage_id, 
                     last_updated_at = GETDATE()
                 WHERE id = :tracking_id
             """),
-            {"location_id": location_id, "stage_code": stage_code, "tracking_id": tracking_id}
+            {"location_id": location_id, "stage_id": to_stage_id, "tracking_id": tracking_id}
         )
-    db.commit()
 
+        log_product_status_change(
+            db=db,
+            product_id=tracking_id,
+            from_stage_id=from_stage_id,
+            to_stage_id=to_stage_id,
+            reason="Storage assignment",
+            user_id=user_id
+        )
+
+    db.commit()
 
 @transactional
 def get_shipped_batches(db: Session) -> list[dict]:
@@ -266,7 +306,19 @@ def get_products_by_batch_id(db: Session, batch_id: int) -> list[dict]:
 
 @transactional
 def update_post_treatment_qc(db: Session, product_qc: list[dict], inspected_by: int):
+    stmt_stage = select(LifecycleStages.id).where(LifecycleStages.stage_code == "PostTreatmentQC")
+    new_stage_id = db.scalar(stmt_stage)
+    if not new_stage_id:
+        raise ValueError("Target stage PostTreatmentQC not found!")
+    
     for item in product_qc:
+        tracking_id = item["tracking_id"]
+
+        from_stage_id = db.scalar(
+            text("SELECT current_stage_id FROM product_tracking WHERE id = :tracking_id"),
+            {"tracking_id": tracking_id}
+        )
+
         db.execute(
             text("""
                 INSERT INTO post_treatment_inspections (
@@ -275,7 +327,7 @@ def update_post_treatment_qc(db: Session, product_qc: list[dict], inspected_by: 
                 VALUES (:pid, :treated, :sterilized, :visual, :qc_result, :inspector)
             """),
             {
-                "pid": item["tracking_id"],
+                "pid": tracking_id,
                 "treated": item["surface_treat"],
                 "sterilized": item["sterilize"],
                 "visual": item["visual_pass"],
@@ -286,10 +338,19 @@ def update_post_treatment_qc(db: Session, product_qc: list[dict], inspected_by: 
         db.execute(
             text("""
                 UPDATE product_tracking
-                SET current_stage_id = 6, last_updated_at = GETDATE()
+                SET current_stage_id = :new_stage_id, last_updated_at = GETDATE()
                 WHERE id = :pid
             """),
-            {"pid": item["tracking_id"]}
+            {"new_stage_id": new_stage_id, "pid": tracking_id}
+        )
+
+        log_product_status_change(
+            db=db,
+            product_id=tracking_id,
+            from_stage_id=from_stage_id,
+            to_stage_id=new_stage_id,
+            reason="Post-Treatment QC Complete",
+            user_id=inspected_by
         )
     db.commit()
 

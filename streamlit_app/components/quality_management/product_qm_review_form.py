@@ -54,9 +54,11 @@ def render_product_qm_review():
     if eligible_tracking_ids:
         st.write(f"Eligible for Approval: {len(eligible_tracking_ids)} product(s).")
         if st.button("Approve All"):
-            try: 
+            try:
+                user_id = st.session_state.get("user_id")
+                 
                 with get_session() as db:
-                    target_stage_func(db, eligible_tracking_ids)
+                    target_stage_func(db, eligible_tracking_ids, user_id)
                 st.success(f"Approved {len(eligible_tracking_ids)} product(s).")
                 time.sleep(1.5)
                 st.rerun()
