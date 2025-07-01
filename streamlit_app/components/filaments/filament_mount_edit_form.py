@@ -28,19 +28,41 @@ def render_edit_mount_form():
     user_labels = {f"{u.display_name} (ID {u.id})": u.id for u in users}
     user_names = list(user_labels.keys())
     current_user_label = next((label for label, id in user_labels.items() if id == mount.mounted_by), None)
-    current_unmounted_by_label = next((label for label, id in user_labels.items() if id == mount.unmounted_by), None) if mount.unmounted_by else user_names[0]
+    current_unmounted_by_label = None
+    if mount.unmounted_by:
+        current_unmounted_by_label = next(
+            (label for label, id in user_labels.items() if id == mount.unmounted_by), 
+            None
+        ) 
 
     printer_labels = {f"{p.name} (ID {p.id})": p.id for p in printers}
     printer_names = list(printer_labels.keys())
     current_printer_label = next((label for label, id in printer_labels.items() if id == mount.printer_id), None)
+    new_status = st.selectbox("Mounting Status", ["In Use", "Unmounted"], index=0 if mount.status == "In Use" else 1)
     with st.form("edit_mount_form"):
-        new_weight = st.number_input("Remaining Weight (g)", min_value=0.0, value=mount.remaining_weight, format="%.2f")
-        new_user_label = st.selectbox("Mounted By", user_names, index=user_names.index(current_user_label))
-        new_mounted_at = st.date_input("Mounted At", value=mount.mounted_at.date())
-        new_status = st.selectbox("Mounting Status", ["In Use", "Unmounted"], index=0 if mount.status == "In Use" else 1)
-        new_unmounted_by_label = st.selectbox("Unmounted By (if unmounting)", user_names, index=user_names.index(current_unmounted_by_label))
-        new_unmounted_at = st.date_input("Unmounted At (if unmounting)", value=mount.unmounted_at.date() if mount.unmounted_at else datetime.today())
-        new_printer_label = st.selectbox("Printer", printer_names, index=printer_names.index(current_printer_label))
+        if new_status == "In Use":
+            new_weight = st.number_input("Remaining Weight (g)", min_value=0.0, value=mount.remaining_weight, format="%.2f")
+            new_user_label = st.selectbox("Mounted By", user_names, index=user_names.index(current_user_label))
+            new_mounted_at = st.date_input("Mounted At", value=mount.mounted_at.date())
+            new_printer_label = st.selectbox("Printer", printer_names, index=printer_names.index(current_printer_label))
+
+        if new_status == "Unmounted":
+            new_unmounted_by_label = st.selectbox(
+                "Unmounted By (if unmounting)", 
+                user_names, 
+                index=user_names.index(current_unmounted_by_label) if current_unmounted_by_label else 0
+            )
+            new_unmounted_by_id = user_labels[new_unmounted_by_label]
+
+            new_unmounted_at = st.date_input(
+                "Unmounted At (if unmounting)", 
+                value=mount.unmounted_at.date() if mount.unmounted_at else datetime.today()
+            )
+            new_unmounted_at_full = datetime.combine(new_unmounted_at, datetime.min.time())
+        else:
+            new_unmounted_by_id = None
+            new_unmounted_at_full = None
+
         reason = st.text_area("Reason for Change", max_chars=255)
 
         submitted = st.form_submit_button("Submit Changes")
@@ -61,11 +83,9 @@ def render_edit_mount_form():
                 updates["mounted_at"] = (mount.mounted_at, new_mounted_at_full)
             if mount.status != new_status:
                 updates["status"] = (mount.status, new_status)
-            new_unmounted_by_id = user_labels[new_unmounted_by_label]
             if mount.unmounted_by != new_unmounted_by_id:
                 updates["unmounted_by"] = (mount.unmounted_by, new_unmounted_by_id)
-            new_unmounted_at_full = datetime.combine(new_unmounted_at, datetime.min.time())
-            if not mount.unmounted_at or mount.unmounted_at.date() != new_unmounted_at:
+            if (mount.unmounted_at or None) != new_unmounted_at_full:
                 updates["unmounted_at"] = (mount.unmounted_at, new_unmounted_at_full)
             new_printer_id = printer_labels[new_printer_label]
             if mount.printer_id != new_printer_id:

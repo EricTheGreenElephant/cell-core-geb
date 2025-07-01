@@ -20,7 +20,7 @@ def render_logistics_form():
         options = [
             {
                 "Include": True,
-                "Tracking ID": p.tracking_id,
+                "Product ID": p.product_id,
                 "Current Status": p.current_stage_name,
                 "Harvest ID": p.harvest_id,
                 "Product Type": p.product_type,
@@ -35,7 +35,7 @@ def render_logistics_form():
         edited = st.data_editor(
             options,
             use_container_width=True,
-            disabled=["Tracking ID", "Current Status", "Harvest ID", "Product Type", "Location", "QC Result"],
+            disabled=["Product ID", "Current Status", "Harvest ID", "Product Type", "Location", "QC Result"],
             column_config={
                 "Include": st.column_config.CheckboxColumn("Include in Batch"),
                 "Surface Treat": st.column_config.CheckboxColumn("Surface Treat"),
@@ -52,7 +52,7 @@ def render_logistics_form():
             try:
                 tracking_data = [
                     TreatmentProductData(
-                        tracking_id=p["Tracking ID"],
+                        product_id=p["Product ID"],
                         surface_treat=p["Surface Treat"],
                         sterilize=p["Sterilize"]
                     ) for p in to_include

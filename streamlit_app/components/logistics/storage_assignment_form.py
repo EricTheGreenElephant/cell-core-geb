@@ -67,24 +67,24 @@ def render_storage_assignment_form():
             st.write("Select storage location for each product:")
             
             for prod in products:
-                label = f"#{prod.tracking_id} - Prod ID: {prod.harvest_id} - {prod.product_type} ({prod.inspection_result})"
+                label = f"#{prod.product_id} - Prod ID: {prod.harvest_id} - {prod.product_type} ({prod.inspection_result})"
 
                 selected_location = st.selectbox(
                     label,
                     options=locations,
                     format_func=lambda loc: f"{loc.location_name} --- {loc.description}",
                     index=get_default_index(global_override_location.id if global_override_location else None),
-                    key=f"loc_{prod.tracking_id}"
+                    key=f"loc_{prod.product_id}"
                 )
 
-                product_selections[prod.tracking_id] = selected_location.id
+                product_selections[prod.product_id] = selected_location.id
 
             submitted = st.form_submit_button("Assign Storage")
             if submitted:
                 try:
                     assignments = []
                     location_lookup = {loc.id: loc for loc in locations}
-                    for tracking_id, location_id in product_selections.items():
+                    for product_id, location_id in product_selections.items():
                         # Determine status based on shelf description
                         loc = location_lookup[location_id]
                         new_stage_code = None
@@ -96,7 +96,7 @@ def render_storage_assignment_form():
                         if not new_stage_code:
                             new_stage_code = "InInterimStorage"
 
-                        assignments.append((tracking_id, location_id, new_stage_code))
+                        assignments.append((product_id, location_id, new_stage_code))
                         user_id = st.session_state.get("user_id")
                     
                     with get_session() as db:
@@ -113,30 +113,3 @@ def render_storage_assignment_form():
     except Exception as e:
         st.error("An error occurred while assigning storage.")
         st.exception(e)
-    #     selected_location = st.selectbox("Select Storage Location", list(location_map.keys()))
-
-    #     selected_ids = []
-    #     with st.form("assign_storage_form"):
-    #         for prod in products:
-    #             label = f"#{prod['tracking_id']} - Prod ID: {prod['harvest_id']} - {prod['product_type']} ({prod['inspection_result']})"
-    #             if st.checkbox(label, value=False, key=f"chk_{prod['tracking_id']}"):
-    #                 selected_ids.append(prod["tracking_id"])
-
-    #         submitted = st.form_submit_button("Assign Storage")
-    #         if submitted:
-    #             try:
-    #                 selected_loc_id = location_map[selected_location]
-
-    #                 with get_session() as db:
-    #                     assign_storage_to_products(db, selected_ids, selected_loc_id, status)
-
-    #                 st.success("Storage assignment complete.")
-    #                 time.sleep(1.5)
-    #                 st.rerun()
-    #             except Exception as e:
-    #                 st.error("Failed to assign storage.")
-    #                 st.exception(e)
-
-    # except Exception as e:
-    #     st.error("An error occurred while assigning storage.")
-    #     st.exception(e)

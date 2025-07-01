@@ -33,9 +33,9 @@ def render_treatment_batch_edit_form():
         return
     
     for idx, p in enumerate(products):
-        with st.expander(f"Product #{p['tracking_id']} - {p['product_type']} - {p['inspection_result']}"):
+        with st.expander(f"Product #{p['product_id']} - {p['product_type']} - {p['inspection_result']}"):
             surface_treat = st.checkbox("Surface Treat", value=p["surface_treat"], key=f"st_{idx}")
-            sterilized = st.checkbox("Sterilize", value=p["sterilize"], key=f"ster_{p['tracking_id']}_{p['id']}_{idx}")
+            sterilized = st.checkbox("Sterilize", value=p["sterilize"], key=f"ster_{p['product_id']}_{p['id']}_{idx}")
             reason = st.text_area("Reason for Update", max_chars=255, key=f"rsn_{idx}")
 
             col1, col2 = st.columns(2)
@@ -79,7 +79,7 @@ def render_treatment_batch_edit_form():
                                 remove_product_from_batch(
                                     db=db, 
                                     batch_product_id=p["id"],
-                                    product_id=p["tracking_id"],
+                                    product_id=p["product_id"],
                                     user_id=st.session_state["user_id"],
                                     reason=reason
                                 )

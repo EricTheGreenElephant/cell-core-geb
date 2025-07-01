@@ -14,34 +14,11 @@ from services.tracking_service import log_product_status_change
 from utils.db_transaction import transactional
 
 
-# @transactional
-# def get_qc_passed_products(db: Session) -> list[dict]:
-#     sql = """
-#         SELECT
-#             pt.id AS tracking_id,
-#             lc.stage_name AS current_status,
-#             pt.last_updated_at,
-#             ph.id AS harvest_id,
-#             ptype.name AS product_type,
-#             pqc.inspection_result,
-#             loc.location_name
-#         FROM product_tracking pt
-#         JOIN product_harvest ph ON pt.harvest_id = ph.id
-#         JOIN product_requests pr ON ph.request_id = pr.id
-#         JOIN product_types ptype ON pr.product_id = ptype.id
-#         JOIN product_quality_control pqc ON ph.id = pqc.harvest_id
-#         LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
-#         LEFT JOIN storage_locations loc ON pt.location_id = loc.id
-#         WHERE lc.stage_code = 'QMTreatmentApproval'
-#     """
-#     result = db.execute(text(sql))
-#     cols = result.keys()
-#     return [dict(zip(cols, row)) for row in result.fetchall()]
 @transactional
 def get_qc_passed_products(db: Session) -> list[TreatmentBatchProductCandidate]:
     stmt = (
         select(
-            ProductTracking.id.label("tracking_id"),
+            ProductTracking.id.label("product_id"),
             LifecycleStages.stage_name.label("current_status"),
             ProductTracking.last_updated_at,
             ProductHarvest.id.label("harvest_id"),
@@ -53,7 +30,7 @@ def get_qc_passed_products(db: Session) -> list[TreatmentBatchProductCandidate]:
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
         .join(ProductType, ProductRequest.product_id == ProductType.id)
-        .join(ProductQualityControl, ProductQualityControl.harvest_id == ProductHarvest.id)
+        .join(ProductQualityControl, ProductQualityControl.product_id == ProductTracking.id)
         .outerjoin(StorageLocation, ProductTracking.location_id == StorageLocation.id)
         .where(LifecycleStages.stage_code == "QMTreatmentApproval")
         .order_by(ProductTracking.last_updated_at.desc())
@@ -61,7 +38,7 @@ def get_qc_passed_products(db: Session) -> list[TreatmentBatchProductCandidate]:
     results = db.execute(stmt).all()
     products = [
         TreatmentBatchProductCandidate(
-            tracking_id=row.tracking_id,
+            product_id=row.product_id,
             current_stage_name=row.current_status,
             last_updated_at=row.last_updated_at,
             harvest_id=row.harvest_id,
@@ -93,13 +70,13 @@ def create_treatment_batch(db: Session, data: TreatmentBatchCreate):
     
     for item in data.tracking_data:
         from_stage_id = db.scalar(
-            text("SELECT current_stage_id FROM product_tracking WHERE id = :tracking_id"),
-            {"tracking_id": item.tracking_id}
+            text("SELECT current_stage_id FROM product_tracking WHERE id = :product_id"),
+            {"product_id": item.product_id}
         )
 
         product = TreatmentBatchProduct(
             batch_id=batch.id,
-            product_id=item.tracking_id,
+            product_id=item.product_id,
             surface_treat=bool(item.surface_treat),
             sterilize=bool(item.sterilize)
         )
@@ -112,14 +89,14 @@ def create_treatment_batch(db: Session, data: TreatmentBatchCreate):
                     current_stage_id = :new_stage_id,
                     location_id = :offsite_id,
                     last_updated_at = GETDATE()
-                 WHERE id = :tracking_id
+                 WHERE id = :product_id
                 """),
-                {"new_stage_id": new_stage_id, "offsite_id": offsite_id, "tracking_id": item.tracking_id}
+                {"new_stage_id": new_stage_id, "offsite_id": offsite_id, "product_id": item.product_id}
         )
 
         log_product_status_change(
             db=db,
-            product_id=item.tracking_id,
+            product_id=item.product_id,
             from_stage_id=from_stage_id,
             to_stage_id=new_stage_id,
             reason="Sent for Treatment (batch creation)",
@@ -128,42 +105,11 @@ def create_treatment_batch(db: Session, data: TreatmentBatchCreate):
         
     db.commit()
 
-
-# @transactional
-# def get_qc_products_needing_storage(db: Session) -> list[dict]:
-#     sql = """
-#         SELECT
-#             pt.id AS tracking_id,
-#             lc.stage_name AS current_status,
-#             pt.location_id,
-#             ph.id AS harvest_id,
-#             pt.harvest_id,
-#             pt.last_updated_at,
-#             pqc.inspection_result,
-#             f.serial_number AS filament_serial,
-#             ptype.name AS product_type,
-#             u.display_name AS printed_by,
-#             ph.print_date
-#         FROM product_tracking pt
-#         JOIN product_harvest ph ON pt.harvest_id = ph.id
-#         JOIN product_quality_control pqc ON pqc.harvest_id = ph.id
-#         JOIN filament_mounting fm ON ph.filament_mounting_id = fm.id
-#         JOIN filaments f ON fm.filament_id = f.id
-#         JOIN product_requests pr ON ph.request_id = pr.id
-#         JOIN product_types ptype ON pr.product_id = ptype.id
-#         LEFT JOIN users u ON ph.printed_by = u.id
-#         LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
-#         WHERE lc.stage_code = 'HarvestQCComplete'
-#         AND pt.location_id IS NULL
-#     """
-#     result = db.execute(text(sql))
-#     cols = result.keys()
-#     return [dict(zip(cols, row)) for row in result.fetchall()]
 @transactional
 def get_qc_products_needing_storage(db: Session) -> list[PostHarvestStorageCandidate]:
     stmt = (
         select(
-            ProductTracking.id.label("tracking_id"),
+            ProductTracking.id.label("product_id"),
             LifecycleStages.stage_name.label("current_stage_name"),
             ProductTracking.location_id,
             ProductHarvest.id.label("harvest_id"),
@@ -178,7 +124,7 @@ def get_qc_products_needing_storage(db: Session) -> list[PostHarvestStorageCandi
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
         .join(ProductType, ProductRequest.product_id == ProductType.id)
-        .join(ProductQualityControl, ProductQualityControl.harvest_id == ProductHarvest.id)
+        .join(ProductQualityControl, ProductQualityControl.product_id == ProductTracking.id)
         .join(FilamentMounting, ProductHarvest.filament_mounting_id == FilamentMounting.id)
         .join(Filament, FilamentMounting.filament_id == Filament.id)
         .outerjoin(User, ProductHarvest.printed_by == User.id)
@@ -190,30 +136,11 @@ def get_qc_products_needing_storage(db: Session) -> list[PostHarvestStorageCandi
 
     return [PostHarvestStorageCandidate(**row._mapping) for row in results]
 
-# @transactional
-# def get_post_treatment_products_needing_storage(db: Session) -> list[dict]:
-#     sql = """
-#         SELECT
-#             pt.id AS tracking_id,
-#             ph.id AS harvest_id,
-#             t.name AS product_type,
-#             pqi.qc_result AS inspection_result
-#         FROM product_tracking pt
-#         JOIN product_harvest ph ON pt.harvest_id = ph.id
-#         JOIN product_requests pr ON pr.id = ph.request_id
-#         JOIN product_types t ON pr.product_id = t.id
-#         JOIN post_treatment_inspections pqi ON pt.id = pqi.product_id
-#         LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
-#         WHERE lc.stage_code = 'PostTreatmentQC'
-#     """
-#     result = db.execute(text(sql))
-#     cols = result.keys()
-#     return [dict(zip(cols, row)) for row in result.fetchall()]
 @transactional
 def get_post_treatment_products_needing_storage(db: Session) -> list[PostTreatmentStorageCandidate]:
     stmt = (
         select(
-            ProductTracking.id.label("tracking_id"),
+            ProductTracking.id.label("product_id"),
             ProductHarvest.id.label("harvest_id"),
             ProductType.name.label("product_type"),
             PostTreatmentInspection.qc_result.label("inspection_result"),
@@ -230,10 +157,10 @@ def get_post_treatment_products_needing_storage(db: Session) -> list[PostTreatme
 
 @transactional
 def assign_storage_to_products(db: Session, assignments: list[tuple[str, int, str]], user_id: int):
-    for tracking_id, location_id, stage_code in assignments:
+    for product_id, location_id, stage_code in assignments:
         from_stage_id = db.scalar(
-            text("SELECT current_stage_id FROM product_tracking WHERE id = :tracking_id"),
-                {"tracking_id": tracking_id}
+            text("SELECT current_stage_id FROM product_tracking WHERE id = :product_id"),
+                {"product_id": product_id}
         )
 
         to_stage_id = db.scalar(
@@ -248,14 +175,14 @@ def assign_storage_to_products(db: Session, assignments: list[tuple[str, int, st
                     location_id = :location_id, 
                     current_stage_id = :stage_id, 
                     last_updated_at = GETDATE()
-                WHERE id = :tracking_id
+                WHERE id = :product_id
             """),
-            {"location_id": location_id, "stage_id": to_stage_id, "tracking_id": tracking_id}
+            {"location_id": location_id, "stage_id": to_stage_id, "product_id": product_id}
         )
 
         log_product_status_change(
             db=db,
-            product_id=tracking_id,
+            product_id=product_id,
             from_stage_id=from_stage_id,
             to_stage_id=to_stage_id,
             reason="Storage assignment",
@@ -282,7 +209,7 @@ def get_products_by_batch_id(db: Session, batch_id: int) -> list[dict]:
     sql = """
         SELECT
             tbp.id,
-            pt.id AS tracking_id,
+            pt.id AS product_id,
             lc.stage_name AS current_status,
             pt.location_id,
             t.name AS product_type,
@@ -295,7 +222,7 @@ def get_products_by_batch_id(db: Session, batch_id: int) -> list[dict]:
         JOIN product_harvest ph ON ph.id = pt.harvest_id
         JOIN product_requests pr ON pr.id = ph.request_id
         JOIN product_types t ON t.id = pr.product_id
-        LEFT JOIN product_quality_control pqc ON ph.id = pqc.harvest_id
+        LEFT JOIN product_quality_control pqc ON pt.id = pqc.product_id
         LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
         WHERE tbp.batch_id = :batch_id
     """
@@ -312,11 +239,11 @@ def update_post_treatment_qc(db: Session, product_qc: list[dict], inspected_by: 
         raise ValueError("Target stage PostTreatmentQC not found!")
     
     for item in product_qc:
-        tracking_id = item["tracking_id"]
+        product_id = item["product_id"]
 
         from_stage_id = db.scalar(
-            text("SELECT current_stage_id FROM product_tracking WHERE id = :tracking_id"),
-            {"tracking_id": tracking_id}
+            text("SELECT current_stage_id FROM product_tracking WHERE id = :product_id"),
+            {"product_id": product_id}
         )
 
         db.execute(
@@ -327,7 +254,7 @@ def update_post_treatment_qc(db: Session, product_qc: list[dict], inspected_by: 
                 VALUES (:pid, :treated, :sterilized, :visual, :qc_result, :inspector)
             """),
             {
-                "pid": tracking_id,
+                "pid": product_id,
                 "treated": item["surface_treat"],
                 "sterilized": item["sterilize"],
                 "visual": item["visual_pass"],
@@ -341,12 +268,12 @@ def update_post_treatment_qc(db: Session, product_qc: list[dict], inspected_by: 
                 SET current_stage_id = :new_stage_id, last_updated_at = GETDATE()
                 WHERE id = :pid
             """),
-            {"new_stage_id": new_stage_id, "pid": tracking_id}
+            {"new_stage_id": new_stage_id, "pid": product_id}
         )
 
         log_product_status_change(
             db=db,
-            product_id=tracking_id,
+            product_id=product_id,
             from_stage_id=from_stage_id,
             to_stage_id=new_stage_id,
             reason="Post-Treatment QC Complete",
@@ -371,7 +298,7 @@ def mark_batch_as_inspected(db: Session, batch_id: int):
 def get_stored_products(db: Session) -> list[dict]:
     sql = """
         SELECT
-            t.id AS tracking_id,
+            t.id AS product_id,
             ph.id AS harvest_id,
             pt.name AS product_type,
             lc.stage_name AS current_status,
@@ -384,7 +311,7 @@ def get_stored_products(db: Session) -> list[dict]:
         JOIN product_types pt ON pr.product_id = pt.id
         JOIN storage_locations sl ON t.location_id = sl.id
         LEFT JOIN lifecycle_stages lc ON t.current_stage_id = lc.id
-        WHERE lc.stage_code IN ('InitialQCComplete', 'Quarantine')
+        WHERE lc.stage_code IN ('InInterimStorage', 'PostTreatmentStorage', 'Quarantine')
     """
     result = db.execute(text(sql))
     cols = result.keys()
@@ -393,7 +320,7 @@ def get_stored_products(db: Session) -> list[dict]:
 @transactional
 def update_tracking_storage(
     db: Session,
-    tracking_id: int,
+    product_id: int,
     updates: dict[str, tuple],
     reason: str,
     user_id: int
@@ -401,14 +328,39 @@ def update_tracking_storage(
     for field, (old_value, new_value) in updates.items():
         audit = FieldChangeAudit(
             table="product_tracking",
-            record_id=tracking_id,
+            record_id=product_id,
             field=field,
             old_value=old_value,
             new_value=new_value,
             reason=reason,
             changed_by=user_id
         )
-        update_record_with_audit(db, audit)
+        update = False if field == "current_status" else True
+        update_record_with_audit(db, audit, update)
+
+        if field == "current_status":
+            stmt_stage = select(LifecycleStages.id).where(LifecycleStages.stage_name == new_value)
+            new_stage_id = db.scalar(stmt_stage)
+            from_stage_id = db.scalar(
+                text("SELECT current_stage_id FROM product_tracking WHERE id = :product_id"),
+                {"product_id": product_id}
+            )
+            db.execute(
+                text("""
+                    UPDATE product_tracking
+                    SET current_stage_id = :new_stage_id, last_updated_at = GETDATE()
+                    WHERE id = :pid
+                """),
+                {"new_stage_id": new_stage_id, "pid": product_id}
+            )
+            log_product_status_change(
+                db=db,
+                product_id=product_id,
+                from_stage_id=from_stage_id,
+                to_stage_id=new_stage_id,
+                reason="Update from storage location edit.",
+                user_id=user_id 
+            )
     db.commit()
 
 @transactional

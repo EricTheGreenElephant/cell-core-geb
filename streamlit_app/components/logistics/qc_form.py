@@ -15,7 +15,7 @@ def render_qc_form():
         return
     
     product_map = {
-        f"#{p['harvest_id']} - {p['product_type']} (Lot: {p['lot_number']})": p
+        f"#{p['product_id']} - {p['product_type']} (Lot: {p['lot_number']})": p
         for p in printed
     }
 
@@ -73,7 +73,7 @@ def render_qc_form():
                 try:
                     user_id = st.session_state.get("user_id")
                     payload = ProductQCInput(
-                        harvest_id=selected["harvest_id"],
+                        product_id=selected["product_id"],
                         inspected_by=user_id,
                         weight_grams=weight,
                         pressure_drop=pressure,

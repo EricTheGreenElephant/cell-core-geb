@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 from services.filament_service import (
     get_acclimatized_filaments,
     get_available_printers,
@@ -44,6 +45,8 @@ def render_mount_form():
                 with get_session() as db:
                     insert_filament_mount(db, filament_id, printer_id, user_id, acclimatization_id)
                 st.success("Filament mounted successfully!")
+                time.sleep(1.5)
+                st.rerun()
             except Exception as e:
                 st.error("Failed to mount filament.")
                 st.exception(e)

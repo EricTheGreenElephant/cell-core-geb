@@ -61,11 +61,11 @@ def render_treatment_qc_form():
                 inspection_result = 'B-Ware'
             else:
                 inspection_result = 'A-Ware'
-            st.markdown(f"**Sample #{i+1}: Product #{p['tracking_id']} - {p['product_type']}: {inspection_result}**")
+            st.markdown(f"**Sample #{i+1}: Product #{p['product_id']} - {p['product_type']}: {inspection_result}**")
             p["visual_pass"] = st.radio(
-                f"Visual Pass (Product #{p['tracking_id']})", [True, False], horizontal=True, key=f"vis_{p['tracking_id']}"
+                f"Visual Pass (Product #{p['product_id']})", [True, False], horizontal=True, key=f"vis_{p['product_id']}"
             )
-            sample_visual_results[p["tracking_id"]] = p["visual_pass"]
+            sample_visual_results[p["product_id"]] = p["visual_pass"]
             if not p['visual_pass']:
                 failed_sample = True
         
@@ -78,16 +78,16 @@ def render_treatment_qc_form():
                 inspection_result = 'B-Ware'
             else:
                 inspection_result = 'A-Ware'
-            st.markdown(f"**Product #{p['tracking_id']} - {p['product_type']}: {inspection_result}**")
+            st.markdown(f"**Product #{p['product_id']} - {p['product_type']}: {inspection_result}**")
 
-            surface = st.checkbox("Surface Treated", value=p["surface_treat"], key=f"surf_{p['tracking_id']}")
-            sterilized = st.checkbox("Sterilized", value=p["sterilize"], key=f"ster_{p['tracking_id']}")
+            surface = st.checkbox("Surface Treated", value=p["surface_treat"], key=f"surf_{p['product_id']}")
+            sterilized = st.checkbox("Sterilized", value=p["sterilize"], key=f"ster_{p['product_id']}")
 
             visual = None
             if failed_sample:
-                default_vis = sample_visual_results.get(p["tracking_id"], True)
+                default_vis = sample_visual_results.get(p["product_id"], True)
                 visual = st.radio(
-                    "Visual Pass", [True, False], index=0 if default_vis else 1, horizontal=True, key=f"full_vis_{p['tracking_id']}"
+                    "Visual Pass", [True, False], index=0 if default_vis else 1, horizontal=True, key=f"full_vis_{p['product_id']}"
                 )
             
             prior_result = p["inspection_result"]
@@ -99,7 +99,7 @@ def render_treatment_qc_form():
 
             st.markdown(f"**Suggested QC Result:** <span style='color:{color}; font-weight:bold'>{qc_result}</span>", unsafe_allow_html=True)
             full_qc.append({
-                "tracking_id": p["tracking_id"],
+                "product_id": p["product_id"],
                 "surface_treat": surface,
                 "sterilize": sterilized,
                 "visual_pass": visual_val,

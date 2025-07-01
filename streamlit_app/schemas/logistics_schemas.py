@@ -4,7 +4,7 @@ from datetime import datetime
 
 
 class TreatmentProductData(BaseModel):
-    tracking_id: int
+    product_id: int
     surface_treat: bool
     sterilize: bool
 
@@ -26,7 +26,7 @@ class TreatmentBatchOut(BaseModel):
 
 
 class TreatmentBatchProductCandidate(BaseModel):
-    tracking_id: int
+    product_id: int
     current_stage_name: str
     last_updated_at: datetime
     harvest_id: int
@@ -39,7 +39,7 @@ class TreatmentBatchProductCandidate(BaseModel):
 
 
 class PostHarvestStorageCandidate(BaseModel):
-    tracking_id: int
+    product_id: int
     current_stage_name: str
     location_id: Optional[int]
     harvest_id: int
@@ -55,7 +55,7 @@ class PostHarvestStorageCandidate(BaseModel):
 
 
 class PostTreatmentStorageCandidate(BaseModel):
-    tracking_id: int
+    product_id: int
     harvest_id: int
     product_type: str
     inspection_result: Optional[str]

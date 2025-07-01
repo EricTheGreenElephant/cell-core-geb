@@ -4,10 +4,9 @@ from typing import Optional
 
 
 class ProductQMReview(BaseModel):
-    tracking_id: int
+    product_id: int
     current_stage_name: str
     last_updated_at: datetime
-    harvest_id: int
     lot_number: str
     product_type_name: str
     inspection_result: str
@@ -22,8 +21,7 @@ class ProductQMReview(BaseModel):
         orm_mode = True
 
 class PostTreatmentApprovalCandidate(BaseModel):
-    tracking_id: int
-    harvest_id: int
+    product_id: int
     product_type_name: str
     inspection_result: Optional[str]
     inspected_by: str

@@ -14,10 +14,9 @@ from utils.db_transaction import transactional
 def get_qm_review_products(db: Session) -> list[ProductQMReview]:
     stmt = (
         select(
-            ProductTracking.id.label("tracking_id"),
+            ProductTracking.id.label("product_id"),
             LifecycleStages.stage_name.label("current_stage_name"),
             ProductTracking.last_updated_at,
-            ProductHarvest.id.label("harvest_id"),
             ProductRequest.lot_number,
             ProductType.name.label("product_type_name"),
             ProductQualityControl.inspection_result,
@@ -32,7 +31,7 @@ def get_qm_review_products(db: Session) -> list[ProductQMReview]:
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
         .join(ProductType, ProductRequest.product_id == ProductType.id)
-        .join(ProductQualityControl, ProductQualityControl.harvest_id == ProductHarvest.id)
+        .join(ProductQualityControl, ProductQualityControl.product_id == ProductTracking.id)
         .join(User, ProductQualityControl.inspected_by == User.id)
         .outerjoin(StorageLocation, ProductTracking.location_id == StorageLocation.id)
         .where(LifecycleStages.stage_code.in_(["InInterimStorage", "Quarantine"]))
@@ -43,11 +42,10 @@ def get_qm_review_products(db: Session) -> list[ProductQMReview]:
 
     products = [
         ProductQMReview(
-            tracking_id=row.tracking_id,
+            product_id=row.product_id,
             current_stage_name=row.current_stage_name,
             last_updated_at=row.last_updated_at,
             current_location=row.current_location,
-            harvest_id=row.harvest_id,
             lot_number=row.lot_number,
             product_type_name=row.product_type_name,
             inspection_result=row.inspection_result,
@@ -66,10 +64,9 @@ def get_qm_review_products(db: Session) -> list[ProductQMReview]:
 def get_post_treatment_qm_candidates(db: Session) -> list[PostTreatmentApprovalCandidate]:
     stmt = (
         select(
-            ProductTracking.id.label("tracking_id"),
+            ProductTracking.id.label("product_id"),
             LifecycleStages.stage_name.label("current_stage_name"),
             ProductTracking.last_updated_at,
-            ProductHarvest.id.label("harvest_id"),
             ProductType.name.label("product_type_name"),
             PostTreatmentInspection.qc_result.label("inspection_result"),
             User.display_name.label("inspected_by"),
@@ -92,8 +89,8 @@ def get_post_treatment_qm_candidates(db: Session) -> list[PostTreatmentApprovalC
     return [PostTreatmentApprovalCandidate(**row._mapping) for row in results]
 
 @transactional
-def approve_products_for_treatment(db: Session, tracking_ids: list[int], user_id: int):
-    if not tracking_ids:
+def approve_products_for_treatment(db: Session, product_ids: list[int], user_id: int):
+    if not product_ids:
         return
     
     stmt = select(LifecycleStages.id).where(LifecycleStages.stage_code == "QMTreatmentApproval")
@@ -101,10 +98,10 @@ def approve_products_for_treatment(db: Session, tracking_ids: list[int], user_id
     if not new_stage_id:
         raise ValueError("Target stage QMTreatmentApproval not found!")
     
-    for tracking_id in tracking_ids:
+    for product_id in product_ids:
         from_stage_id = db.scalar(
-            text("SELECT current_stage_id FROM product_tracking WHERE id = :tracking_id"),
-            {"tracking_id": tracking_id}
+            text("SELECT current_stage_id FROM product_tracking WHERE id = :product_id"),
+            {"product_id": product_id}
         )
     
         db.execute(
@@ -112,32 +109,25 @@ def approve_products_for_treatment(db: Session, tracking_ids: list[int], user_id
                 UPDATE product_tracking
                 SET current_stage_id = :new_stage_id,
                     last_updated_at = GETDATE()
-                WHERE id = :tracking_id
+                WHERE id = :product_id
             """),
-            {"new_stage_id": new_stage_id, "tracking_id": tracking_id}
+            {"new_stage_id": new_stage_id, "product_id": product_id}
         )
 
         log_product_status_change(
             db=db,
-            product_id=tracking_id,
+            product_id=product_id,
             from_stage_id=from_stage_id,
             to_stage_id=new_stage_id,
             reason="QM Approved for Treatment",
             user_id=user_id
         )
-    # update_stmt = text("""
-    #     UPDATE product_tracking
-    #     SET current_stage_id = :new_stage_id,
-    #         last_updated_at = GETDATE()
-    #     WHERE id IN :tracking_ids
-    # """).bindparams(bindparam("tracking_ids", expanding=True))
 
-    # db.execute(update_stmt, {"new_stage_id": new_stage_id, "tracking_ids": tuple(tracking_ids)})
     db.commit()
 
 @transactional
-def approve_products_for_sales(db: Session, tracking_ids: list[int], user_id: int):
-    if not tracking_ids:
+def approve_products_for_sales(db: Session, product_ids: list[int], user_id: int):
+    if not product_ids:
         return
     
     target_stage_id = db.scalar(
@@ -146,37 +136,30 @@ def approve_products_for_sales(db: Session, tracking_ids: list[int], user_id: in
     if not target_stage_id:
         raise ValueError("Target stage QMSalesApproval not found!")
     
-    for tracking_id in tracking_ids:
+    for product_id in product_ids:
         from_stage_id = db.scalar(
-            text("SELECT current_stage_id FROM product_tracking WHERE id = :tracking_id"),
-            {"tracking_id": tracking_id}
+            text("SELECT current_stage_id FROM product_tracking WHERE id = :product_id"),
+            {"product_id": product_id}
         )
         db.execute(
             text("""
                 UPDATE product_tracking
                 SET current_stage_id = :new_stage_id,
                     last_updated_at = GETDATE()
-                WHERE id = :tracking_id
+                WHERE id = :product_id
             """),
-            {"new_stage_id": target_stage_id, "tracking_id": tracking_id}
+            {"new_stage_id": target_stage_id, "product_id": product_id}
         )
 
         log_product_status_change(
             db=db,
-            product_id=tracking_id,
+            product_id=product_id,
             from_stage_id=from_stage_id,
             to_stage_id=target_stage_id,
             reason="QM Approved for Sales",
             user_id=user_id
         )
-    # update_stmt = text("""
-    #     UPDATE product_tracking
-    #     SET current_stage_id = :new_stage_id,
-    #         last_updated_at = GETDATE()
-    #     WHERE id IN :tracking_ids
-    # """).bindparams(bindparam("tracking_ids", expanding=True))
 
-    # db.execute(update_stmt, {"new_stage_id": target_stage_id, "tracking_ids": tracking_ids})
     db.commit()
 
 @transactional

@@ -77,6 +77,7 @@ def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int,
         text("UPDATE product_requests SET status = 'Fulfilled' WHERE id = :id"),
         {"id": request_id}
     )
+    
     db.commit()
 
 @transactional
@@ -94,6 +95,7 @@ def get_harvested_products(db: Session) -> list[dict]:
             ph.id AS harvest_id,
             ph.filament_mounting_id AS mount_id,
             ph.lid_id AS lid_id,
+            ph.seal_id,
             pr.id AS request_id,
             pt.name AS product_type,
             f.serial_number AS filament_serial,

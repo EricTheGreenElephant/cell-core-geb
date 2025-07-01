@@ -206,24 +206,6 @@ BEGIN
     );
 END;
 
-IF OBJECT_ID('product_quality_control', 'U') IS NULL
-BEGIN
-    CREATE TABLE product_quality_control (
-        id INT PRIMARY KEY IDENTITY(1,1),
-        harvest_id INT NOT NULL,
-        inspected_by INT NOT NULL,
-        inspected_at DATETIME2 DEFAULT GETDATE() NOT NULL,
-        weight_grams DECIMAL(6,2) NOT NULL,
-        pressure_drop DECIMAL(6,3) NOT NULL,
-        visual_pass BIT NOT NULL,
-        inspection_result NVARCHAR(20) NOT NULL CHECK (inspection_result IN ('Passed', 'B-Ware', 'Waste', 'Quarantine')),
-        notes NVARCHAR(255),
-
-        CONSTRAINT fk_qc_print_job FOREIGN KEY (harvest_id) REFERENCES product_harvest(id),
-        CONSTRAINT fk_qc_user_product FOREIGN KEY (inspected_by) REFERENCES users(id)
-    );
-END;
-
 IF OBJECT_ID('product_tracking', 'U') IS NULL
 BEGIN
     CREATE TABLE product_tracking (
@@ -237,6 +219,24 @@ BEGIN
         CONSTRAINT fk_tracking_harvest FOREIGN KEY (harvest_id) REFERENCES product_harvest(id),
         CONSTRAINT fk_tracking_location FOREIGN KEY (location_id) REFERENCES storage_locations(id),
         CONSTRAINT fk_tracking_stage FOREIGN KEY (current_stage_id) REFERENCES lifecycle_stages(id)
+    );
+END;
+
+IF OBJECT_ID('product_quality_control', 'U') IS NULL
+BEGIN
+    CREATE TABLE product_quality_control (
+        id INT PRIMARY KEY IDENTITY(1,1),
+        product_id INT NOT NULL,
+        inspected_by INT NOT NULL,
+        inspected_at DATETIME2 DEFAULT GETDATE() NOT NULL,
+        weight_grams DECIMAL(6,2) NOT NULL,
+        pressure_drop DECIMAL(6,3) NOT NULL,
+        visual_pass BIT NOT NULL,
+        inspection_result NVARCHAR(20) NOT NULL CHECK (inspection_result IN ('Passed', 'B-Ware', 'Waste', 'Quarantine')),
+        notes NVARCHAR(255),
+
+        CONSTRAINT fk_qc_print_job FOREIGN KEY (product_id) REFERENCES product_tracking(id),
+        CONSTRAINT fk_qc_user_product FOREIGN KEY (inspected_by) REFERENCES users(id)
     );
 END;
 
@@ -425,7 +425,7 @@ BEGIN
         LEFT JOIN users u ON ph.printed_by = u.id
         LEFT JOIN product_requests pr ON ph.request_id = pr.id
         LEFT JOIN product_types ptype ON pr.product_id = ptype.id
-        LEFT JOIN product_quality_control pqc ON pqc.harvest_id = ph.id
+        LEFT JOIN product_quality_control pqc ON pqc.product_id = pt.id
         LEFT JOIN treatment_batch_products tbp ON tbp.product_id = pt.id
         LEFT JOIN treatment_batches tb ON tbp.batch_id = tb.id
         LEFT JOIN post_treatment_inspections pti ON pti.product_id = pt.id

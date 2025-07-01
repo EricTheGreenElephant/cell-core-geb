@@ -27,7 +27,7 @@ def render_storage_edit_form():
     location_names = list(location_map.keys())
 
     product_map = {
-        f"#{p['tracking_id']} —  Prod ID: {p['harvest_id']} - {p['product_type']}": p
+        f"#{p['product_id']} —  Prod ID: {p['harvest_id']} - {p['product_type']} -- {p['current_status']}": p
         for p in products
     }
 
@@ -36,7 +36,15 @@ def render_storage_edit_form():
 
     current_loc_label = next((label for label, id in location_map.items() if id == selected["location_id"]), None)
     new_location_label = st.selectbox("New Storage Location", location_names, index=location_names.index(current_loc_label))
-    new_status = st.selectbox("New Product Status", ["In Quarantine", "In Interim Storage"], index=0 if selected["current_status"] == "In Quarantine" else 1)
+    change_status = st.checkbox(label="Change Product Status", value=False, key=f"status_change_{selected["harvest_id"]}")
+    if change_status:   
+        new_status = st.selectbox(
+            "New Product Status", 
+            ["Moved to Quarantine", "Stored; Pending QM Approval for Treatment", "Stored; Pending QM Approval for Sales"], 
+            index=0
+        )
+    else:
+        new_status = selected["current_status"]
 
     reason = st.text_area("Reason for Edit", max_chars=255)
 
@@ -60,7 +68,7 @@ def render_storage_edit_form():
             with get_session() as db:
                 update_tracking_storage(
                     db=db,
-                    tracking_id=selected["tracking_id"],
+                    product_id=selected["product_id"],
                     updates=updates,
                     reason=reason,
                     user_id=st.session_state["user_id"]

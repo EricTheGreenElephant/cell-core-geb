@@ -36,8 +36,7 @@ class ProductHarvest(Base):
     print_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     lid_id = Column(Integer, ForeignKey('lids.id'))
     seal_id = Column(String(50), nullable=False)
-
-    quality_controls = relationship('models.product_quality_control_models.ProductQualityControl', back_populates='harvest')
+    
 
 class ProductTracking(Base):
     __tablename__ = 'product_tracking'
@@ -52,4 +51,5 @@ class ProductTracking(Base):
     location = relationship('models.storage_locations_models.StorageLocation')
     treatment_batch_product = relationship("models.logistics_models.TreatmentBatchProduct", back_populates="product", uselist=False)
     post_treatment_inspections = relationship("PostTreatmentInspection", back_populates="product")
+    quality_controls = relationship("models.product_quality_control_models.ProductQualityControl", back_populates='product')
     

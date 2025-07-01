@@ -33,3 +33,33 @@ def log_product_status_change(db: Session, product_id: int, from_stage_id: int, 
             "user_id": user_id
         }
     )
+
+def update_product_stage(
+        db: Session,
+        product_id: int,
+        new_stage_id: int,
+        reason: str,
+        user_id: int
+):
+    from_stage_id = db.scalar(
+        text("SELECT current_stage_id FROM product_tracking WHERE id = :product_id"),
+        {"product_id": product_id}
+    )
+
+    db.execute(
+        text("""
+            UPDATE product_tracking
+            SET current_stage_id = :new_stage_id, last_updated_at = GETDATE()
+            WHERE id = :product_id
+        """),
+        {"new_stage_id": new_stage_id, "product_id": product_id}
+    )
+
+    log_product_status_change(
+        db=db,
+        product_id=product_id,
+        from_stage_id=from_stage_id,
+        to_stage_id=new_stage_id,
+        reason=reason,
+        user_id=user_id
+    )

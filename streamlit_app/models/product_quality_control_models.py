@@ -8,7 +8,7 @@ class ProductQualityControl(Base):
     __tablename__ = 'product_quality_control'
 
     id = Column(Integer, primary_key=True)
-    harvest_id = Column(Integer, ForeignKey('product_harvest.id'), nullable=False)
+    product_id = Column(Integer, ForeignKey('product_tracking.id'), nullable=False)
     inspected_by = Column(Integer, ForeignKey('users.id'), nullable=False)
     inspected_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     weight_grams = Column(DECIMAL(6, 2), nullable=False)
@@ -17,7 +17,7 @@ class ProductQualityControl(Base):
     inspection_result = Column(String(20), nullable=False)
     notes = Column(String(255))
 
-    harvest = relationship('models.production_models.ProductHarvest', back_populates='quality_controls')
+    product = relationship('models.production_models.ProductTracking', back_populates='quality_controls')
     inspector = relationship('models.users_models.User', backref='inspected_products')
 
 

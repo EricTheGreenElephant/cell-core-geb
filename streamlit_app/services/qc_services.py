@@ -3,7 +3,7 @@ from sqlalchemy import text
 from schemas.qc_schemas import ProductQCInput
 from schemas.audit_schemas import FieldChangeAudit
 from services.audit_services import update_record_with_audit
-from services.tracking_service import log_product_status_change
+from services.tracking_service import update_product_stage
 from utils.db_transaction import transactional
 
 
@@ -11,17 +11,18 @@ from utils.db_transaction import transactional
 def get_printed_products(db: Session) -> list[dict]:
     sql = """
         SELECT
-            ph.id as harvest_id,
+            pt.id AS product_id,
+            pt.harvest_id,
             pr.id AS request_id,
             ptype.name AS product_type,
             ptype.average_weight,
             ptype.buffer_weight,
             pr.lot_number,
             ph.print_date
-        FROM product_harvest ph
+        FROM product_tracking pt
+        JOIN product_harvest ph ON pt.harvest_id = ph.id
         JOIN product_requests pr ON ph.request_id = pr.id
         JOIN product_types ptype ON pr.product_id = ptype.id
-        JOIN product_tracking pt ON ph.id = pt.harvest_id
         LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
         WHERE lc.stage_order = 1
         ORDER BY ph.print_date
@@ -36,13 +37,13 @@ def insert_product_qc(db: Session, data: ProductQCInput):
     db.execute(
         text("""
             INSERT INTO product_quality_control (
-                harvest_id, inspected_by, weight_grams, pressure_drop,
+                product_id, inspected_by, weight_grams, pressure_drop,
                 visual_pass, inspection_result, notes
             )
-            VALUES (:h_id, :inspector, :weight, :pressure, :visual, :result, :notes)
+            VALUES (:pid, :inspector, :weight, :pressure, :visual, :result, :notes)
         """),
         {
-            "h_id": data.harvest_id,
+            "pid": data.product_id,
             "inspector": data.inspected_by,
             "weight": data.weight_grams,
             "pressure": data.pressure_drop,
@@ -57,32 +58,11 @@ def insert_product_qc(db: Session, data: ProductQCInput):
         text("SELECT id FROM lifecycle_stages WHERE stage_code = :code"),
         {"code": stage_code}
     )
-    tracking_id, current_stage_id = db.execute(
-        text("""
-            SELECT id, current_stage_id
-            FROM product_tracking
-            WHERE harvest_id = :h_id
-        """),
-        {"h_id": data.harvest_id}
-    ).one()
-
-    db.execute(
-        text("""
-            UPDATE product_tracking
-            SET 
-                current_stage_id = :stage_id, 
-                last_updated_at = GETDATE()
-            WHERE harvest_id = :h_id
-        """),
-        {"stage_id": new_stage_id, "h_id": data.harvest_id}
-    )
-
-    log_product_status_change(
+    update_product_stage(
         db=db,
-        product_id=tracking_id,
-        from_stage_id=current_stage_id,
-        to_stage_id=new_stage_id,
-        reason="QC Complete",
+        product_id=data.product_id,
+        new_stage_id=new_stage_id,
+        reason="Harvest QC Complete",
         user_id=data.inspected_by
     )
 
@@ -90,11 +70,12 @@ def insert_product_qc(db: Session, data: ProductQCInput):
         text("""
             UPDATE fm
             SET fm.remaining_weight = fm.remaining_weight - :weight
-            FROM filament_mounting fm
+            FROM filament_mounting fm 
             JOIN product_harvest ph ON ph.filament_mounting_id = fm.id
-            WHERE ph.id = :h_id
+            JOIN product_tracking pt ON ph.id = pt.harvest_id
+            WHERE pt.id = :pid
         """),
-        {"weight": data.weight_grams, "h_id": data.harvest_id}
+        {"weight": data.weight_grams, "pid": data.product_id}
     )
     db.commit()
 
