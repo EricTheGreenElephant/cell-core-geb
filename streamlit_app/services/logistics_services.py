@@ -10,7 +10,7 @@ from models.users_models import User
 from schemas.logistics_schemas import TreatmentBatchCreate, TreatmentBatchProductCandidate, PostHarvestStorageCandidate, PostTreatmentStorageCandidate
 from schemas.audit_schemas import FieldChangeAudit
 from services.audit_services import update_record_with_audit
-from services.tracking_service import log_product_status_change
+from services.tracking_service import log_product_status_change, update_product_stage
 from utils.db_transaction import transactional
 
 
@@ -69,10 +69,10 @@ def create_treatment_batch(db: Session, data: TreatmentBatchCreate):
         raise ValueError("Target stage InTreatment not found!")
     
     for item in data.tracking_data:
-        from_stage_id = db.scalar(
-            text("SELECT current_stage_id FROM product_tracking WHERE id = :product_id"),
-            {"product_id": item.product_id}
-        )
+        # from_stage_id = db.scalar(
+        #     text("SELECT current_stage_id FROM product_tracking WHERE id = :product_id"),
+        #     {"product_id": item.product_id}
+        # )
 
         product = TreatmentBatchProduct(
             batch_id=batch.id,
@@ -82,26 +82,34 @@ def create_treatment_batch(db: Session, data: TreatmentBatchCreate):
         )
         db.add(product)
 
-        db.execute(
-            text("""
-                 UPDATE product_tracking
-                 SET 
-                    current_stage_id = :new_stage_id,
-                    location_id = :offsite_id,
-                    last_updated_at = GETDATE()
-                 WHERE id = :product_id
-                """),
-                {"new_stage_id": new_stage_id, "offsite_id": offsite_id, "product_id": item.product_id}
-        )
-
-        log_product_status_change(
+        update_product_stage(
             db=db,
             product_id=item.product_id,
-            from_stage_id=from_stage_id,
-            to_stage_id=new_stage_id,
+            new_stage_id=new_stage_id,
             reason="Sent for Treatment (batch creation)",
-            user_id=data.sent_by
+            user_id=data.sent_by,
+            location_id=offsite_id
         )
+        # db.execute(
+        #     text("""
+        #          UPDATE product_tracking
+        #          SET 
+        #             current_stage_id = :new_stage_id,
+        #             location_id = :offsite_id,
+        #             last_updated_at = GETDATE()
+        #          WHERE id = :product_id
+        #         """),
+        #         {"new_stage_id": new_stage_id, "offsite_id": offsite_id, "product_id": item.product_id}
+        # )
+
+        # log_product_status_change(
+        #     db=db,
+        #     product_id=item.product_id,
+        #     from_stage_id=from_stage_id,
+        #     to_stage_id=new_stage_id,
+        #     reason="Sent for Treatment (batch creation)",
+        #     user_id=data.sent_by
+        # )
         
     db.commit()
 
@@ -158,36 +166,51 @@ def get_post_treatment_products_needing_storage(db: Session) -> list[PostTreatme
 @transactional
 def assign_storage_to_products(db: Session, assignments: list[tuple[str, int, str]], user_id: int):
     for product_id, location_id, stage_code in assignments:
-        from_stage_id = db.scalar(
-            text("SELECT current_stage_id FROM product_tracking WHERE id = :product_id"),
-                {"product_id": product_id}
-        )
+        # from_stage_id = db.scalar(
+        #     text("SELECT current_stage_id FROM product_tracking WHERE id = :product_id"),
+        #         {"product_id": product_id}
+        # )
 
         to_stage_id = db.scalar(
             text("SELECT id FROM lifecycle_stages WHERE stage_code = :code"),
             {"code": stage_code}
         )
+        
+        if stage_code == "Quarantine":
+            reason = "Moved to Quarantine"
+        elif stage_code == "Disposed":
+            reason = "Disposed"
+        else:
+            reason = "Storage assignment"
 
-        db.execute(
-            text("""
-                UPDATE product_tracking
-                SET 
-                    location_id = :location_id, 
-                    current_stage_id = :stage_id, 
-                    last_updated_at = GETDATE()
-                WHERE id = :product_id
-            """),
-            {"location_id": location_id, "stage_id": to_stage_id, "product_id": product_id}
-        )
-
-        log_product_status_change(
+        update_product_stage(
             db=db,
             product_id=product_id,
-            from_stage_id=from_stage_id,
-            to_stage_id=to_stage_id,
-            reason="Storage assignment",
-            user_id=user_id
+            new_stage_id=to_stage_id,
+            reason=reason,
+            user_id=user_id,
+            location_id=location_id
         )
+        # db.execute(
+        #     text("""
+        #         UPDATE product_tracking
+        #         SET 
+        #             location_id = :location_id, 
+        #             current_stage_id = :stage_id, 
+        #             last_updated_at = GETDATE()
+        #         WHERE id = :product_id
+        #     """),
+        #     {"location_id": location_id, "stage_id": to_stage_id, "product_id": product_id}
+        # )
+
+        # log_product_status_change(
+        #     db=db,
+        #     product_id=product_id,
+        #     from_stage_id=from_stage_id,
+        #     to_stage_id=to_stage_id,
+        #     reason="Storage assignment",
+        #     user_id=user_id
+        # )
 
     db.commit()
 
@@ -241,10 +264,10 @@ def update_post_treatment_qc(db: Session, product_qc: list[dict], inspected_by: 
     for item in product_qc:
         product_id = item["product_id"]
 
-        from_stage_id = db.scalar(
-            text("SELECT current_stage_id FROM product_tracking WHERE id = :product_id"),
-            {"product_id": product_id}
-        )
+        # from_stage_id = db.scalar(
+        #     text("SELECT current_stage_id FROM product_tracking WHERE id = :product_id"),
+        #     {"product_id": product_id}
+        # )
 
         db.execute(
             text("""
@@ -262,23 +285,30 @@ def update_post_treatment_qc(db: Session, product_qc: list[dict], inspected_by: 
                 "inspector": inspected_by
             }
         )
-        db.execute(
-            text("""
-                UPDATE product_tracking
-                SET current_stage_id = :new_stage_id, last_updated_at = GETDATE()
-                WHERE id = :pid
-            """),
-            {"new_stage_id": new_stage_id, "pid": product_id}
-        )
-
-        log_product_status_change(
+        update_product_stage(
             db=db,
             product_id=product_id,
-            from_stage_id=from_stage_id,
-            to_stage_id=new_stage_id,
+            new_stage_id=new_stage_id,
             reason="Post-Treatment QC Complete",
             user_id=inspected_by
         )
+        # db.execute(
+        #     text("""
+        #         UPDATE product_tracking
+        #         SET current_stage_id = :new_stage_id, last_updated_at = GETDATE()
+        #         WHERE id = :pid
+        #     """),
+        #     {"new_stage_id": new_stage_id, "pid": product_id}
+        # )
+
+        # log_product_status_change(
+        #     db=db,
+        #     product_id=product_id,
+        #     from_stage_id=from_stage_id,
+        #     to_stage_id=new_stage_id,
+        #     reason="Post-Treatment QC Complete",
+        #     user_id=inspected_by
+        # )
     db.commit()
 
 

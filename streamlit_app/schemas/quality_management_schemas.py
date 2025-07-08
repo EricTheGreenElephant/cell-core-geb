@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional
 
@@ -20,6 +20,7 @@ class ProductQMReview(BaseModel):
     class Config:
         orm_mode = True
 
+
 class PostTreatmentApprovalCandidate(BaseModel):
     product_id: int
     product_type_name: str
@@ -31,3 +32,38 @@ class PostTreatmentApprovalCandidate(BaseModel):
     current_stage_name: str
     current_location: Optional[str]
     last_updated_at: datetime
+
+
+class QuarantinedProductRow(BaseModel):
+    product_id: int
+    harvest_id: int
+    product_type: str
+    previous_stage_name: Optional[str]
+    current_stage_name: str
+    location_name: Optional[str]
+    inspection_result: Optional[str]
+    weight_grams: Optional[float]
+    pressure_drop: Optional[float]
+    last_updated_at: datetime
+
+
+class InvestigationEntry(BaseModel):
+    product_id: int
+    status: str = Field(default="Under Investigation")
+    comment: str = Field(..., max_length=255)
+    deviation_number: str = Field(..., max_length=100)
+    created_by: int
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class InvestigatedProductRow(BaseModel):
+    product_id: int
+    product_type: str
+    current_stage_name: str
+    last_updated_at: datetime
+    location_name: Optional[str]
+    inspection_result: Optional[str]
+    deviation_number: str
+    comment: str
+    created_by: str
+    created_at: datetime

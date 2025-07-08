@@ -16,7 +16,8 @@ def render_product_qm_review():
         "Select QM Approval Type:",
         options=["Post-Harvest Approval", "Post-Treatment Approval"]
     )
-
+    user_id = st.session_state.get("user_id")
+    
     if approval_type == "Post-Harvest Approval":
         stage_label = "Stored; Pending QM Approval for Treatment"
         target_stage_func = approve_products_for_treatment
@@ -55,8 +56,6 @@ def render_product_qm_review():
         st.write(f"Eligible for Approval: {len(eligible_product_ids)} product(s).")
         if st.button("Approve All"):
             try:
-                user_id = st.session_state.get("user_id")
-
                 with get_session() as db:
                     target_stage_func(db, eligible_product_ids, user_id)
                 st.success(f"Approved {len(eligible_product_ids)} product(s).")
@@ -86,7 +85,7 @@ def render_product_qm_review():
                 ):
                     try:
                         with get_session() as db:
-                            target_stage_func(db, [p.product_id])
+                            target_stage_func(db, [p.product_id], user_id)
                         st.success(f"Product {p.product_id} approved.")
                         time.sleep(1.5)
                         st.rerun()

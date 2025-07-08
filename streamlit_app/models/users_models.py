@@ -19,3 +19,5 @@ class User(Base):
     unmounted_filaments = relationship("models.filament_models.FilamentMounting", back_populates="unmounted_by_user", foreign_keys="FilamentMounting.unmounted_by")
     received_lids = relationship("models.lid_models.Lid", back_populates="receiver", foreign_keys="Lid.received_by")
     post_treatment_inspections = relationship("PostTreatmentInspection", back_populates="inspector")
+    investigations_created = relationship("ProductInvestigation", back_populates="created_user")
+    status_changes = relationship("ProductStatusHistory", back_populates="user")

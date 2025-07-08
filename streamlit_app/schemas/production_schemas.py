@@ -38,8 +38,22 @@ class ProductTrackingRead(BaseModel):
     id: int
     tracking_id: str
     harvest_id: int
+    previous_stage_id: int
     current_stage_id: int
     last_updated_at: datetime
+
+    class Config:
+        orm_mode = True
+
+
+class ProductStatusHistoryEntry(BaseModel):
+    id: int
+    product_id: int
+    from_stage_id: Optional[int]
+    to_stage_id: int
+    reason: Optional[str]
+    changed_by: int
+    changed_at: datetime
 
     class Config:
         orm_mode = True
