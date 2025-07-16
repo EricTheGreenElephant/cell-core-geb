@@ -42,6 +42,7 @@ class QuarantinedProductRow(BaseModel):
     current_stage_name: str
     location_name: Optional[str]
     inspection_result: Optional[str]
+    qc_result: Optional[str]
     weight_grams: Optional[float]
     pressure_drop: Optional[float]
     last_updated_at: datetime
@@ -59,6 +60,7 @@ class InvestigationEntry(BaseModel):
 class InvestigatedProductRow(BaseModel):
     product_id: int
     product_type: str
+    previous_stage_name: str
     current_stage_name: str
     last_updated_at: datetime
     location_name: Optional[str]

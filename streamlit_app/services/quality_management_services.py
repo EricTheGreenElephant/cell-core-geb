@@ -16,6 +16,7 @@ from schemas.quality_management_schemas import (
 )
 from services.tracking_service import log_product_status_change, update_product_stage
 from utils.db_transaction import transactional
+from datetime import datetime
 
 
 StagePrev = aliased(LifecycleStages)
@@ -217,6 +218,7 @@ def get_quarantined_products(db: Session) -> list[QuarantinedProductRow]:
             LifecycleStages.stage_name.label("current_stage_name"),
             StorageLocation.location_name,
             ProductQualityControl.inspection_result,
+            PostTreatmentInspection.qc_result,
             ProductQualityControl.weight_grams,
             ProductQualityControl.pressure_drop,
             ProductTracking.last_updated_at
@@ -225,6 +227,7 @@ def get_quarantined_products(db: Session) -> list[QuarantinedProductRow]:
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
         .join(ProductType, ProductRequest.product_id == ProductType.id)
         .outerjoin(ProductQualityControl, ProductQualityControl.product_id == ProductTracking.id)
+        .outerjoin(PostTreatmentInspection, ProductTracking.id == PostTreatmentInspection.product_id)
         .outerjoin(StorageLocation, ProductTracking.location_id == StorageLocation.id)
         .join(LifecycleStages, ProductTracking.current_stage_id == LifecycleStages.id)
         .outerjoin(StagePrev, ProductTracking.previous_stage_id == StagePrev.id)
@@ -280,8 +283,6 @@ def escalate_to_investigation(db: Session, entry: InvestigationEntry):
     #     user_id=entry.created_by
     # )
 
-    db.commit()
-
 # @transactional
 # def resolve_quarantine_approval(
 #     db: Session, product_id: int, resolution: str, user_id: int, comment: str = ""
@@ -291,24 +292,31 @@ def escalate_to_investigation(db: Session, entry: InvestigationEntry):
 def sort_qm_reviewed_products(db: Session, product_id: int, stage_name: str, resolution: str, user_id: int):
     if resolution == "Waste":
         new_stage_name = "Discarded Product"
-    elif stage_name == "Stored; Pending QM Approval for Treatment":
+    elif stage_name == "Harvest QC Complete; Pending Storage":
         new_stage_name = "QM Approved for Treatment; Pending Treatment"
-    elif stage_name == "Stored; Pending QM Approval for Sales":
+        db.execute(
+            text("""
+                UPDATE product_quality_control
+                SET inspection_result = :resolution
+                WHERE product_id = :pid
+            """),
+            {"resolution": resolution, "pid": product_id}
+        )
+    elif stage_name == "Returned / Post-Treatment QC; Pending Storage":
         new_stage_name = "QM Approved For Sales; Pending Sales"
+        db.execute(
+            text("""
+                UPDATE post_treatment_inspections
+                SET qc_result = :resolution
+                WHERE product_id = :pid
+            """),
+            {"resolution": resolution, "pid": product_id}
+        )
     else:
         new_stage_name = stage_name
     
     stmt = select(LifecycleStages.id).where(LifecycleStages.stage_name == new_stage_name)
     stage_id = db.scalar(stmt)
-
-    db.execute(
-        text("""
-            UPDATE product_quality_control
-            SET inspection_result = :resolution
-            WHERE product_id = :pid
-        """),
-        {"resolution": resolution, "pid": product_id}
-    )
 
     update_product_stage(
         db=db,
@@ -317,8 +325,6 @@ def sort_qm_reviewed_products(db: Session, product_id: int, stage_name: str, res
         reason="QM Decision",
         user_id=user_id
     )
-
-    db.commit()
 
 def get_previous_stage_before_quarantine(db: Session, product_id: int) -> int | None:
     return db.scalar(
@@ -336,6 +342,7 @@ def get_investigated_products(db: Session) -> list[InvestigatedProductRow]:
         select(
             ProductTracking.id.label("product_id"),
             ProductType.name.label("product_type"),
+            StagePrev.stage_name.label("previous_stage_name"),
             LifecycleStages.stage_name.label("current_stage_name"),
             ProductTracking.last_updated_at,
             StorageLocation.location_name,
@@ -351,8 +358,43 @@ def get_investigated_products(db: Session) -> list[InvestigatedProductRow]:
         .join(ProductType, ProductRequest.product_id == ProductType.id)
         .outerjoin(StorageLocation, ProductTracking.location_id == StorageLocation.id)
         .outerjoin(ProductQualityControl, ProductQualityControl.product_id == ProductTracking.id)
+        .outerjoin(StagePrev, ProductTracking.previous_stage_id == StagePrev.id)
         .join(ProductInvestigation, ProductInvestigation.product_id == ProductTracking.id)
         .join(User, ProductInvestigation.created_by == User.id)
+        .where(ProductInvestigation.status == "Under Investigation")
     )
     result = db.execute(stmt).all()
     return [InvestigatedProductRow(**row._mapping) for row in result]
+
+@transactional
+def resolve_investigation(db: Session, product_id: int, resolution: str, user_id: int, comment: str):
+    resolution_note = f"[Resolution {datetime.now().strftime('%Y-%m-%d %H:%M')}]: {resolution}"
+    if comment:
+        resolution_note += f" — {comment}"
+    if resolution == "Passed":
+        status = "Cleared A-Ware"
+    elif resolution == "B-Ware":
+        status = "Cleared B-Ware"
+    else:
+        status = "Disposed"
+    db.execute(
+        text("""
+            UPDATE product_investigations
+            SET
+                status = :status,
+                resolved_at = GETDATE(),
+                resolved_by = :resolved_by,
+                comment = 
+                    CASE 
+                        WHEN comment IS NULL OR comment = '' THEN :note
+                        ELSE comment + CHAR(13) + :note
+                    END
+            WHERE product_id = :product_id AND status = 'Under Investigation'
+        """),
+        {
+            "status": status,
+            "resolved_by": user_id,
+            "product_id": product_id,
+            "note": resolution_note
+        }
+    ) 

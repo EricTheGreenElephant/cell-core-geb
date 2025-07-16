@@ -9,3 +9,4 @@ from . import audit_models
 from . import lifecycle_stages_models
 from . import product_quality_control_models
 from . import investigation_models
+from . import quarantined_products_models

@@ -261,20 +261,46 @@ BEGIN
 END;
 
 -- ======== QUARANTINED PRODUCTS ===========
+IF OBJECT_ID('quarantined_products', 'U') IS NULL
+BEGIN
+    CREATE TABLE quarantined_products(
+        id INT IDENTITY PRIMARY KEY,
+        product_id INT NOT NULL,
+        from_stage_id INT NOT NULL,
+        source NVARCHAR(50) NOT NULL CHECK (source IN ('Harvest QC', 'Post-Treatment QC', 'Ad-Hoc')),
+        location_id INT NULL,
+        quarantine_date DATETIME2 NOT NULL DEFAULT GETDATE(),
+        quarantined_by INT NOT NULL,
+        quarantine_reason NVARCHAR(255) NULL,
+        quarantine_status NVARCHAR(20) NOT NULL CHECK (quarantine_status IN ('Active', 'Released', 'Disposed')),
+        result NVARCHAR(20) NULL CHECK (result IN ('Passed', 'B-Ware', 'Waste')),
+        resolved_at DATETIME2 NULL,
+        resolved_by INT NULL,
+
+        CONSTRAINT fk_quarantine_product FOREIGN KEY (product_id) REFERENCES product_tracking(id),
+        CONSTRAINT fk_quarantine_stage FOREIGN KEY (from_stage_id) REFERENCES lifecycle_stages(id),
+        CONSTRAINT fk_quarantine_user FOREIGN KEY (quarantined_by) REFERENCES users(id),
+        CONSTRAINT fk_quarantine_resolved_user FOREIGN KEY (resolved_by) REFERENCES users(id),
+        CONSTRAINT fk_quarantine_location FOREIGN KEY (location_id) REFERENCES storage_locations(id)
+    );
+END;
+
 IF OBJECT_ID('product_investigations', 'U') IS NULL
 BEGIN
     CREATE TABLE product_investigations(
         id INT IDENTITY PRIMARY KEY,
         product_id INT NOT NULL,
-        status VARCHAR(50) NOT NULL CHECK (status IN ('Under Investigation', 'Cleard A-Ware', 'Cleared B-Ware', 'Disposed')),
+        status VARCHAR(50) NOT NULL CHECK (status IN ('Under Investigation', 'Cleared A-Ware', 'Cleared B-Ware', 'Disposed')),
         deviation_number VARCHAR(50),
         comment NVARCHAR(255),
         created_by INT NOT NULL,
         created_at DATETIME2 DEFAULT GETDATE() NOT NULL,
         resolved_at DATETIME2 NULL,
+        resolved_by INT NULL,
 
         CONSTRAINT fk_investigation_product FOREIGN KEY (product_id) REFERENCES product_tracking(id),
-        CONSTRAINT fk_investigation_user FOREIGN KEY (created_by) REFERENCES users(id)
+        CONSTRAINT fk_investigation_user FOREIGN KEY (created_by) REFERENCES users(id),
+        CONSTRAINT fk_investigation_resolved_user FOREIGN KEY (resolved_by) REFERENCES users(id)
     );
 END;
 
@@ -317,7 +343,7 @@ BEGIN
         visual_pass BIT NOT NULL,
         surface_treated BIT NOT NULL,
         sterilized BIT NOT NULL,
-        qc_result NVARCHAR(20) NOT NULL CHECK (qc_result IN ('QM Request', 'Internal Use', 'Waste')),
+        qc_result NVARCHAR(20) NOT NULL CHECK (qc_result IN ('QM Request', 'Internal Use', 'Quarantine', 'Waste')),
         notes NVARCHAR(255),
 
         CONSTRAINT fk_post_qc_product FOREIGN KEY (product_id) REFERENCES product_tracking(id),

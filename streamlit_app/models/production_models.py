@@ -56,6 +56,7 @@ class ProductTracking(Base):
     quality_controls = relationship("models.product_quality_control_models.ProductQualityControl", back_populates='product')
     investigation = relationship("ProductInvestigation", back_populates="product", uselist=False)
     status_history = relationship("ProductStatusHistory", back_populates="product")
+    quarantine_records = relationship("QuarantinedProducts", back_populates="product")
 
 class ProductStatusHistory(Base):
     __tablename__ = "product_status_history"

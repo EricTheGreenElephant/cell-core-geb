@@ -3,6 +3,7 @@ from utils.session import require_access, require_login
 from utils.auth import show_user_sidebar
 from components.logistics.logistics_form import render_logistics_form
 from components.logistics.storage_assignment_form import render_storage_assignment_form
+from components.logistics.storage_audit import render_shelf_stage_mismatch_report
 from components.logistics.treatment_qc_form import render_treatment_qc_form
 from components.logistics.storage_edit_form import render_storage_edit_form
 from components.logistics.treatment_qc_edit_form import render_treatment_qc_edit_form
@@ -29,12 +30,20 @@ require_login()
 require_access("Logistics", "Write")
 
 # --- Page structure ---
-tab1, tab2, tab3, tab4 = st.tabs(["Harvest Storage", "Treatment Batch", "Treatment QC", "Edit Storage and Treatment"])
+tab1, tab2, tab3, tab4 = st.tabs(["Storage", "Treatment Batch", "Treatment QC", "Edit Storage and Treatment"])
 
 with tab1:
-    toggle_button("assign_storage", "Assign Storage", "Hide Storage")
-    if st.session_state.get("assign_storage", False):
+    toggle_storage = st.selectbox(
+        label="Select Storage Option",
+        options=["Select an option...", "Assign Storage", "Check Mismatched Inventory"],
+        index=0
+    )
+
+    if toggle_storage == "Assign Storage":
         render_storage_assignment_form()
+    
+    elif toggle_storage == "Check Mismatched Inventory":
+        render_shelf_stage_mismatch_report()
 
 with tab2:
     toggle_button("create_batch", "Create Treatment Batch", "Hide Treatment Batch")

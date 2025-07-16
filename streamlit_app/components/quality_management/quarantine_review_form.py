@@ -29,7 +29,8 @@ def render_quarantine_review_form():
             with st.expander(f"Product #{prod.product_id} - {prod.product_type}"):
                 st.write(f"**Previous Stage:** {prod.previous_stage_name or 'Unknown'}")
                 st.write(f"**Stage:** {prod.current_stage_name}")
-                st.write(f"**Initial QC Result:** {prod.inspection_result}")
+                st.write(f"**Post-Harvest QC Result:** {prod.inspection_result}")
+                st.write(f"**Post-Treatment QC Result:** {prod.qc_result}")
                 st.write(f"**Last Updated:** {prod.last_updated_at.date()}")
                 st.write(f"**Location:** {prod.location_name or 'N/A'}")
 
@@ -65,6 +66,7 @@ def render_quarantine_review_form():
                             )
                             with get_session() as db:
                                 escalate_to_investigation(db, entry)
+                                db.commit()
                         
                         else:
                             with get_session() as db:
@@ -75,7 +77,7 @@ def render_quarantine_review_form():
                                     resolution=action,
                                     user_id=user_id
                                 )
-
+                                db.commit()
                         st.success(f"Action '{action}' submitted for product #{prod.product_id}.")
                         time.sleep(1.5)
                         st.rerun()

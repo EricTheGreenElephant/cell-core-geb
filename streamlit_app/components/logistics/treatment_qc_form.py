@@ -13,14 +13,17 @@ from db.orm_session import get_session
 color_map = {
     "QM Request": "green",
     "Internal Use": "orange",
+    "Quarantine": "blue",
     "Waste": "red"
 }
 
-def determine_qc_result(prior_result, surface_treat_required, surface_treated, sterilized, visual_pass):
+def determine_qc_result(prior_result, surface_treat_required, surface_treated, sterilized, quarantine, visual_pass):
     if not sterilized or not visual_pass:
         return "Waste"
     if surface_treat_required and not surface_treated:
         return "Waste"
+    if quarantine:
+        return "Quarantine"
     if prior_result == "Passed" and surface_treated and sterilized and visual_pass:
         return "QM Request"
     return "Internal Use"
@@ -72,6 +75,8 @@ def render_treatment_qc_form():
         st.divider()
         st.markdown("### Full Inspection")
 
+        quarantine_all = st.checkbox("Quarantine All", value=False)
+
         full_qc = []
         for p in products:
             if p["inspection_result"] == 'B-Ware':
@@ -82,6 +87,7 @@ def render_treatment_qc_form():
 
             surface = st.checkbox("Surface Treated", value=p["surface_treat"], key=f"surf_{p['product_id']}")
             sterilized = st.checkbox("Sterilized", value=p["sterilize"], key=f"ster_{p['product_id']}")
+            quarantine = st.checkbox("Quarantine", value=quarantine_all, key=f"quar_{p['product_id']}")
 
             visual = None
             if failed_sample:
@@ -94,7 +100,7 @@ def render_treatment_qc_form():
             treat_required = p["surface_treat"]
             visual_val = visual if visual is not None else True
 
-            qc_result = determine_qc_result(prior_result, treat_required, surface, sterilized, visual_val)
+            qc_result = determine_qc_result(prior_result, treat_required, surface, sterilized, quarantine, visual_val)
             color = color_map.get(qc_result, "black")
 
             st.markdown(f"**Suggested QC Result:** <span style='color:{color}; font-weight:bold'>{qc_result}</span>", unsafe_allow_html=True)

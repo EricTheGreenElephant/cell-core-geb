@@ -14,3 +14,4 @@ class StorageLocation(Base):
     filaments = relationship("models.filament_models.Filament", back_populates="location")
     product_tracking = relationship("models.production_models.ProductTracking", back_populates="location")
     lids = relationship("models.lid_models.Lid", back_populates="location")
+    quarantined_products = relationship("QuarantinedProducts", back_populates="location")

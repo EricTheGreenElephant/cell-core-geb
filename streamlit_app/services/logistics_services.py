@@ -175,7 +175,7 @@ def assign_storage_to_products(db: Session, assignments: list[tuple[str, int, st
             text("SELECT id FROM lifecycle_stages WHERE stage_code = :code"),
             {"code": stage_code}
         )
-        
+
         if stage_code == "Quarantine":
             reason = "Moved to Quarantine"
         elif stage_code == "Disposed":
@@ -325,7 +325,7 @@ def mark_batch_as_inspected(db: Session, batch_id: int):
     db.commit()
 
 @transactional
-def get_stored_products(db: Session) -> list[dict]:
+def get_stored_products(db: Session, product_id: str | None = None) -> list[dict]:
     sql = """
         SELECT
             t.id AS product_id,
@@ -341,9 +341,12 @@ def get_stored_products(db: Session) -> list[dict]:
         JOIN product_types pt ON pr.product_id = pt.id
         JOIN storage_locations sl ON t.location_id = sl.id
         LEFT JOIN lifecycle_stages lc ON t.current_stage_id = lc.id
-        WHERE lc.stage_code IN ('InInterimStorage', 'PostTreatmentStorage', 'Quarantine')
+        
     """
-    result = db.execute(text(sql))
+    if product_id:
+        sql += " WHERE t.id = :product_id"
+
+    result = db.execute(text(sql), {"product_id": product_id} if product_id else {})
     cols = result.keys()
     return [dict(zip(cols, row)) for row in result.fetchall()]
 

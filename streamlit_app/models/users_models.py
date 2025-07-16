@@ -21,3 +21,5 @@ class User(Base):
     post_treatment_inspections = relationship("PostTreatmentInspection", back_populates="inspector")
     investigations_created = relationship("ProductInvestigation", back_populates="created_user")
     status_changes = relationship("ProductStatusHistory", back_populates="user")
+    quarantines_created = relationship("QuarantinedProducts", foreign_keys="[QuarantinedProducts.quarantined_by]", back_populates="quarantined_user")
+    quarantines_resolved = relationship("QuarantinedProducts", foreign_keys="[QuarantinedProducts.resolved_by]", back_populates="resolved_user")

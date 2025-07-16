@@ -8,8 +8,15 @@ from db.orm_session import get_session
 def render_storage_edit_form():
     st.subheader("Edit Storage Assignment")
 
+    search_input = st.text_input("Search by Product ID", placeholder="e.g. 100124")
+    search_term = search_input.strip() if search_input else None
+
+    if not search_term:
+        st.warning("Enter a Product ID to search.")
+        return
+    
     with get_session() as db:
-        products = get_stored_products(db)
+        products = get_stored_products(db, product_id=search_term)
         locations = get_storage_locations(db)
 
     if not products:
@@ -35,8 +42,19 @@ def render_storage_edit_form():
     selected = product_map[selected_label]
 
     current_loc_label = next((label for label, id in location_map.items() if id == selected["location_id"]), None)
-    new_location_label = st.selectbox("New Storage Location", location_names, index=location_names.index(current_loc_label))
-    change_status = st.checkbox(label="Change Product Status", value=False, key=f"status_change_{selected["harvest_id"]}")
+
+    new_location_label = st.selectbox(
+        "New Storage Location", 
+        location_names, 
+        index=location_names.index(current_loc_label) if current_loc_label in location_names else 0
+    )
+
+    change_status = st.checkbox(
+        label="Change Product Status", 
+        value=False, 
+        key=f"status_change_{selected["harvest_id"]}"
+    )
+    
     if change_status:   
         new_status = st.selectbox(
             "New Product Status", 
