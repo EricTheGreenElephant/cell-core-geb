@@ -76,6 +76,13 @@ def render_treatment_qc_form():
         st.markdown("### Full Inspection")
 
         quarantine_all = st.checkbox("Quarantine All", value=False)
+        quarantine_all_reason = ""
+        if quarantine_all:
+            quarantine_all_reason = st.text_area(
+                "Reason for Quarantining All Products",
+                max_chars=255,
+                key="quarantine_all_reason"
+            )
 
         full_qc = []
         for p in products:
@@ -88,6 +95,15 @@ def render_treatment_qc_form():
             surface = st.checkbox("Surface Treated", value=p["surface_treat"], key=f"surf_{p['product_id']}")
             sterilized = st.checkbox("Sterilized", value=p["sterilize"], key=f"ster_{p['product_id']}")
             quarantine = st.checkbox("Quarantine", value=quarantine_all, key=f"quar_{p['product_id']}")
+
+            product_reason = None
+            if quarantine:
+                product_reason = st.text_area(
+                    f"Reason for Quarantining Product #{p['product_id']}",
+                    max_chars=255,
+                    value=quarantine_all_reason if quarantine_all else "",
+                    key=f"quar_reason_{p['product_id']}"
+                )
 
             visual = None
             if failed_sample:
@@ -109,7 +125,8 @@ def render_treatment_qc_form():
                 "surface_treat": surface,
                 "sterilize": sterilized,
                 "visual_pass": visual_val,
-                "qc_result": qc_result
+                "qc_result": qc_result,
+                "quarantine_reason": product_reason
             })
 
         if st.button("Finalize Inspection"):

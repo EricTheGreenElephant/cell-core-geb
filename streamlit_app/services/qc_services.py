@@ -4,6 +4,7 @@ from schemas.qc_schemas import ProductQCInput
 from schemas.audit_schemas import FieldChangeAudit
 from services.audit_services import update_record_with_audit
 from services.tracking_service import update_product_stage
+from services.quality_management_services import create_quarantine_record
 from utils.db_transaction import transactional
 
 
@@ -65,6 +66,15 @@ def insert_product_qc(db: Session, data: ProductQCInput):
         reason="Harvest QC Complete",
         user_id=data.inspected_by
     )
+    
+    if data.inspection_result == "Quarantine":
+        create_quarantine_record(
+            db=db,
+            product_id=data.product_id,
+            source="Harvest QC",
+            quarantined_by=data.inspected_by,
+            reason=data.notes
+        )
 
     db.execute(
         text("""

@@ -6,6 +6,7 @@ from models.lifecycle_stages_models import LifecycleStages
 from models.users_models import User
 from models.investigation_models import ProductInvestigation
 from models.product_quality_control_models import ProductQualityControl, PostTreatmentInspection
+from models.quarantined_products_models import QuarantinedProducts
 from models.storage_locations_models import StorageLocation
 from schemas.quality_management_schemas import (
     ProductQMReview, 
@@ -16,7 +17,7 @@ from schemas.quality_management_schemas import (
 )
 from services.tracking_service import log_product_status_change, update_product_stage
 from utils.db_transaction import transactional
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 StagePrev = aliased(LifecycleStages)
@@ -212,17 +213,21 @@ def get_quarantined_products(db: Session) -> list[QuarantinedProductRow]:
     stmt = (
         select(
             ProductTracking.id.label("product_id"),
-            ProductHarvest.id.label("harvest_id"),
+            ProductTracking.tracking_id,
             ProductType.name.label("product_type"),
             StagePrev.stage_name.label("previous_stage_name"),
             LifecycleStages.stage_name.label("current_stage_name"),
             StorageLocation.location_name,
             ProductQualityControl.inspection_result,
             PostTreatmentInspection.qc_result,
+            QuarantinedProducts.quarantine_date,
+            QuarantinedProducts.quarantine_reason,
+            User.display_name.label("quarantined_by"),
             ProductQualityControl.weight_grams,
             ProductQualityControl.pressure_drop,
             ProductTracking.last_updated_at
         )
+        .join(QuarantinedProducts, QuarantinedProducts.product_id == ProductTracking.id)
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
         .join(ProductType, ProductRequest.product_id == ProductType.id)
@@ -232,12 +237,12 @@ def get_quarantined_products(db: Session) -> list[QuarantinedProductRow]:
         .join(LifecycleStages, ProductTracking.current_stage_id == LifecycleStages.id)
         .outerjoin(StagePrev, ProductTracking.previous_stage_id == StagePrev.id)
         .outerjoin(ProductInvestigation, ProductTracking.id == ProductInvestigation.product_id)
+        .join(User, QuarantinedProducts.quarantined_by == User.id)
+        .where(QuarantinedProducts.quarantine_status == "Active")
+        .where(QuarantinedProducts.location_id.is_not(None))
         .where(
-            LifecycleStages.stage_code == "Quarantine",
-            or_(
-                ProductInvestigation.id.is_(None),                      
-                ProductInvestigation.status != "Under Investigation"     
-            )
+            (ProductInvestigation.id.is_(None)) |
+            (ProductInvestigation.status != "Under Investigation")
         )
     )
     results = db.execute(stmt).all()
@@ -294,24 +299,24 @@ def sort_qm_reviewed_products(db: Session, product_id: int, stage_name: str, res
         new_stage_name = "Discarded Product"
     elif stage_name == "Harvest QC Complete; Pending Storage":
         new_stage_name = "QM Approved for Treatment; Pending Treatment"
-        db.execute(
-            text("""
-                UPDATE product_quality_control
-                SET inspection_result = :resolution
-                WHERE product_id = :pid
-            """),
-            {"resolution": resolution, "pid": product_id}
-        )
+        # db.execute(
+        #     text("""
+        #         UPDATE product_quality_control
+        #         SET inspection_result = :resolution
+        #         WHERE product_id = :pid
+        #     """),
+        #     {"resolution": resolution, "pid": product_id}
+        # )
     elif stage_name == "Returned / Post-Treatment QC; Pending Storage":
         new_stage_name = "QM Approved For Sales; Pending Sales"
-        db.execute(
-            text("""
-                UPDATE post_treatment_inspections
-                SET qc_result = :resolution
-                WHERE product_id = :pid
-            """),
-            {"resolution": resolution, "pid": product_id}
-        )
+        # db.execute(
+        #     text("""
+        #         UPDATE post_treatment_inspections
+        #         SET qc_result = :resolution
+        #         WHERE product_id = :pid
+        #     """),
+        #     {"resolution": resolution, "pid": product_id}
+        # )
     else:
         new_stage_name = stage_name
     
@@ -368,6 +373,10 @@ def get_investigated_products(db: Session) -> list[InvestigatedProductRow]:
 
 @transactional
 def resolve_investigation(db: Session, product_id: int, resolution: str, user_id: int, comment: str):
+    """
+    Marks the product investigation as resolved and also updates the quarantined_products table if applicable.
+
+    """
     resolution_note = f"[Resolution {datetime.now().strftime('%Y-%m-%d %H:%M')}]: {resolution}"
     if comment:
         resolution_note += f" — {comment}"
@@ -377,6 +386,10 @@ def resolve_investigation(db: Session, product_id: int, resolution: str, user_id
         status = "Cleared B-Ware"
     else:
         status = "Disposed"
+    
+    q_status = status if status == "Disposed" else "Released"
+
+    # === Update product_investigations ===
     db.execute(
         text("""
             UPDATE product_investigations
@@ -397,4 +410,83 @@ def resolve_investigation(db: Session, product_id: int, resolution: str, user_id
             "product_id": product_id,
             "note": resolution_note
         }
+    )
+
+    # === Update the quarantined_products record === 
+    db.execute(
+        text("""
+            UPDATE quarantined_products
+            SET
+                quarantine_status = :q_status,
+                result = :q_result,
+                resolved_at = GETDATE(),
+                resolved_by = :resolved_by
+            WHERE product_id = :product_id AND quarantine_status = 'Active'
+        """),
+        {
+            "q_status": q_status,
+            "q_result": resolution,
+            "resolved_by": user_id,
+            "product_id": product_id
+        }
     ) 
+
+@transactional
+def resolve_quarantine_record(
+    db: Session,
+    product_id: int,
+    result: str,
+    resolved_by: int
+):
+    """
+    Updates a quarantine record once QM reviews the product.
+    """
+    status = "Released" if result in ("Passed", "B-Ware") else "Disposed"
+
+    db.execute(
+        text("""
+            UPDATE quarantined_products
+            SET
+                quarantine_status = :status,
+                result = :result,
+                resolved_at = :resolved_at,
+                resolved_by = :resolved_by
+            WHERE product_id = :pid AND quarantine_status = 'Active'
+        """),
+        {
+            "status": status,
+            "result": result,
+            "resolved_at": datetime.now(timezone.utc),
+            "resolved_by": resolved_by,
+            "pid": product_id
+        }
+    )
+
+@transactional
+def create_quarantine_record(
+    db: Session,
+    product_id: int,
+    source: str,
+    quarantined_by: int,
+    reason: str | None = None
+):
+    from_stage_id = db.scalar(
+        text("SELECT current_stage_id FROM product_tracking WHERE id = :pid"),
+        {"pid": product_id}
+    )
+    db.execute(
+        text("""
+            INSERT INTO quarantined_products (
+                product_id, from_stage_id, source, quarantined_by, quarantine_reason, quarantine_status, quarantine_date
+            )
+            VALUES (:pid, :stage, :source, :user, :reason, 'Active', :q_date)
+        """),
+        {
+            "pid": product_id,
+            "stage": from_stage_id,
+            "source": source,
+            "user": quarantined_by,
+            "reason": reason or None,
+            "q_date": datetime.now(timezone.utc)
+        }
+    )

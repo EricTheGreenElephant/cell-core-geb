@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 from typing import Optional
 
@@ -17,8 +17,7 @@ class ProductQMReview(BaseModel):
     current_location: Optional[str]
     qc_notes: Optional[str]
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PostTreatmentApprovalCandidate(BaseModel):
@@ -36,17 +35,21 @@ class PostTreatmentApprovalCandidate(BaseModel):
 
 class QuarantinedProductRow(BaseModel):
     product_id: int
-    harvest_id: int
+    tracking_id: str
     product_type: str
     previous_stage_name: Optional[str]
     current_stage_name: str
     location_name: Optional[str]
     inspection_result: Optional[str]
+    quarantine_date: datetime
+    quarantine_reason: Optional[str]
+    quarantined_by: str
     qc_result: Optional[str]
     weight_grams: Optional[float]
     pressure_drop: Optional[float]
     last_updated_at: datetime
 
+    model_config = ConfigDict(from_attributes=True)
 
 class InvestigationEntry(BaseModel):
     product_id: int

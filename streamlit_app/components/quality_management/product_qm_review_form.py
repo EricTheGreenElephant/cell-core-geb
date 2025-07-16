@@ -18,6 +18,8 @@ def render_product_qm_review():
     )
     user_id = st.session_state.get("user_id")
     
+    st.divider()
+    
     if approval_type == "Post-Harvest Approval":
         stage_label = "Stored; Pending QM Approval for Treatment"
         target_stage_func = approve_products_for_treatment

@@ -14,9 +14,9 @@ STAGE_SHELF_RULES = {
     "InInterimStorage": ["CellScrew; Inventory", "CellScrew; B-Ware"],
     "QMTreatmentApproval": ["CellScrew; Inventory", "CellScrew; B-Ware"],
     "InTreatment": ["Offsite", "Treatment/Partner/Customer"],
-    "PostTreatmentQC": ["CellScrew; Inventory", "CellScrew; B-Ware"],
-    "PostTreatmentStorage": ["CellScrew; Inventory", "CellScrew; B-Ware"],
-    "QMSalesApproval": ["CellScrew; Sales"],
+    "PostTreatmentQC": ["CellScrew; Sales", "Internal Use", "CellScrew; B-Ware"],
+    "PostTreatmentStorage": ["CellScrew; Sales", "Internal Use", "CellScrew; B-Ware"],
+    "QMSalesApproval": ["CellScrew; Sales", "Internal Use"],
     "Quarantine": ["CellScrew; Quarantine"],
     "Disposed": ["Disposed Product", "Waste"],
     "Internal Use": ["Internal Use"],  # If you later create shelves like "CellScrew; Internal Use"
@@ -33,12 +33,10 @@ def render_shelf_stage_mismatch_report():
                 LifecycleStages.stage_code,
                 StorageLocation.id.label("location_id"),
                 StorageLocation.location_name,
-                StorageLocation.description,
-                ProductQualityControl.inspection_result,
+                StorageLocation.description,                
             )
             .join(LifecycleStages, ProductTracking.current_stage_id == LifecycleStages.id)
             .join(StorageLocation, ProductTracking.location_id == StorageLocation.id)
-            .join(ProductQualityControl, ProductTracking.id == ProductQualityControl.product_id)
             .all()
         )
 
@@ -52,7 +50,6 @@ def render_shelf_stage_mismatch_report():
                 "location_id": row.location_id,
                 "location_name": row.location_name,
                 "description": row.description,
-                "inspection_result": row.inspection_result,
                 "allowed_keywords": allowed_keywords,
             })
 
@@ -67,8 +64,7 @@ def render_shelf_stage_mismatch_report():
         with st.expander(f"{item['product_id']} - Shelf: {item['description']}"):
             st.write(f"**Current Stage:** `{item['stage_code']}`")
             st.write(f"**Current Shelf:** `{item['location_name']} - {item['description']}`")
-            st.write(f"**Inspection Result:** `{item['inspection_result']}`")
-            st.write(f"**Expected Keywords:** `{', '.join(item['allowed_keywords'])}`")
+            st.write(f"**Expected Shelf Area:** `{', '.join(item['allowed_keywords'])}`")
 
             valid_locations = [
                 loc for loc in locations
