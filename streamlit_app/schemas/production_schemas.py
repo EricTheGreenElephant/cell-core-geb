@@ -37,13 +37,14 @@ class HarvestedProductOut(BaseModel):
 class ProductTrackingRead(BaseModel):
     id: int
     tracking_id: str
+    current_status_id: Optional[int]
+    current_status_name: Optional[str] = None
     harvest_id: int
     previous_stage_id: int
     current_stage_id: int
     last_updated_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProductStatusHistoryEntry(BaseModel):
@@ -55,5 +56,4 @@ class ProductStatusHistoryEntry(BaseModel):
     changed_by: int
     changed_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

@@ -10,8 +10,9 @@ from models.users_models import User
 from schemas.logistics_schemas import TreatmentBatchCreate, TreatmentBatchProductCandidate, PostHarvestStorageCandidate, PostTreatmentStorageCandidate
 from schemas.audit_schemas import FieldChangeAudit
 from services.audit_services import update_record_with_audit
-from services.tracking_service import log_product_status_change, update_product_stage
+from services.tracking_service import log_product_status_change, update_product_stage, update_product_status
 from services.quality_management_services import create_quarantine_record
+from constants.product_status_constants import STATUS_MAP_QC_TO_BUSINESS
 from utils.db_transaction import transactional
 
 
@@ -193,7 +194,8 @@ def get_products_by_batch_id(db: Session, batch_id: int) -> list[dict]:
         SELECT
             tbp.id,
             pt.id AS product_id,
-            lc.stage_name AS current_status,
+            ps.status_name AS current_status,
+            lc.stage_name AS current_stage,
             pt.location_id,
             t.name AS product_type,
             pqc.inspection_result,
@@ -207,6 +209,7 @@ def get_products_by_batch_id(db: Session, batch_id: int) -> list[dict]:
         JOIN product_types t ON t.id = pr.product_id
         LEFT JOIN product_quality_control pqc ON pt.id = pqc.product_id
         LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
+        LEFT JOIN product_statuses ps ON pt.current_status_id = ps.id
         WHERE tbp.batch_id = :batch_id
     """
     result = db.execute(text(sql), {"batch_id": batch_id})
@@ -221,6 +224,7 @@ def update_post_treatment_qc(db: Session, product_qc: list[dict], inspected_by: 
     if not new_stage_id:
         raise ValueError("Target stage PostTreatmentQC not found!")
     
+    # === Insert Inspection Result ===
     for item in product_qc:
         product_id = item["product_id"]
 
@@ -240,6 +244,8 @@ def update_post_treatment_qc(db: Session, product_qc: list[dict], inspected_by: 
                 "inspector": inspected_by
             }
         )
+
+        # === Insert Product to Quarantine if Applicable ===
         if item["qc_result"] == "Quarantine":
             create_quarantine_record(
                 db=db,
@@ -255,6 +261,13 @@ def update_post_treatment_qc(db: Session, product_qc: list[dict], inspected_by: 
             new_stage_id=new_stage_id,
             reason="Post-Treatment QC Complete",
             user_id=inspected_by
+        )
+
+        status_name = STATUS_MAP_QC_TO_BUSINESS.get(item["qc_result"], "Pending")
+        update_product_status(
+            db=db,
+            product_id=product_id,
+            status_name=status_name
         )
 
     db.commit()

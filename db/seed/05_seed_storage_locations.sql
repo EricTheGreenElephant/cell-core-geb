@@ -18,6 +18,8 @@ BEGIN
         ('2300', 'Shelf', 'CellScrew; Sales'),
         ('2301', 'Shelf', 'CellScrew; Sales'),
         ('2302', 'Shelf', 'CellScrew; Sales'),
+        ('2310', 'Shelf', 'CellScrew; Internal Use'),
+        ('2311', 'Shelf', 'CellScrew; Internal Use'),
         ('A', 'Room', 'Lids'),
         ('Offsite', 'Offsite', 'Treatment/Partner/Customer'),
         ('Waste', 'Waste', 'Disposed Product');

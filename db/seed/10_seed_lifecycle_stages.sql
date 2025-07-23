@@ -7,7 +7,7 @@ BEGIN
         ('QMTreatmentApproval', 'QM Approved for Treatment; Pending Treatment', 4),
         ('InTreatment', 'In Treatment / Shipped; Pending Return', 5),
         ('PostTreatmentQC', 'Returned / Post-Treatment QC; Pending Storage', 6),
-        ('PostTreatmentStorage', 'Stored; Pending QM Approval for Sales', 7),
+        ('PostTreatmentStorage', 'Stored; Pending QM Approval', 7),
         ('QMSalesApproval', 'QM Approved For Sales; Pending Sales', 8),
         ('Quarantine', 'Moved to Quarantine', 99),
         ('Disposed', 'Discarded Product', 100),

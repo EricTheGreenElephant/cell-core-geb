@@ -55,20 +55,22 @@ def render_quarantine_review_form():
                 action = RESOLUTION_OPTIONS[selected_label]
 
                 comment = deviation = ""
+
+                comment = st.text_area("Comment", max_chars=255, key=f"comment_{prod.product_id}")
+
                 if action == "Investigation":
                     deviation = st.text_input("Deviation Number", key=f"dev_{prod.product_id}")
-                    comment = st.text_area("Comment", max_chars=255, key=f"comment_{prod.product_id}")
                 
                 submit_key = f"submit_{prod.product_id}"
                 if st.button("Submit Decision", key=submit_key):
+                    if not comment:
+                        st.error("Comment required for resolution.")
+                        return
                     try:
                         with get_session() as db:
                             if action == "Investigation":
                                 if not deviation:
                                     st.warning("Deviation Number Required!")
-                                    return
-                                if not comment:
-                                    st.warning("Comment required for investigation!")
                                     return
                                 
                                 entry = InvestigationEntry(
@@ -95,7 +97,8 @@ def render_quarantine_review_form():
                                     db=db,
                                     product_id=prod.product_id,
                                     result=action,
-                                    resolved_by=user_id
+                                    resolved_by=user_id,
+                                    comment=comment
                                 )
                             db.commit()
 

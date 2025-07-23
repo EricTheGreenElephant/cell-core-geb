@@ -15,8 +15,9 @@ from schemas.quality_management_schemas import (
     InvestigationEntry,
     InvestigatedProductRow
 )
-from services.tracking_service import log_product_status_change, update_product_stage
+from services.tracking_service import log_product_status_change, update_product_stage, update_product_status
 from utils.db_transaction import transactional
+from constants.product_status_constants import STATUS_MAP_QC_TO_BUSINESS
 from datetime import datetime, timezone
 
 
@@ -102,8 +103,8 @@ def get_post_treatment_qm_candidates(db: Session) -> list[PostTreatmentApprovalC
     return [PostTreatmentApprovalCandidate(**row._mapping) for row in results]
 
 @transactional
-def approve_products_for_treatment(db: Session, product_ids: list[int], user_id: int):
-    if not product_ids:
+def approve_products_for_treatment(db: Session, products: list[dict], user_id: int):
+    if not products:
         return
     
     stmt = select(LifecycleStages.id).where(LifecycleStages.stage_code == "QMTreatmentApproval")
@@ -111,12 +112,18 @@ def approve_products_for_treatment(db: Session, product_ids: list[int], user_id:
     if not new_stage_id:
         raise ValueError("Target stage QMTreatmentApproval not found!")
     
-    for product_id in product_ids:
+    for product in products:
+        product_id = product["pid"]
+        reason = product.get("reason", "").strip()
+
+        approval_reason = (
+            f"QM Approved for Treatment{': ' + reason if reason else ''}"
+        )
         update_product_stage(
             db=db,
             product_id=product_id,
             new_stage_id=new_stage_id,
-            reason="QM Approved for Treatment",
+            reason=approval_reason,
             user_id=user_id
         )
         # from_stage_id = db.scalar(
@@ -146,24 +153,45 @@ def approve_products_for_treatment(db: Session, product_ids: list[int], user_id:
     db.commit()
 
 @transactional
-def approve_products_for_sales(db: Session, product_ids: list[int], user_id: int):
-    if not product_ids:
+def approve_products_for_sales(db: Session, products: list[dict], user_id: int):
+    if not products:
         return
     
-    target_stage_id = db.scalar(
+    target_stage_id_passed = db.scalar(
         select(LifecycleStages.id).where(LifecycleStages.stage_code == "QMSalesApproval")
     )
-    if not target_stage_id:
+
+    target_stage_id_bware = db.scalar(
+        select(LifecycleStages.id).where(LifecycleStages.stage_code == "Internal Use")
+    )
+
+    if not target_stage_id_passed:
         raise ValueError("Target stage QMSalesApproval not found!")
+    if not target_stage_id_bware:
+        raise ValueError("Target stage Internal Use not found!")
     
-    for product_id in product_ids:
+    for product in products:
+        product_id = product["pid"]
+        result = product["result"]
+        reason = product.get("reason", "").strip()
+
+        if result == "Passed":
+            final_target_stage = target_stage_id_passed
+            approval_reason = (
+                f"QM Approved for Sales{': ' + reason if reason else ''}"
+            )
+        else:
+            final_target_stage = target_stage_id_bware
+            approval_reason = f"QM Approved for Internal Use{': ' + reason if reason else ''}"
+
         update_product_stage(
             db=db,
             product_id=product_id,
-            new_stage_id=target_stage_id,
-            reason="QM Approved for Sales",
+            new_stage_id=final_target_stage,
+            reason=approval_reason,
             user_id=user_id
         )
+
         # from_stage_id = db.scalar(
         #     text("SELECT current_stage_id FROM product_tracking WHERE id = :product_id"),
         #     {"product_id": product_id}
@@ -187,6 +215,32 @@ def approve_products_for_sales(db: Session, product_ids: list[int], user_id: int
         #     user_id=user_id
         # )
 
+    db.commit()
+
+@transactional
+def decline_products_for_disposal(db: Session, products: list[dict], comment: str, user_id: int):
+    """
+    Moves products to the Disposed stage and updates status to Waste.
+    """
+    target_stage_id = db.scalar(
+        select(LifecycleStages.id).where(LifecycleStages.stage_code == "Disposed")
+    )
+    if not target_stage_id:
+        raise ValueError("Target stage 'Disposed' not found!")
+    
+    for product in products:
+        product_id = product["pid"]
+
+        update_product_stage(
+            db=db,
+            product_id=product_id,
+            new_stage_id=target_stage_id,
+            reason=f"Declined by QM: {comment}",
+            user_id=user_id
+        )
+
+        update_product_status(db, product_id, "Waste")
+    
     db.commit()
 
 @transactional
@@ -299,24 +353,13 @@ def sort_qm_reviewed_products(db: Session, product_id: int, stage_name: str, res
         new_stage_name = "Discarded Product"
     elif stage_name == "Harvest QC Complete; Pending Storage":
         new_stage_name = "QM Approved for Treatment; Pending Treatment"
-        # db.execute(
-        #     text("""
-        #         UPDATE product_quality_control
-        #         SET inspection_result = :resolution
-        #         WHERE product_id = :pid
-        #     """),
-        #     {"resolution": resolution, "pid": product_id}
-        # )
+    
+    elif resolution == "B-Ware" and stage_name == "Returned / Post-Treatment QC; Pending Storage":
+        new_stage_name = "Internal Use/Client" 
+
     elif stage_name == "Returned / Post-Treatment QC; Pending Storage":
         new_stage_name = "QM Approved For Sales; Pending Sales"
-        # db.execute(
-        #     text("""
-        #         UPDATE post_treatment_inspections
-        #         SET qc_result = :resolution
-        #         WHERE product_id = :pid
-        #     """),
-        #     {"resolution": resolution, "pid": product_id}
-        # )
+
     else:
         new_stage_name = stage_name
     
@@ -431,17 +474,29 @@ def resolve_investigation(db: Session, product_id: int, resolution: str, user_id
         }
     ) 
 
+    status_name = STATUS_MAP_QC_TO_BUSINESS.get(resolution, "Pending")
+    update_product_status(
+        db=db,
+        product_id=product_id,
+        status_name=status_name
+    )
+
 @transactional
 def resolve_quarantine_record(
     db: Session,
     product_id: int,
     result: str,
-    resolved_by: int
+    resolved_by: int,
+    comment: str
 ):
     """
     Updates a quarantine record once QM reviews the product.
     """
     status = "Released" if result in ("Passed", "B-Ware") else "Disposed"
+
+    resolution_note = f"[Resolution {datetime.now().strftime('%Y-%m-%d %H:%M')}]: {result}"
+    if comment:
+        resolution_note += f" — {comment}"
 
     db.execute(
         text("""
@@ -450,7 +505,12 @@ def resolve_quarantine_record(
                 quarantine_status = :status,
                 result = :result,
                 resolved_at = :resolved_at,
-                resolved_by = :resolved_by
+                resolved_by = :resolved_by,
+                quarantine_reason = 
+                    CASE 
+                        WHEN quarantine_reason IS NULL OR quarantine_reason = '' THEN :note
+                        ELSE quarantine_reason + CHAR(13) + :note
+                    END
             WHERE product_id = :pid AND quarantine_status = 'Active'
         """),
         {
@@ -458,8 +518,16 @@ def resolve_quarantine_record(
             "result": result,
             "resolved_at": datetime.now(timezone.utc),
             "resolved_by": resolved_by,
-            "pid": product_id
+            "pid": product_id,
+            "note": resolution_note
         }
+    )
+
+    status_name = STATUS_MAP_QC_TO_BUSINESS.get(result, "Pending")
+    update_product_status(
+        db=db,
+        product_id=product_id,
+        status_name=status_name
     )
 
 @transactional

@@ -54,6 +54,7 @@ def get_pending_requests(db: Session) -> list[dict]:
 
 @transactional
 def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int, printed_by: int, lid_id: int, seal_id: str):
+    # === Insert Harvest Record ===
     harvest = ProductHarvest(
         request_id=request_id,
         filament_mounting_id=filament_mount_id,
@@ -64,12 +65,20 @@ def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int,
     db.add(harvest)
     db.flush()
 
+    # === Creates a Unique Tracking ID === 
     tracking_id = generate_tracking_id(db)
 
+    # === Gets the Status ID ===
+    pending_status_id = db.scalar(
+        text("SELECT id FROM product_statuses WHERE status_name = 'Pending'")
+    )
+
+    # === Insert Product Tracking Record ===
     tracking = ProductTracking(
         harvest_id=harvest.id,
         tracking_id=tracking_id,
-        current_stage_id=1
+        current_stage_id=1,
+        current_status_id=pending_status_id
     )
     db.add(tracking)
 

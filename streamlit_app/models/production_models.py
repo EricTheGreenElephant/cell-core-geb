@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from db.base import Base
@@ -42,6 +42,7 @@ class ProductTracking(Base):
     __tablename__ = 'product_tracking'
     id = Column(Integer, primary_key=True)
     harvest_id = Column(Integer, ForeignKey('product_harvest.id'), unique=True, nullable=False)
+    current_status_id = Column(Integer, ForeignKey("product_statuses.id"), nullable=True)
     tracking_id = Column(String(50), unique=True, nullable=False)
     previous_stage_id = Column(Integer, ForeignKey('lifecycle_stages.id'), nullable=True)
     current_stage_id = Column(Integer, ForeignKey('lifecycle_stages.id'), nullable=False)
@@ -57,6 +58,7 @@ class ProductTracking(Base):
     investigation = relationship("ProductInvestigation", back_populates="product", uselist=False)
     status_history = relationship("ProductStatusHistory", back_populates="product")
     quarantine_records = relationship("QuarantinedProducts", back_populates="product")
+    current_status = relationship("ProductStatuses", back_populates="products")
 
 class ProductStatusHistory(Base):
     __tablename__ = "product_status_history"
@@ -73,4 +75,14 @@ class ProductStatusHistory(Base):
     from_stage = relationship("LifecycleStages", foreign_keys=[from_stage_id])
     to_stage = relationship("LifecycleStages", foreign_keys=[to_stage_id])
     user = relationship("User", back_populates="status_changes")
+
+
+class ProductStatuses(Base):
+    __tablename__ = "product_statuses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    status_name = Column(String(50), nullable=False, unique=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    products = relationship("ProductTracking", back_populates="current_status")
     

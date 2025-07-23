@@ -99,6 +99,7 @@ BEGIN
     CREATE TABLE filaments (
         id INT PRIMARY KEY IDENTITY(1,1),
         serial_number NVARCHAR(100) NOT NULL UNIQUE,
+        lot_number NVARCHAR(100) NOT NULL,
         location_id INT NOT NULL,
         weight_grams DECIMAL(10,2) NOT NULL,
         received_at DATETIME2 NOT NULL DEFAULT GETDATE(),
@@ -171,6 +172,15 @@ BEGIN
     );
 END;
 
+IF OBJECT_ID('product_statuses', 'U') IS NULL
+BEGIN
+    CREATE TABLE product_statuses(
+        id INT IDENTITY PRIMARY KEY,
+        status_name NVARCHAR(50) NOT NULL UNIQUE,
+        is_active BIT NOT NULL DEFAULT 1
+    );
+END
+
 IF OBJECT_ID('product_requests', 'U') IS NULL
 BEGIN
     CREATE TABLE product_requests (
@@ -212,12 +222,14 @@ BEGIN
         id INT PRIMARY KEY IDENTITY(1,1),
         harvest_id INT NOT NULL UNIQUE,
         tracking_id NVARCHAR(50) NOT NULL UNIQUE,
+        current_status_id INT NULL,
         previous_stage_id INT NULL,
         current_stage_id INT NOT NULL,
         location_id INT,
         last_updated_at DATETIME2 DEFAULT GETDATE(),
 
         CONSTRAINT fk_tracking_harvest FOREIGN KEY (harvest_id) REFERENCES product_harvest(id),
+        CONSTRAINT fk_tracking_status FOREIGN KEY (current_status_id) REFERENCES product_statuses(id),
         CONSTRAINT fk_tracking_location FOREIGN KEY (location_id) REFERENCES storage_locations(id),
         CONSTRAINT fk_tracking_stage FOREIGN KEY (current_stage_id) REFERENCES lifecycle_stages(id),
         CONSTRAINT fk_tracking_prev_stage FOREIGN KEY (previous_stage_id) REFERENCES lifecycle_stages(id)
@@ -343,7 +355,7 @@ BEGIN
         visual_pass BIT NOT NULL,
         surface_treated BIT NOT NULL,
         sterilized BIT NOT NULL,
-        qc_result NVARCHAR(20) NOT NULL CHECK (qc_result IN ('QM Request', 'Internal Use', 'Quarantine', 'Waste')),
+        qc_result NVARCHAR(20) NOT NULL CHECK (qc_result IN ('Passed', 'B-Ware', 'Quarantine', 'Waste')),
         notes NVARCHAR(255),
 
         CONSTRAINT fk_post_qc_product FOREIGN KEY (product_id) REFERENCES product_tracking(id),

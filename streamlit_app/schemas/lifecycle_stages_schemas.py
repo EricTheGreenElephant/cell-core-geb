@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class LifecycleStagesRead(BaseModel):
@@ -8,5 +8,4 @@ class LifecycleStagesRead(BaseModel):
     stage_order: int
     is_active: bool
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

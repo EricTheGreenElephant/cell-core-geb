@@ -34,8 +34,7 @@ class TreatmentBatchProductCandidate(BaseModel):
     inspection_result: str
     location_name: Optional[str]
 
-    class Config: 
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PostHarvestStorageCandidate(BaseModel):
@@ -50,8 +49,7 @@ class PostHarvestStorageCandidate(BaseModel):
     printed_by: Optional[str]
     print_date: Optional[datetime]
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PostTreatmentStorageCandidate(BaseModel):

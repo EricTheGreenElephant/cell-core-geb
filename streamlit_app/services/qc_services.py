@@ -3,9 +3,10 @@ from sqlalchemy import text
 from schemas.qc_schemas import ProductQCInput
 from schemas.audit_schemas import FieldChangeAudit
 from services.audit_services import update_record_with_audit
-from services.tracking_service import update_product_stage
+from services.tracking_service import update_product_stage, update_product_status
 from services.quality_management_services import create_quarantine_record
 from utils.db_transaction import transactional
+from constants.product_status_constants import STATUS_MAP_QC_TO_BUSINESS
 
 
 @transactional
@@ -35,6 +36,7 @@ def get_printed_products(db: Session) -> list[dict]:
 
 @transactional
 def insert_product_qc(db: Session, data: ProductQCInput):
+    # === Insert QC Result ===
     db.execute(
         text("""
             INSERT INTO product_quality_control (
@@ -54,6 +56,7 @@ def insert_product_qc(db: Session, data: ProductQCInput):
         }
     )
 
+    # === Update Lifecycle Stage ===
     stage_code = "HarvestQCComplete"
     new_stage_id = db.scalar(
         text("SELECT id FROM lifecycle_stages WHERE stage_code = :code"),
@@ -66,7 +69,8 @@ def insert_product_qc(db: Session, data: ProductQCInput):
         reason="Harvest QC Complete",
         user_id=data.inspected_by
     )
-    
+
+    # === Create Quarantine Record if Needed ===
     if data.inspection_result == "Quarantine":
         create_quarantine_record(
             db=db,
@@ -76,6 +80,11 @@ def insert_product_qc(db: Session, data: ProductQCInput):
             reason=data.notes
         )
 
+    # === Update the Current Product Status ===
+    status_name = STATUS_MAP_QC_TO_BUSINESS.get(data.inspection_result, "Pending")
+    update_product_status(db, data.product_id, status_name)
+    
+    # === Update the Remaining Filament Weight ===
     db.execute(
         text("""
             UPDATE fm

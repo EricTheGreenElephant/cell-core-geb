@@ -30,9 +30,9 @@ def render_qc_form():
     st.markdown(f"**Target Weight:** {avg_weight:.2f}g ± {tolerance}g")
     st.markdown(f"**Accepted Range:** {weight_low:.2f}g to {weight_high:.2f}g")
 
-    weight = st.number_input("Measured Weight (g)", min_value=0.0, format="%.2f")
-    pressure = st.number_input("Pressure Drop (mbar)", min_value=0.0, format="%.2f")
-    visual = st.radio("Visual Check", ["Pass", "Fail"])
+    weight = st.number_input("Measured Weight (g)", min_value=0.0, format="%.2f", key=f"hqc_weight_{selected['product_id']}")
+    pressure = st.number_input("Pressure Drop (mbar)", min_value=0.0, format="%.2f", key=f"hqc_pressure_{selected['product_id']}")
+    visual = st.radio("Visual Check", ["Pass", "Fail"], key=f"hqc_visual_{selected['product_id']}")
 
     # Conditional formatting for result
     color_map = {
@@ -62,7 +62,7 @@ def render_qc_form():
     st.markdown(f"<p><strong>Final QC Result:</strong> <span style='color:{color}'>{result}</span></p>", unsafe_allow_html=True)
     
     with st.form("qc_form"):       
-        notes = st.text_area("Notes (optional)", max_chars=255)
+        notes = st.text_area("Notes (optional)", max_chars=255, key=f"hqc_notes_{selected['product_id']}")
 
         submitted = st.form_submit_button("Submit QC")
 
@@ -84,6 +84,9 @@ def render_qc_form():
                     with get_session() as db:
                         insert_product_qc(db=db, data=payload)
                     st.success("QC submitted successfully.")
+                    for key in list(st.session_state.keys()):
+                        if key.startswith("hqc_"):
+                            del st.session_state[key]
                     time.sleep(1.5)
                     st.rerun()
                 except Exception as e:

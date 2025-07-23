@@ -79,3 +79,23 @@ def update_product_stage(
         reason=reason,
         user_id=user_id
     )
+
+def update_product_status(db: Session, product_id: int, status_name: str):
+    """
+    Updates the product's business status (A-Ware, B-Ware, In Quarantine, Waste)
+    """
+    status_id = db.scalar(
+        text("SELECT id FROM product_statuses WHERE status_name = :name"),
+        {"name": status_name}
+    )
+    if not status_id:
+        raise ValueError(f"Status '{status_name}' not found in product_statuses table.")
+
+    db.execute(
+        text("""
+            UPDATE product_tracking
+            SET current_status_id = :status_id, last_updated_at = GETDATE()
+            WHERE id = :pid
+        """),
+        {"status_id": status_id, "pid": product_id}
+    )

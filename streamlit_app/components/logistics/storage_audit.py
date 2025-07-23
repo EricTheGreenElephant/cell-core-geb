@@ -2,25 +2,13 @@ import streamlit as st
 import time
 from sqlalchemy.orm import Session
 from db.orm_session import get_session
-from models.production_models import ProductTracking
+from models.production_models import ProductTracking, ProductStatuses
 from models.lifecycle_stages_models import LifecycleStages
 from models.storage_locations_models import StorageLocation
 from models.product_quality_control_models import ProductQualityControl
 from services.logistics_services import update_tracking_storage
+from constants.storage_constants import STAGE_SHELF_RULES
 
-# Mapping: stage_code → acceptable shelf keywords in storage_location.description
-STAGE_SHELF_RULES = {
-    "HarvestQCComplete": ["CellScrew; Inventory", "CellScrew; B-Ware"],
-    "InInterimStorage": ["CellScrew; Inventory", "CellScrew; B-Ware"],
-    "QMTreatmentApproval": ["CellScrew; Inventory", "CellScrew; B-Ware"],
-    "InTreatment": ["Offsite", "Treatment/Partner/Customer"],
-    "PostTreatmentQC": ["CellScrew; Sales", "Internal Use", "CellScrew; B-Ware"],
-    "PostTreatmentStorage": ["CellScrew; Sales", "Internal Use", "CellScrew; B-Ware"],
-    "QMSalesApproval": ["CellScrew; Sales", "Internal Use"],
-    "Quarantine": ["CellScrew; Quarantine"],
-    "Disposed": ["Disposed Product", "Waste"],
-    "Internal Use": ["Internal Use"],  # If you later create shelves like "CellScrew; Internal Use"
-}
 
 def render_shelf_stage_mismatch_report():
     st.subheader("🔍 Shelf/Stage Mismatch Report")
@@ -30,6 +18,7 @@ def render_shelf_stage_mismatch_report():
         results = (
             db.query(
                 ProductTracking.id,
+                ProductStatuses.status_name,
                 LifecycleStages.stage_code,
                 StorageLocation.id.label("location_id"),
                 StorageLocation.location_name,
@@ -37,6 +26,7 @@ def render_shelf_stage_mismatch_report():
             )
             .join(LifecycleStages, ProductTracking.current_stage_id == LifecycleStages.id)
             .join(StorageLocation, ProductTracking.location_id == StorageLocation.id)
+            .outerjoin(ProductStatuses, ProductTracking.current_status_id == ProductStatuses.id)
             .all()
         )
 
@@ -46,6 +36,7 @@ def render_shelf_stage_mismatch_report():
         if not any(keyword in row.description for keyword in allowed_keywords):
             mismatches.append({
                 "product_id": row.id,
+                "status_name": row.status_name,
                 "stage_code": row.stage_code,
                 "location_id": row.location_id,
                 "location_name": row.location_name,
@@ -62,6 +53,7 @@ def render_shelf_stage_mismatch_report():
 
     for item in mismatches:
         with st.expander(f"{item['product_id']} - Shelf: {item['description']}"):
+            st.write(f"**Current Status:** `{item['status_name']}`")
             st.write(f"**Current Stage:** `{item['stage_code']}`")
             st.write(f"**Current Shelf:** `{item['location_name']} - {item['description']}`")
             st.write(f"**Expected Shelf Area:** `{', '.join(item['allowed_keywords'])}`")

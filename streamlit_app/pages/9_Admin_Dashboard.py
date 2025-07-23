@@ -1,7 +1,7 @@
 import streamlit as st
 from utils.session import require_login, require_access
 from utils.auth import show_user_sidebar
-from components.admin.storage_audit import render_shelf_stage_mismatch_report
+from streamlit_app.components.logistics.storage_audit import render_shelf_stage_mismatch_report
 from components.common.admin_record_lookup import render_admin_record_lookup
 from components.common.toggle import toggle_button
 

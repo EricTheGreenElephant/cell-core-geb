@@ -11,8 +11,8 @@ from db.orm_session import get_session
 
 
 color_map = {
-    "QM Request": "green",
-    "Internal Use": "orange",
+    "Passed": "green",
+    "B-Ware": "orange",
     "Quarantine": "blue",
     "Waste": "red"
 }
@@ -24,9 +24,9 @@ def determine_qc_result(prior_result, surface_treat_required, surface_treated, s
         return "Waste"
     if quarantine:
         return "Quarantine"
-    if prior_result == "Passed" and surface_treated and sterilized and visual_pass:
-        return "QM Request"
-    return "Internal Use"
+    if prior_result == "A-Ware" and surface_treated and sterilized and visual_pass:
+        return "Passed"
+    return "B-Ware"
     
 def render_treatment_qc_form():
     st.subheader("Treatment Quality Control")
@@ -60,7 +60,7 @@ def render_treatment_qc_form():
         failed_sample = False
         sample_visual_results = {}
         for i, p in enumerate(random_sample):
-            if p["inspection_result"] == 'B-Ware':
+            if p["current_status"] == 'B-Ware':
                 inspection_result = 'B-Ware'
             else:
                 inspection_result = 'A-Ware'
@@ -86,7 +86,7 @@ def render_treatment_qc_form():
 
         full_qc = []
         for p in products:
-            if p["inspection_result"] == 'B-Ware':
+            if p["current_status"] == 'B-Ware':
                 inspection_result = 'B-Ware'
             else:
                 inspection_result = 'A-Ware'
@@ -112,7 +112,7 @@ def render_treatment_qc_form():
                     "Visual Pass", [True, False], index=0 if default_vis else 1, horizontal=True, key=f"full_vis_{p['product_id']}"
                 )
             
-            prior_result = p["inspection_result"]
+            prior_result = p["current_status"]
             treat_required = p["surface_treat"]
             visual_val = visual if visual is not None else True
 
