@@ -22,7 +22,7 @@ def show_user_sidebar():
         with st.sidebar:
             st.markdown(f"**{st.session_state.display_name}**")
 
-            if st.button("Logout"):
+            if st.button("Logout", type="primary"):
                 st.session_state.clear()
                 st.switch_page("Main.py")
                 st.rerun()

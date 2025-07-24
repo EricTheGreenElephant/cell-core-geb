@@ -5,6 +5,7 @@ from models.production_models import ProductRequest, ProductHarvest, ProductTrac
 from schemas.production_schemas import ProductRequestCreate
 from schemas.audit_schemas import FieldChangeAudit
 from services.audit_services import update_record_with_audit
+from services.tracking_service import generate_tracking_id
 from utils.db_transaction import transactional
 
 
@@ -52,20 +53,32 @@ def get_pending_requests(db: Session) -> list[dict]:
     return [dict(zip(cols, row)) for row in result.fetchall()]
 
 @transactional
-def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int, printed_by: int, lid_id: int):
+def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int, printed_by: int, lid_id: int, seal_id: str):
+    # === Insert Harvest Record ===
     harvest = ProductHarvest(
         request_id=request_id,
         filament_mounting_id=filament_mount_id,
         printed_by=printed_by,
-        print_status="Printed",
-        lid_id=lid_id
+        lid_id=lid_id,
+        seal_id=seal_id
     )
     db.add(harvest)
     db.flush()
 
+    # === Creates a Unique Tracking ID === 
+    tracking_id = generate_tracking_id(db)
+
+    # === Gets the Status ID ===
+    pending_status_id = db.scalar(
+        text("SELECT id FROM product_statuses WHERE status_name = 'Pending'")
+    )
+
+    # === Insert Product Tracking Record ===
     tracking = ProductTracking(
         harvest_id=harvest.id,
-        current_status="Printed"
+        tracking_id=tracking_id,
+        current_stage_id=1,
+        current_status_id=pending_status_id
     )
     db.add(tracking)
 
@@ -73,6 +86,7 @@ def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int,
         text("UPDATE product_requests SET status = 'Fulfilled' WHERE id = :id"),
         {"id": request_id}
     )
+    
     db.commit()
 
 @transactional
@@ -90,14 +104,14 @@ def get_harvested_products(db: Session) -> list[dict]:
             ph.id AS harvest_id,
             ph.filament_mounting_id AS mount_id,
             ph.lid_id AS lid_id,
+            ph.seal_id,
             pr.id AS request_id,
             pt.name AS product_type,
             f.serial_number AS filament_serial,
             p.name AS printer_name,
             l.serial_number AS lid_serial,
             u.display_name AS printed_by,
-            ph.print_date,
-            ph.print_status
+            ph.print_date
         FROM product_harvest ph
         JOIN product_requests pr ON ph.request_id = pr.id
         JOIN product_types pt ON pr.product_id = pt.id

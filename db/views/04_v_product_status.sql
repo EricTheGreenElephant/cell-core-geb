@@ -3,8 +3,9 @@ IF OBJECT_ID('v_product_status', 'V') IS NOT NULL
 GO
 
 CREATE VIEW v_product_status AS
-SELECT pt.id AS tracking_id,
-    pt.current_status,
+SELECT pt.id AS product_id,
+    lc.stage_name AS current_stage,
+    ps.status_name AS current_status,
     loc.location_name,
     pt.last_updated_at,
 
@@ -37,7 +38,9 @@ JOIN product_requests pr ON ph.request_id = pr.id
 JOIN product_types ptype ON pr.product_id = ptype.id
 JOIN users printed_user ON ph.printed_by = printed_user.id
 
-LEFT JOIN product_quality_control qc ON qc.harvest_id = ph.id
+LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
+LEFT JOIN product_statuses ps ON pt.current_status_id = ps.id
+LEFT JOIN product_quality_control qc ON qc.product_id = pt.id
 LEFT JOIN treatment_batch_products tbi ON tbi.product_id = pt.id
 LEFT JOIN post_treatment_inspections pti ON pti.product_id = pt.id
 LEFT JOIN shipment_items si ON si.product_id = pt.id

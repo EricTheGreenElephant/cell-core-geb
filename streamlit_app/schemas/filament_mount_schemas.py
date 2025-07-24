@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional
 from schemas.filament_schemas import FilamentOut
@@ -18,5 +18,4 @@ class FilamentMountOut(BaseModel):
     filament: FilamentOut
     printer: PrinterOut
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

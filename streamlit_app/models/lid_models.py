@@ -12,8 +12,8 @@ class Lid(Base):
     location_id = Column(Integer, ForeignKey('storage_locations.id'))
     qc_result = Column(String, nullable=False)
     received_by = Column(Integer, ForeignKey('users.id'))
-    received_at = Column(DateTime, default=datetime.now(timezone.utc))
+    received_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
-    location = relationship("StorageLocation")
-    receiver = relationship("User")
+    location = relationship("models.storage_locations_models.StorageLocation")
+    receiver = relationship("models.users_models.User", back_populates="received_lids")
     

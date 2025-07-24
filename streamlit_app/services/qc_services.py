@@ -3,28 +3,30 @@ from sqlalchemy import text
 from schemas.qc_schemas import ProductQCInput
 from schemas.audit_schemas import FieldChangeAudit
 from services.audit_services import update_record_with_audit
+from services.tracking_service import update_product_stage, update_product_status
+from services.quality_management_services import create_quarantine_record
 from utils.db_transaction import transactional
+from constants.product_status_constants import STATUS_MAP_QC_TO_BUSINESS
 
 
 @transactional
 def get_printed_products(db: Session) -> list[dict]:
     sql = """
         SELECT
-            ph.id as harvest_id,
+            pt.id AS product_id,
+            pt.harvest_id,
             pr.id AS request_id,
-            pt.name AS product_type,
-            pt.average_weight,
-            pt.buffer_weight,
+            ptype.name AS product_type,
+            ptype.average_weight,
+            ptype.buffer_weight,
             pr.lot_number,
             ph.print_date
-        FROM product_harvest ph
+        FROM product_tracking pt
+        JOIN product_harvest ph ON pt.harvest_id = ph.id
         JOIN product_requests pr ON ph.request_id = pr.id
-        JOIN product_types pt ON pr.product_id = pt.id
-        WHERE ph.print_status = 'Printed'
-            AND NOT EXISTS (
-                SELECT 1 FROM product_quality_control qc
-                WHERE qc.harvest_id = ph.id
-            )
+        JOIN product_types ptype ON pr.product_id = ptype.id
+        LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
+        WHERE lc.stage_order = 1
         ORDER BY ph.print_date
     """
     result = db.execute(text(sql))
@@ -34,16 +36,17 @@ def get_printed_products(db: Session) -> list[dict]:
 
 @transactional
 def insert_product_qc(db: Session, data: ProductQCInput):
+    # === Insert QC Result ===
     db.execute(
         text("""
             INSERT INTO product_quality_control (
-                harvest_id, inspected_by, weight_grams, pressure_drop,
+                product_id, inspected_by, weight_grams, pressure_drop,
                 visual_pass, inspection_result, notes
             )
-            VALUES (:h_id, :inspector, :weight, :pressure, :visual, :result, :notes)
+            VALUES (:pid, :inspector, :weight, :pressure, :visual, :result, :notes)
         """),
         {
-            "h_id": data.harvest_id,
+            "pid": data.product_id,
             "inspector": data.inspected_by,
             "weight": data.weight_grams,
             "pressure": data.pressure_drop,
@@ -53,40 +56,45 @@ def insert_product_qc(db: Session, data: ProductQCInput):
         }
     )
 
-    new_status = {
-        "Passed": "QC Passed",
-        "B-Ware": "QC B-Ware",
-        "Quarantine": "QC Quarantine",
-        "Waste": "QC Failed"
-    }.get(data.inspection_result, "QC Completed")
-
-    db.execute(
-        text("""
-            UPDATE product_tracking
-            SET current_status = :status, last_updated_at = GETDATE()
-            WHERE harvest_id = :h_id
-        """),
-        {"status": new_status, "h_id": data.harvest_id}
+    # === Update Lifecycle Stage ===
+    stage_code = "HarvestQCComplete"
+    new_stage_id = db.scalar(
+        text("SELECT id FROM lifecycle_stages WHERE stage_code = :code"),
+        {"code": stage_code}
+    )
+    update_product_stage(
+        db=db,
+        product_id=data.product_id,
+        new_stage_id=new_stage_id,
+        reason="Harvest QC Complete",
+        user_id=data.inspected_by
     )
 
-    db.execute(
-        text("""
-            UPDATE product_harvest
-            SET print_status = 'Inspected'
-            WHERE id = :h_id
-        """),
-        {"h_id": data.harvest_id}
-    )
+    # === Create Quarantine Record if Needed ===
+    if data.inspection_result == "Quarantine":
+        create_quarantine_record(
+            db=db,
+            product_id=data.product_id,
+            source="Harvest QC",
+            quarantined_by=data.inspected_by,
+            reason=data.notes
+        )
 
+    # === Update the Current Product Status ===
+    status_name = STATUS_MAP_QC_TO_BUSINESS.get(data.inspection_result, "Pending")
+    update_product_status(db, data.product_id, status_name)
+    
+    # === Update the Remaining Filament Weight ===
     db.execute(
         text("""
             UPDATE fm
             SET fm.remaining_weight = fm.remaining_weight - :weight
-            FROM filament_mounting fm
+            FROM filament_mounting fm 
             JOIN product_harvest ph ON ph.filament_mounting_id = fm.id
-            WHERE ph.id = :h_id
+            JOIN product_tracking pt ON ph.id = pt.harvest_id
+            WHERE pt.id = :pid
         """),
-        {"weight": data.weight_grams, "h_id": data.harvest_id}
+        {"weight": data.weight_grams, "pid": data.product_id}
     )
     db.commit()
 
@@ -143,16 +151,16 @@ def update_qc_fields(
     
     if inspection_result_updated:
         new_status = {
-            "Passed": "QC Passed",
-            "B-Ware": "QC B-Ware",
-            "Quarantine": "QC Quarantine",
-            "Waste": "QC Failed"
-        }.get(new_result, "QC Completed")
+            "Passed": 2,
+            "B-Ware": 2,
+            "Quarantine": 8,
+            "Waste": 9
+        }.get(new_result, 2)
         
         db.execute(
             text("""
                 UPDATE product_tracking
-                SET current_status = :status, last_updated_at = GETDATE()
+                SET current_stage_id = :status, last_updated_at = GETDATE()
                 WHERE harvest_id = :h_id
             """),
             {"status": new_status, "h_id": harvest_id}
@@ -203,3 +211,4 @@ def update_post_treatment_qc_fields(
         )
         update_record_with_audit(db, audit)
     db.commit()
+

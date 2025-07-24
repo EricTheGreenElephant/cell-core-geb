@@ -32,4 +32,28 @@ class HarvestedProductOut(BaseModel):
     lid_serial: str
     printed_by: str
     print_date: datetime
-    print_status: str
+    
+
+class ProductTrackingRead(BaseModel):
+    id: int
+    tracking_id: str
+    current_status_id: Optional[int]
+    current_status_name: Optional[str] = None
+    harvest_id: int
+    previous_stage_id: int
+    current_stage_id: int
+    last_updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductStatusHistoryEntry(BaseModel):
+    id: int
+    product_id: int
+    from_stage_id: Optional[int]
+    to_stage_id: int
+    reason: Optional[str]
+    changed_by: int
+    changed_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

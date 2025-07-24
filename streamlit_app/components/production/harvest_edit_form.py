@@ -44,6 +44,10 @@ def render_harvest_edit_form():
         options=list(lid_map.keys()),
         index=0
     )
+    new_seal = st.text_input(
+        "Change Seal ID",
+        value=selected["seal_id"]
+    )
 
     reason = st.text_area("Reason for Edit", max_chars=255)
     if st.button("Update Harvest Record"):
@@ -56,6 +60,8 @@ def render_harvest_edit_form():
             updates["filament_mounting_id"] = (selected["mount_id"], printer_map[new_mount])
         if selected["lid_id"] != lid_map[new_lid]:
             updates["lid_id"] = (selected["lid_id"], lid_map[new_lid])
+        if selected["seal_id"] != new_seal:
+            updates["seal_id"] = (selected["seal_id"], new_seal)
         
         if not updates:
             st.info("No changes detected.")

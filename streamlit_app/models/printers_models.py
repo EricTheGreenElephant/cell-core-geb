@@ -10,4 +10,4 @@ class Printer(Base):
     name = Column(String)
     status = Column(String)
 
-    mountings = relationship("FilamentMounting", back_populates="printer")
+    mountings = relationship("models.filament_models.FilamentMounting", back_populates="printer")

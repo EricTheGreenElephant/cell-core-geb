@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 from schemas.filament_schemas import FilamentCreate
 from services.filament_service import insert_filament, get_storage_locations
 from schemas.storage_location_schemas import StorageLocationOut
@@ -48,6 +49,8 @@ def render_add_filament_form():
                 with get_session() as db:
                     insert_filament(db, filament_data)
                 st.success(f"Filament spool '{serial_number}' added successfully.")
+                time.sleep(1.5)
+                st.rerun()
             except Exception as e:
                 st.error("Failed to add filament.")
                 st.exception(e)

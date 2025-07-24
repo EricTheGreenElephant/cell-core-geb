@@ -20,6 +20,7 @@ def toggle_button(state_key: str, label_off: str, label_on: str):
 
     st.button(
         label_on if current_state else label_off,
+        type="primary",
         key=f"toggle_btn_{state_key}",
         on_click=_toggle
     )

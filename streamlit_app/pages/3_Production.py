@@ -14,6 +14,9 @@ from components.common.toggle import toggle_button
 if "show_inventory" not in st.session_state:
     st.session_state.show_inventory = False
 
+if "create_requests" not in st.session_state:
+    st.session_state.create_requests = False
+
 if "show_requests" not in st.session_state:
     st.session_state.show_requests = False
 
@@ -42,7 +45,9 @@ with tab1:
 
 with tab2:
     if access_level in ("Write", "Admin"):
-        render_product_request_form()
+        toggle_button("create_requests", "Create Requests", "Hide Requests")
+        if st.session_state.get("create_requests", False):
+            render_product_request_form()
     else:
         st.warning("🔒 You do not have permission to view Requests.")
 

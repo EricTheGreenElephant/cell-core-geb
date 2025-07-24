@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text
-from sqlalchemy.sql import func
+from datetime import datetime, timezone
 from db.base import Base
 
 
@@ -14,4 +14,4 @@ class AuditLog(Base):
     new_value = Column(Text, nullable=True)
     reason = Column(String(255), nullable=False)
     changed_by = Column(Integer, nullable=False)
-    changed_at = Column(DateTime, server_default=func.now(), nullable=False)
+    changed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
