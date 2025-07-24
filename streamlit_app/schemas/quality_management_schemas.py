@@ -72,3 +72,16 @@ class InvestigatedProductRow(BaseModel):
     comment: str
     created_by: str
     created_at: datetime
+
+
+class ProductQuarantineSearchResult(BaseModel):
+    product_id: int
+    tracking_id: str
+    product_type: str
+    lot_number: Optional[str]
+    current_stage_name: str
+    current_status: Optional[str]
+    location_name: Optional[str]
+    last_updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

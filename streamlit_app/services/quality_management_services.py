@@ -1,19 +1,21 @@
 from sqlalchemy import select, text, bindparam, or_, and_
 from sqlalchemy.orm import Session, aliased
 from typing import Optional
-from models.production_models import ProductTracking, ProductHarvest, ProductType, ProductRequest
+from models.production_models import ProductTracking, ProductHarvest, ProductType, ProductRequest, ProductStatuses
 from models.lifecycle_stages_models import LifecycleStages
 from models.users_models import User
 from models.investigation_models import ProductInvestigation
 from models.product_quality_control_models import ProductQualityControl, PostTreatmentInspection
 from models.quarantined_products_models import QuarantinedProducts
 from models.storage_locations_models import StorageLocation
+from models.logistics_models import TreatmentBatchProduct
 from schemas.quality_management_schemas import (
     ProductQMReview, 
     PostTreatmentApprovalCandidate, 
     QuarantinedProductRow, 
     InvestigationEntry,
-    InvestigatedProductRow
+    InvestigatedProductRow,
+    ProductQuarantineSearchResult
 )
 from services.tracking_service import log_product_status_change, update_product_stage, update_product_status
 from utils.db_transaction import transactional
@@ -558,3 +560,97 @@ def create_quarantine_record(
             "q_date": datetime.now(timezone.utc)
         }
     )
+
+@transactional
+def search_products_for_quarantine(db: Session, mode:str, value: str) -> list[ProductQuarantineSearchResult]:
+    """
+    Searches products for ad-hoc quarantine
+    """
+
+    stmt = (
+        select(
+            ProductTracking.id.label("product_id"),
+            ProductTracking.tracking_id,
+            ProductType.name.label("product_type"),
+            ProductRequest.lot_number,
+            ProductRequest.id.label("request_id"),
+            ProductHarvest.id.label("harvest_id"),
+            LifecycleStages.stage_name.label("current_stage_name"),
+            ProductStatuses.status_name.label("current_status"),
+            StorageLocation.location_name,
+            ProductTracking.last_updated_at,
+        )
+        .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
+        .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
+        .join(ProductType, ProductRequest.product_id == ProductType.id)
+        .join(LifecycleStages, ProductTracking.current_stage_id == LifecycleStages.id)
+        .outerjoin(ProductStatuses, ProductTracking.current_status_id == ProductStatuses.id)
+        .outerjoin(StorageLocation, ProductTracking.location_id == StorageLocation.id)
+        .outerjoin(
+            QuarantinedProducts,
+            (QuarantinedProducts.product_id == ProductTracking.id) &
+            (QuarantinedProducts.quarantine_status == "Active")
+        )
+        .where(
+            (ProductStatuses.status_name != "Waste") | (ProductStatuses.status_name.is_(None))
+        )
+        .where(QuarantinedProducts.id.is_(None))
+    )
+    
+    # Add filters based on mode
+    if mode == "Product ID":
+        stmt = stmt.where(ProductTracking.id == int(value))
+
+    elif mode == "Lot Number":
+        stmt = stmt.where(ProductRequest.lot_number == value)
+    
+    elif mode == "Treatment Batch":
+        stmt = stmt.join(
+            TreatmentBatchProduct,
+            TreatmentBatchProduct.product_id == ProductTracking.id
+        ).where(TreatmentBatchProduct.batch_id == int(value))
+
+    elif mode == "Filament Mount ID":
+        stmt = stmt.where(ProductHarvest.filament_mounting_id == int(value))
+
+    results = db.execute(stmt).all()
+    return [ProductQuarantineSearchResult(**row._mapping) for row in results]
+
+@transactional
+def mark_products_ad_hoc_quarantine(db: Session, product_ids: list[int], user_id: int, comment: str):
+    """
+    Marks products for ad-hoc quarantine, updates stage & status, and logs the reason.
+    """
+    if not product_ids:
+        return
+    
+    quarantine_stage_id = db.scalar(
+        select(LifecycleStages.id).where(LifecycleStages.stage_code == "Quarantine")
+    )
+    if not quarantine_stage_id:
+        raise ValueError("Stage 'Quarantine' not found.")
+    
+    for product_id in product_ids:
+        db.add(
+            QuarantinedProducts(
+                product_id=product_id,
+                from_stage_id=db.scalar(
+                    select(ProductTracking.current_stage_id).where(ProductTracking.id == product_id)
+                ),
+                source="Ad-Hoc",
+                quarantined_by=user_id,
+                quarantine_reason=comment,
+                quarantine_status="Active"
+            )
+        )
+
+        update_product_stage(
+            db=db,
+            product_id=product_id,
+            new_stage_id=quarantine_stage_id,
+            reason=f"Ad-Hoc Quarantine: {comment}",
+            user_id=user_id
+        )
+        update_product_status(db, product_id, "In Quarantine")
+
+    db.commit()
