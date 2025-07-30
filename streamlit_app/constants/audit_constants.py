@@ -3,6 +3,7 @@ ALLOWED_AUDIT_TABLES = {
     "filament_mounting",
     "filament_acclimatization",
     "lids",
+    "seals",
     "product_requests",
     "product_harvest",
     "product_quality_control",

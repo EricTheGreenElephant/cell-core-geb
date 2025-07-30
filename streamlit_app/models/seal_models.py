@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from db.base import Base
 
 
-class Lid(Base):
-    __tablename__ = 'lids'
+class Seal(Base):
+    __tablename__ = 'seals'
 
     id = Column(Integer, primary_key=True)
     serial_number = Column(String, nullable=False)
@@ -16,5 +16,5 @@ class Lid(Base):
     received_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     location = relationship("models.storage_locations_models.StorageLocation")
-    receiver = relationship("models.users_models.User", back_populates="received_lids")
+    seal_receiver = relationship("models.users_models.User", back_populates="received_seals")
     

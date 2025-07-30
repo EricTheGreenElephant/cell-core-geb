@@ -5,7 +5,7 @@ from models.production_models import ProductRequest, ProductHarvest, ProductTrac
 from schemas.production_schemas import ProductRequestCreate
 from schemas.audit_schemas import FieldChangeAudit
 from services.audit_services import update_record_with_audit
-from services.tracking_service import generate_tracking_id
+from services.tracking_service import generate_tracking_id, record_materials_post_harvest
 from utils.db_transaction import transactional
 
 
@@ -81,7 +81,12 @@ def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int,
         current_status_id=pending_status_id
     )
     db.add(tracking)
+    db.flush()
 
+    # === Records the lid + seal usage ===
+    record_materials_post_harvest(db=db, product_id=tracking.id, harvest_id=harvest.id, user_id=printed_by)
+
+    # === Updates the product request status ===
     db.execute(
         text("UPDATE product_requests SET status = 'Fulfilled' WHERE id = :id"),
         {"id": request_id}

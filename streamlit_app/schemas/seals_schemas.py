@@ -3,7 +3,7 @@ from typing import Optional
 from datetime import datetime
 
 
-class LidCreate(BaseModel):
+class SealCreate(BaseModel):
     serial_number: str
     quantity: int
     location_id: int
@@ -11,7 +11,7 @@ class LidCreate(BaseModel):
     received_by: int
 
 
-class LidOut(BaseModel):
+class SealOut(BaseModel):
     id: int
     serial_number: str
     quantity: int

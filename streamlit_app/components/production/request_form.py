@@ -1,5 +1,6 @@
 import streamlit as st
 from services.production_services import get_product_types, insert_product_request
+from services.tracking_service import validate_materials_available
 from schemas.production_schemas import ProductRequestCreate
 from db.orm_session import get_session
 
@@ -23,24 +24,32 @@ def render_product_request_form():
         submitted = st.form_submit_button("Submit Request")
 
         if submitted: 
-            try:
-                user_id = st.session_state.get("user_id")
-                if not user_id:
-                    st.error("You must be logged in to make a request.")
-                    return
-                
-                product_id = product_options[product_choice]
-                payload = ProductRequestCreate(
-                    requested_by=user_id,
-                    product_id=product_id,
-                    quantity=quantity,
-                    notes=notes
-                )
+            user_id = st.session_state.get("user_id")
+            if not user_id:
+                st.error("You must be logged in to make a request.")
+                return
+            
+            product_id = product_options[product_choice]
 
-                with get_session() as db:
-                    insert_product_request(db, payload)
+            with get_session() as db:
+                errors, info = validate_materials_available(db, product_id, quantity)
 
-                st.success("Product request submitted successfully!")
-            except Exception as e:
-                st.error("Failed to submit request.")
-                st.exception(e)
+                if errors:
+                    for e in errors:
+                        st.error(e)
+                    if info:
+                        st.info(info)
+                    st.stop()
+                else:
+                    try:
+                        payload = ProductRequestCreate(
+                            requested_by=user_id,
+                            product_id=product_id,
+                            quantity=quantity,
+                            notes=notes
+                        )
+                        insert_product_request(db, payload)
+                        st.success("Product request submitted successfully!")
+                    except Exception as e:
+                        st.error("Failed to submit request.")
+                        st.exception(e)

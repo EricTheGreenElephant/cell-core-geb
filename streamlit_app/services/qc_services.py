@@ -3,7 +3,7 @@ from sqlalchemy import text
 from schemas.qc_schemas import ProductQCInput
 from schemas.audit_schemas import FieldChangeAudit
 from services.audit_services import update_record_with_audit
-from services.tracking_service import update_product_stage, update_product_status
+from services.tracking_service import update_product_stage, update_product_status, record_filament_usage_post_qc
 from services.quality_management_services import create_quarantine_record
 from utils.db_transaction import transactional
 from constants.product_status_constants import STATUS_MAP_QC_TO_BUSINESS
@@ -54,6 +54,27 @@ def insert_product_qc(db: Session, data: ProductQCInput):
             "result": data.inspection_result,
             "notes": data.notes
         }
+    )
+
+    # === Get harvest ID from tracking table ===
+    result = db.execute(text("""
+        SELECT harvest_id
+        FROM product_tracking
+        WHERE id = :pid
+    """), {"pid": data.product_id}).fetchone()
+
+    if not result:
+        raise ValueError(f"No harvest found for product ID {data.product_id}")
+    
+    harvest_id = result.harvest_id
+
+    # === Record the filament usage ===
+    record_filament_usage_post_qc(
+        db=db,
+        harvest_id=harvest_id,
+        product_id=data.product_id,
+        weight_grams=data.weight_grams,
+        user_id=data.inspected_by
     )
 
     # === Update Lifecycle Stage ===
