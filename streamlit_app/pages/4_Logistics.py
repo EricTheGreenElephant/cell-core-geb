@@ -8,6 +8,9 @@ from components.logistics.treatment_qc_form import render_treatment_qc_form
 from components.logistics.storage_edit_form import render_storage_edit_form
 from components.logistics.treatment_qc_edit_form import render_treatment_qc_edit_form
 from components.logistics.treatment_batch_edit_form import render_treatment_batch_edit_form
+from components.logistics.sales_inventory_form import render_sales_tab
+from components.logistics.sales_batch_form import render_sales_batch_form
+from components.logistics.expiration_review_form import render_expiration_review
 from components.common.toggle import toggle_button
 
 
@@ -20,6 +23,9 @@ if "assign_storage" not in st.session_state:
 if "show_treatment_qc" not in st.session_state:
     st.session_state.show_treatment_qc = False
 
+if "check_expired" not in st.session_state:
+    st.session_state.check_expired = False
+
 st.title("Logistics & Treatment Dispatch")
 
 # --- User logout ---
@@ -30,7 +36,7 @@ require_login()
 require_access("Logistics", "Write")
 
 # --- Page structure ---
-tab1, tab2, tab3, tab4 = st.tabs(["Storage", "Treatment Batch", "Treatment QC", "Edit Storage and Treatment"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Storage", "Treatment Batch", "Treatment QC", "Sales Batch", "Expired Products", "Edit Storage and Treatment"])
 
 with tab1:
     toggle_storage = st.selectbox(
@@ -56,6 +62,23 @@ with tab3:
         render_treatment_qc_form()
 
 with tab4:
+    toggle = st.selectbox(
+        label="Choose Option",
+        options=["Select an option...", "View Sales Inventory", "Create Sales Batch"],
+        index=0,
+    )
+    if toggle == "View Sales Inventory":
+        render_sales_tab()
+    
+    elif toggle == "Create Sales Batch":
+        render_sales_batch_form()
+
+with tab5:
+    toggle_button("check_expired", "Check Expired Products", "Hide Expired Products")
+    if st.session_state.get("check_expired", False):
+        render_expiration_review()
+
+with tab6:
     toggle = st.selectbox(
         label="Edit Data", 
         options=["Select an option...", "Edit Storage", "Edit Treatment Batch", "Edit QC Data"],

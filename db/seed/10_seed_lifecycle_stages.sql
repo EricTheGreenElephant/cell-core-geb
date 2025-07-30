@@ -12,5 +12,6 @@ BEGIN
         ('Quarantine', 'Moved to Quarantine', 99),
         ('Disposed', 'Discarded Product', 100),
         ('Shipped', 'Shipped to Customer', 110),
-        ('Internal Use', 'Internal Use/Client', 120);
+        ('Internal Use', 'Internal Use/Client', 120),
+        ('Expired', 'Overaged - Do Not Use', 999);
 END;
