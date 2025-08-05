@@ -1,4 +1,4 @@
-from sqlalchemy import text
+from sqlalchemy import text, bindparam
 from sqlalchemy.orm import Session
 
 
@@ -63,24 +63,30 @@ def expire_eligible_products(db: Session, user_id: int) -> int:
         return 0
     
     # Update products' current_stage_id
-    db.execute(text(
+    sql = text(
         """
-            UDPATE product_tracking
-            SET current_stage_id = :stage
+            UPDATE product_tracking
+            SET 
+                previous_stage_id = current_stage_id,
+                current_stage_id = :stage,
+                last_updated_at = GETDATE()
             WHERE id IN :ids
         """
-    ), {"stagee": expired_stage_id, "ids": tuple(product_ids)})
+    ).bindparams(bindparam("ids", expanding=True))
+    db.execute(sql, {"stage": expired_stage_id, "ids": product_ids})
 
     # Insert into product_stages_history
-    db.execute(text(
+    
+    sql = text(
         """
             INSERT INTO product_status_history (product_id, from_stage_id, to_stage_id, reason, changed_by)
-            SELECT pt.id, pt.current_stage_id, :to_stage, 'Auto-expired after 1 year', :user
+            SELECT pt.id, pt.previous_stage_id, :to_stage, 'Auto-expired after 1 year', :user
             FROM product_tracking pt
             JOIN lifecycle_stages ls ON pt.current_stage_id = ls.id
             WHERE pt.id IN :ids
         """
-    ), {"to_stage": expired_stage_id, "user": user_id, "ids": tuple(product_ids)})
+    ).bindparams(bindparam("ids", expanding=True))
+    db.execute(sql, {"to_stage": expired_stage_id, "user": user_id, "ids": product_ids})
 
     db.commit()
     return len(product_ids)

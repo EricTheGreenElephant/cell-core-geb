@@ -425,6 +425,19 @@ BEGIN
     );
 END;
 
+IF OBJECT_ID('order_items', 'U') IS NULL
+BEGIN
+    CREATE TABLE order_items (
+        id INT PRIMARY KEY IDENTITY(1,1),
+        order_id INT NOT NULL,
+        product_type_id INT NOT NULL,
+        quantity INT NOT NULL,
+
+        CONSTRAINT fk_order_items_order FOREIGN KEY (order_id) REFERENCES orders(id),
+        CONSTRAINT fk_order_items_type FOREIGN KEY (product_type_id) REFERENCES product_types(id)
+    );
+END;
+
 IF OBJECT_ID('shipments', 'U') IS NULL
 BEGIN
     CREATE TABLE shipments (

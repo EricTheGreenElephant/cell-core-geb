@@ -1,5 +1,9 @@
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from schemas.sales_schemas import SalesOrderInput
+from models.sales_models import Order, OrderItem
+from models.production_models import ProductType
+from utils.db_transaction import transactional
 
 
 def get_sales_ready_inventory(db: Session):
@@ -23,6 +27,7 @@ def get_sales_ready_inventory(db: Session):
             WHERE 
                 ls.stage_code = 'QMSalesApproval'
                 AND ps.status_name IN ('A-Ware')
+                AND ph.print_date >= DATEADD(year, -1, GETDATE())
             ORDER BY pt.last_updated_at DESC
         """
     )
@@ -48,9 +53,45 @@ def get_sales_ready_quantities_by_type(db: Session):
             WHERE
                 ls.stage_code = 'QMSalesApproval'
                 AND ps.status_name IN ('A-Ware')
+                AND ph.print_date >= DATEADD(year, -1, GETDATE())
             GROUP BY pt.name
             ORDER BY pt.name
         """
     )
     result = db.execute(query).fetchall()
     return [dict(row._mapping) for row in result]
+
+def get_orderable_product_types(db: Session) -> list[ProductType]:
+    return db.query(ProductType).order_by(ProductType.name).all()
+
+@transactional
+def create_sales_order(db: Session, data: SalesOrderInput):
+    # === Create Order Object === 
+    order = Order(
+        customer_id=data.customer_id,
+        order_creator_id=data.created_by,
+        status="Processing"
+    )
+    db.add(order)
+    db.flush()
+
+    # === Get product_type ===
+    types = db.query(ProductType).all()
+    type_lookup = {t.name: t.id for t in types}
+
+    # === Insert order_items
+    for type_name, qty in data.product_quantities.items():
+        if qty <= 0:
+            continue
+        type_id = type_lookup.get(type_name)
+        if not type_id:
+            raise ValueError(f"Invalid product type: {type_name}")
+        
+        item = OrderItem(
+            order_id=order.id,
+            product_type_id=type_id,
+            quantity=qty
+        )
+        db.add(item)
+
+    db.commit()

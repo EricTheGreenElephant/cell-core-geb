@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 from services.expiration_services import get_expiring_products, expire_eligible_products
 from db.orm_session import get_session
 
@@ -29,4 +30,5 @@ def render_expiration_review():
                     st.stop()
                 updated = expire_eligible_products(db, user_id)
                 st.success(f"{updated} products marked as expired.")
+                time.sleep(1.5)
                 st.rerun()

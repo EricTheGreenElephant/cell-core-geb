@@ -11,7 +11,8 @@ BEGIN
         ('QMSalesApproval', 'QM Approved For Sales; Pending Sales', 8),
         ('Quarantine', 'Moved to Quarantine', 99),
         ('Disposed', 'Discarded Product', 100),
-        ('Shipped', 'Shipped to Customer', 110),
-        ('Internal Use', 'Internal Use/Client', 120),
+        ('PendingShipment', 'Marked for Shipment', 110)
+        ('Shipped', 'Shipped to Customer', 120),
+        ('Internal Use', 'Internal Use/Client', 130),
         ('Expired', 'Overaged - Do Not Use', 999);
 END;
