@@ -5,14 +5,22 @@ from services.filament_mount_services import update_mount_fields, get_unmounted_
 
 
 def render_restore_mount_form():
-    st.markdown("### Restore Unmounted Filament")
+    """
+    Creates form that allows user to re-mount unmounted filament.
+
+    - Fetches filaments with unmounted status
+    - On submission,
+        - Edits filament_mounting table
+        - Inserts record into audit_log table
+    """
+    st.subheader("Restore Unmounted Filament")
 
     with get_session() as db:
         mounts = get_unmounted_mounts(db)
 
     if not mounts:
         st.info("No unmounted filaments available for restoration.")
-        return
+        st.stop()
     
     options = {
         f"{m["serial_number"]} on {m["printer_name"]} (Unmounted at {m["unmounted_at"]} - Remaining Weight: {m["remaining_weight"]})": m for m in mounts
@@ -21,12 +29,12 @@ def render_restore_mount_form():
     selection = st.selectbox("Select Unmounted Filament to Restore", list(options.keys()))
     selected = options[selection]
 
-    reason = st.text_area("Reason for restoration", max_chars=255)
+    reason = st.text_area("Reason for restoration", max_chars=255).strip()
 
     if st.button("Restore Filament"):
-        if not reason.strip():
+        if not reason:
             st.warning("A reason is required.")
-            return
+            st.stop()
         
         updates = {}
         if selected["unmounted_at"] is not None:
@@ -38,6 +46,7 @@ def render_restore_mount_form():
         
         if not updates:
             st.info("No fields need restoring.")
+            st.stop()
 
         try:
             with get_session() as db:

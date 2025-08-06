@@ -7,7 +7,15 @@ from datetime import datetime
 
 
 def render_edit_filament_tab():
-    st.markdown("### Edit Filament Info")
+    """
+    Creates form that allows user to edit any mistakes/incorrect information
+
+    - Fetches available filaments, storage locations, and users
+    - Creates form based on selected filament, prefilling values
+    - On submission, updates filament table with corrected information
+    - Inserts edit as new row into audit_log table
+    """
+    st.subheader("Edit Filament Info")
 
     with get_session() as db:
         filaments = get_filaments(db)
@@ -16,7 +24,7 @@ def render_edit_filament_tab():
 
     if not filaments:
         st.info("No filaments found.")
-        return
+        st.stop()
     
     filament_options = {f"{f.serial_number} (ID {f.id})": f for f in filaments}
     selection = st.selectbox("Select Filament to Edit", list(filament_options.keys()))
@@ -31,22 +39,25 @@ def render_edit_filament_tab():
     current_user_label = next((label for label, id in user_labels.items() if id == filament.received_by), None)
 
     with st.form("edit_filament_form"):
-        new_serial = st.text_input("Serial Number", value=filament.serial_number)
+        new_lot = st.text_input("Lot Number", value=filament.lot_number).strip()
+        new_serial = st.text_input("Serial Number", value=filament.serial_number).strip()
         new_weight = st.number_input("Weight (g)", min_value=0.0, value=filament.weight_grams, format="%.2f")
         new_location_label = st.selectbox("Storage Location", location_names, index=location_names.index(current_loc_label))
         new_qc_result = st.selectbox("QC Result", ["PASS", "FAIL"], index=0 if filament.qc_result == "PASS" else 1)
         new_user_label = st.selectbox("Received By", user_names, index=user_names.index(current_user_label))
         new_received_at = st.date_input("Received At", value=filament.received_at.date())
-        reason  = st.text_area("Reason for Change", max_chars=255)
+        reason  = st.text_area("Reason for Change", max_chars=255).strip()
 
         submitted = st.form_submit_button("Submit Changes")
 
         if submitted:
-            if not reason.strip():
+            if not reason:
                 st.warning("A reason for the change is required.")
-                return
+                st.stop()
             
             updates = {}
+            if filament.lot_number != new_lot:
+                updates["lot_number"] = (filament.lot_number, new_lot)
             if filament.serial_number != new_serial:
                 updates["serial_number"] = (filament.serial_number, new_serial)
             if filament.weight_grams != new_weight:
@@ -65,7 +76,7 @@ def render_edit_filament_tab():
             
             if not updates:
                 st.info("No changes detected.")
-                return
+                st.stop()
             
             try:
                 with get_session() as db:

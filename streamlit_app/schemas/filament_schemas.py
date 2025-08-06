@@ -4,6 +4,7 @@ from datetime import datetime
 
 
 class FilamentCreate(BaseModel):
+    lot_number: str
     serial_number: str
     weight_grams: float
     location_id: int
@@ -13,6 +14,7 @@ class FilamentCreate(BaseModel):
 
 class FilamentOut(BaseModel):
     id: int
+    lot_number: str
     serial_number: str
     weight_grams: float
     qc_result: Optional[str]

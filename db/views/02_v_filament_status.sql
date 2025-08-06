@@ -1,11 +1,8 @@
 CREATE OR ALTER VIEW v_filament_status AS
 SELECT
     f.id AS filament_id,
+    f.lot_number,
     f.serial_number,
-    f.weight_grams AS initial_weight,
-    f.qc_result,
-    f.received_at,
-    u.display_name AS received_by_name,
     sl.location_name,
 
     -- Derived Current Status
@@ -16,10 +13,16 @@ SELECT
         ELSE 'In Storage'
     END AS current_status,
 
+    f.weight_grams AS initial_weight,
+    fm.remaining_weight,
+    f.qc_result,
+    f.received_at,
+    u.display_name AS received_by_name,
+    
     -- Mounting Info
+    fm.id AS filament_mounting_id,
     fm.printer_id,
     p.name AS printer_name,
-    fm.remaining_weight,
     fm.mounted_at,
     fm.unmounted_at,
 

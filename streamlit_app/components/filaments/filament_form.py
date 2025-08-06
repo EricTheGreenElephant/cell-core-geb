@@ -6,7 +6,14 @@ from schemas.storage_location_schemas import StorageLocationOut
 from db.orm_session import get_session
 
 def render_add_filament_form():
-    st.markdown("Add New Filament")
+    """
+    Displays a Streamlit form that allows users to input a new filament into database.
+
+    - Fetches storage locations from database
+    - Allows user to input filament information
+    - On submission, adds the new filament to the database
+    """
+    st.subheader("Add New Filament")
 
     # Get user info
     user_id = st.session_state.get("user_id")
@@ -16,20 +23,23 @@ def render_add_filament_form():
     with get_session() as db:
         locations: list[StorageLocationOut] = get_storage_locations(db)
 
+    # Format to display storage location options
     location_options = {
         f"{loc.location_name} --- (Type: {loc.location_type}) (Desc.: {loc.description})": loc.id 
         for loc in locations
         }
 
+    # Check for user login
     if not user_id:
         st.error("User must be logged in to add filaments.")
-        return
+        st.stop()
     
     st.info(f"Received by: **{user_name}**")
 
-
+    # Creates the form display with inputs
     with st.form("add_filament_form"):
-        serial_number = st.text_input("Serial Number", max_chars=100)
+        lot_number = st.text_input("Lot Number", max_chars=100).strip()
+        serial_number = st.text_input("Serial Number", max_chars=100).strip()
         weight_grams = st.number_input("Initial Weight (g)", min_value=0.0, format="%.2f")
         location_label = st.selectbox("Storage Location", list(location_options.keys()))
         qc_result = st.selectbox("QC Result", ["PASS", "FAIL"])
@@ -37,15 +47,32 @@ def render_add_filament_form():
         submitted = st.form_submit_button("Add Filament")
 
         if submitted:
+            if not lot_number:
+                st.warning("Please enter a valid lot number.")
+                st.stop()
+
+            if not serial_number:
+                st.warning("Please enter a valid serial number.")
+                st.stop()
+            
+            if weight_grams <= 0:
+                st.warning("Please enter a valid weight.")
+                st.stop()
+
             try:
-                location_id = location_options[location_label]                
+                location_id = location_options[location_label]   
+
+                # Packages filament data             
                 filament_data = FilamentCreate(
-                    serial_number=serial_number.strip(),
+                    lot_number=lot_number,
+                    serial_number=serial_number,
                     weight_grams=weight_grams,
                     location_id=location_id,
                     qc_result=qc_result,
                     received_by=user_id
                 )
+
+                # Create database session and calls function to handle query
                 with get_session() as db:
                     insert_filament(db, filament_data)
                 st.success(f"Filament spool '{serial_number}' added successfully.")

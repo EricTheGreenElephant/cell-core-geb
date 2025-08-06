@@ -5,7 +5,15 @@ from db.orm_session import get_session
 
 
 def render_acclimatizing_form():
-    st.markdown("Move Filament to Acclimatization")
+    """
+    Creates form that allows the user to select available filaments
+    that can be acclimatized. 
+
+    - Fetches all filaments currently not in use and available for acclimatization.
+    - Creates user selection of filaments.
+    - Inserts filament into filament_acclimatization table.
+    """
+    st.subheader("Move Filament to Acclimatization")
 
     try:
         with get_session() as db:

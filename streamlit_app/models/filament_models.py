@@ -7,6 +7,7 @@ from db.base import Base
 class Filament(Base):
     __tablename__ = 'filaments'
     id = Column(Integer, primary_key=True)
+    lot_number = Column(String, nullable=False)
     serial_number = Column(String, nullable=False)
     weight_grams = Column(Float, nullable=False)
     location_id = Column(Integer, ForeignKey('storage_locations.id'))
