@@ -32,7 +32,7 @@ def render_add_filament_form():
     # Check for user login
     if not user_id:
         st.error("User must be logged in to add filaments.")
-        st.stop()
+        return
     
     st.info(f"Received by: **{user_name}**")
 
@@ -49,15 +49,15 @@ def render_add_filament_form():
         if submitted:
             if not lot_number:
                 st.warning("Please enter a valid lot number.")
-                st.stop()
+                return
 
             if not serial_number:
                 st.warning("Please enter a valid serial number.")
-                st.stop()
+                return
             
             if weight_grams <= 0:
                 st.warning("Please enter a valid weight.")
-                st.stop()
+                return
 
             try:
                 location_id = location_options[location_label]   

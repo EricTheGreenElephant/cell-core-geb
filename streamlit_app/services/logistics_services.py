@@ -381,14 +381,16 @@ def remove_product_from_batch(
         {"id": batch_product_id}    
     )
 
-    db.execute(
-        text("""
-            UPDATE product_tracking
-            SET current_status = 'In Interim Storage', last_updated_at = GETDATE()
-            WHERE id = :pid
-        """),
-        {"pid": product_id}
+    stmt_stage = select(LifecycleStages.id).where(LifecycleStages.stage_code == "QMTreatmentApproval")
+    new_stage_id = db.scalar(stmt_stage)
+    update_product_stage(
+        db=db,
+        product_id=product_id,
+        new_stage_id=new_stage_id,
+        reason="Removed from treatment batch",
+        user_id=user_id
     )
+
     db.commit()
 
 @transactional

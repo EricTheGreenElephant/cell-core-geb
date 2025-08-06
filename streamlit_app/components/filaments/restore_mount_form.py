@@ -20,7 +20,7 @@ def render_restore_mount_form():
 
     if not mounts:
         st.info("No unmounted filaments available for restoration.")
-        st.stop()
+        return
     
     options = {
         f"{m["serial_number"]} on {m["printer_name"]} (Unmounted at {m["unmounted_at"]} - Remaining Weight: {m["remaining_weight"]})": m for m in mounts
@@ -34,7 +34,7 @@ def render_restore_mount_form():
     if st.button("Restore Filament"):
         if not reason:
             st.warning("A reason is required.")
-            st.stop()
+            return
         
         updates = {}
         if selected["unmounted_at"] is not None:
@@ -46,7 +46,7 @@ def render_restore_mount_form():
         
         if not updates:
             st.info("No fields need restoring.")
-            st.stop()
+            return
 
         try:
             with get_session() as db:

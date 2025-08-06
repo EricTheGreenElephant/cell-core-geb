@@ -5,6 +5,19 @@ from db.orm_session import get_session
 
 
 def render_treatment_qc_edit_form():
+    """
+    Creates form that allows user to edit QC information.
+
+    - Fetches post-treatment QC products
+    - Creates form to allow user to edit selected product
+    - On submission
+        - Updates audit_log table
+        - Updates post_treatment_inspections table
+        - If quarantine:
+            - Updates product_tracking
+            - Updates product_status_history
+            - Inserts record into quarantined_products
+    """
     st.subheader("Edit Post-Treatment QC Records")
 
     with get_session() as db:
@@ -27,14 +40,25 @@ def render_treatment_qc_edit_form():
     visual_pass = st.radio("Visual Pass", [True, False], index=0 if selected["visual_pass"] else 1)
     qc_result = st.selectbox(
         "QC Result",
-        options=["QM Request", "Internal Use", "Waste"],
-        index=["QM Request", "Internal Use", "Waste"].index(selected["qc_result"])
+        options=["Passed", "B-Ware", "Quarantine", "Waste"],
+        index=["Passed", "B-Ware", "Quarantine", "Waste"].index(selected["qc_result"])
     )
 
-    reason = st.text_area("Reason for Edit", max_chars=255)
+    if qc_result == "Quarantine":
+        q_reason = st.text_area("Reason for Quarantine", max_chars=255).strip()
+    else: 
+        q_reason = ""
+
+    reason = st.text_area("Reason for Edit", max_chars=255).strip()
 
     if st.button("Submit QC Update"):
-        if not reason.strip():
+
+        if qc_result == "Quarantine":
+            if not q_reason:
+                st.warning("A reason for Quarantine status required.")
+                return
+            
+        if not reason:
             st.warning("A reason for the change is required.")
             return
         
@@ -57,8 +81,10 @@ def render_treatment_qc_edit_form():
                 update_post_treatment_qc_fields(
                     db=db,
                     inspection_id=selected["inspection_id"],
+                    product_id=selected["product_id"],
                     updates=updates,
                     reason=reason,
+                    q_reason=q_reason,
                     user_id=st.session_state["user_id"]
                 )
             st.success("Post-treatment QC record updated successfully.")

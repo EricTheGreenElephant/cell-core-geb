@@ -43,7 +43,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "Treatment QC", 
     "Sales Shipment Batch", 
     "Expired Products", 
-    "Edit Storage and Treatment"
+    "Edit Logistics"
 ])
 
 with tab1:

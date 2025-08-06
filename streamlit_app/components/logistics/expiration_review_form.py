@@ -5,6 +5,13 @@ from db.orm_session import get_session
 
 
 def render_expiration_review():
+    """
+    Component checks for expired/near expired products.
+
+    - Fetches products expiring/nearly expiring
+    - Presents data in dataframe (table)
+    - On submission, updates product_tracking and product_status_history products to expired
+    """
     st.subheader("Expiration Management")
 
     with get_session() as db:
@@ -12,7 +19,7 @@ def render_expiration_review():
 
     if not soon and not expired:
         st.success("No products nearing expiration.")
-        st.stop()
+        return
     
     if soon:
         st.markdown("### Expiring Soon (Within 7 Days)")
@@ -27,7 +34,7 @@ def render_expiration_review():
                 user_id = st.session_state.get("user_id")
                 if not user_id:
                     st.error("You must be logged in to perform this action.")
-                    st.stop()
+                    return
                 updated = expire_eligible_products(db, user_id)
                 st.success(f"{updated} products marked as expired.")
                 time.sleep(1.5)

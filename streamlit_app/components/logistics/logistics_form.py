@@ -5,6 +5,14 @@ from schemas.logistics_schemas import TreatmentBatchCreate, TreatmentProductData
 from db.orm_session import get_session
 
 def render_logistics_form():
+    """
+    Creates treatment batch form from selected, qc passed products.
+
+    - Fetches qc passed products (post-harvest)
+    - Creates editable dataframe (data_editor) for user to select treatment options
+    - On submission, record inserted to treatment_batch and treatment_batch_products table
+    - Updates product stage on product_tracking and product_status_history table
+    """
     st.subheader("📦 Create Treatment Batch")
 
     user_id = st.session_state.get("user_id")
@@ -46,7 +54,7 @@ def render_logistics_form():
         # Filter to only selected rows
         to_include = [p for p in edited if p["Include"]]
 
-        notes = st.text_area("Optional Notes", max_chars=250)
+        notes = st.text_area("Optional Notes", max_chars=250).strip()
 
         if st.button("Create Treatment Batch") and to_include:
             try:

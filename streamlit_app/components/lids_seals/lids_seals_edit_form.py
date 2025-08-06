@@ -34,7 +34,7 @@ def render_edit_lid_form(mode):
 
     if not inventory:
         st.info(f"No {mode} Inventory Available.")
-        st.stop()
+        return
     
     inventory_map = {f"{inv.serial_number} (ID {inv.id})": inv for inv in inventory}
     selection = st.selectbox("Select Lid", list(inventory_map.keys()))
@@ -55,7 +55,7 @@ def render_edit_lid_form(mode):
         if submitted:
             if not reason:
                 st.warning("A reason for the change is required.")
-                st.stop()
+                return
             
             updates = {}
             if inventory_item.serial_number != new_serial:

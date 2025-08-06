@@ -45,6 +45,8 @@ STAGE_SHELF_RULES = {
     "PostTreatmentQC": ["CellScrew; Sales", "Internal Use", "CellScrew; B-Ware"],
     "PostTreatmentStorage": ["CellScrew; Sales", "Internal Use", "CellScrew; B-Ware"],
     "QMSalesApproval": ["CellScrew; Sales"],
+    "PendingShipment": ["CellScrew; Sales"],
+    "Shipped": ["Offsite", "Treatment/Partner/Customer"],
     "Quarantine": ["CellScrew; Quarantine"],
     "Disposed": ["Disposed Product", "Waste"],
     "Internal Use": ["Internal Use"],  # If you later create shelves like "CellScrew; Internal Use"

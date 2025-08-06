@@ -20,7 +20,7 @@ def render_restore_acclimatization_form():
 
         if not acclimatized:
             st.info("No filaments currently in acclimatization that can be restored.")
-            st.stop()
+            return
         
         option_labels = {
             f"{f['serial_number']} (Ready: {f['ready_at'].date()}, Location: {f['location_name']})": f['acclimatization_id']
@@ -33,7 +33,7 @@ def render_restore_acclimatization_form():
         if st.button("Restore Acclimatization"):
             if not reason:
                 st.warning("Please provide a reason for the change.")
-                st.stop()
+                return
             
             acclimatization_id = option_labels[selection]
             user_id = st.session_state.get("user_id")

@@ -43,7 +43,7 @@ def render_add_lid_seal_form(mode: str):
             try:
                 if not serial_number:
                     st.warning("Serial number is required.")
-                    st.stop()
+                    return
                 
                 if mode == "Lid":
                     lid_data = LidCreate(

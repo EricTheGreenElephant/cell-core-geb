@@ -24,7 +24,7 @@ def render_edit_filament_tab():
 
     if not filaments:
         st.info("No filaments found.")
-        st.stop()
+        return
     
     filament_options = {f"{f.serial_number} (ID {f.id})": f for f in filaments}
     selection = st.selectbox("Select Filament to Edit", list(filament_options.keys()))
@@ -53,7 +53,7 @@ def render_edit_filament_tab():
         if submitted:
             if not reason:
                 st.warning("A reason for the change is required.")
-                st.stop()
+                return
             
             updates = {}
             if filament.lot_number != new_lot:
@@ -76,7 +76,7 @@ def render_edit_filament_tab():
             
             if not updates:
                 st.info("No changes detected.")
-                st.stop()
+                return
             
             try:
                 with get_session() as db:

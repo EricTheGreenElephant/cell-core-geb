@@ -27,7 +27,7 @@ def render_edit_mount_form():
 
     if not mounts:
         st.info("No mounted filaments found.")
-        st.stop()
+        return
     
     mount_options = {
         f"{m.filament.serial_number} on {m.printer.name} (ID {m.id})": m for m in mounts
@@ -85,7 +85,7 @@ def render_edit_mount_form():
         if submitted:
             if not reason:
                 st.warning("A reason for the change is required.")
-                st.stop()
+                return
             
             updates = {}
             if mount.remaining_weight != new_weight:
@@ -108,7 +108,7 @@ def render_edit_mount_form():
             
             if not updates:
                 st.info("No changes detected.")
-                st.stop()
+                return
             
             try: 
                 with get_session() as db:

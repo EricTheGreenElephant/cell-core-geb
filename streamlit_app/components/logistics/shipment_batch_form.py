@@ -6,6 +6,18 @@ from db.orm_session import get_session
 
 
 def render_shipment_batch_form():
+    """
+    Creates form that allows user to create shipment batch based on order request. 
+
+    - Fetches open order requests
+    - Automatically fetches available inventory by First-in, First-out basis
+    - Allows user to manually override inventory selection
+    - Prevent user from submitted if not enough inventory available for order request
+    - On submission
+        - Updates product stage on product_tracking and product_status_history table
+        - Inserts records to shipment and shipment_items table
+        - Updates status on orders table
+    """
     st.subheader("Create Shipment from Sales Order")
 
     with get_session() as db:
@@ -63,7 +75,7 @@ def render_shipment_batch_form():
                 invalid_fulfillments.append(product_type)
 
             df = pd.DataFrame(selected_inventory)
-            st.data_editor(df, num_rows='fixed', key=f"manual_table_{product_type}")
+            st.data_editor(df, hide_index=True, num_rows='fixed', key=f"manual_table_{product_type}")
         else:
             selected_inventory = fifo_inventory
             if len(selected_inventory) != quantity_needed:
@@ -71,7 +83,7 @@ def render_shipment_batch_form():
 
             st.markdown("*Auto-selected by FIFO*")
             df = pd.DataFrame(fifo_inventory)
-            st.data_editor(df, num_rows="fixed", disabled=True, key=f"fifo_{product_type}")
+            st.data_editor(df, hide_index=True, num_rows="fixed", disabled=True, key=f"fifo_{product_type}")
 
         all_selected_products[product_type] = selected_inventory
 
@@ -79,7 +91,7 @@ def render_shipment_batch_form():
     if submitted:
         if invalid_fulfillments:
             st.error(f"Shipment cannot be created. These product types are incomplete: {', '.join(invalid_fulfillments)}")
-            st.stop()
+            return
 
         try:
             user_id = st.session_state.get("user_id")
