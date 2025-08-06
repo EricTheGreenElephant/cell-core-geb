@@ -7,7 +7,22 @@ from db.orm_session import get_session
 
 
 def render_edit_lid_form(mode):
-    st.markdown("### Edit Existing Lids")
+    """
+    Creates form that allows user to edit input seal or lid data
+
+    Parameters
+        - mode: str
+            Passed parameter of either 'Lid' or 'Seal'
+
+    - Fetches available lid or seal data
+    - Fetches storage locations
+    - Creates form based on selection, prefills data with known values
+    - On submission
+        - Updates either seals or lids table
+        - Inserts record into the audit_log table
+
+    """
+    st.subheader("Edit Existing Lids")
 
     with get_session() as db:
         if mode == "Lid":
@@ -29,18 +44,18 @@ def render_edit_lid_form(mode):
     current_location_label = next((label for label, id in location_map.items() if id == inventory_item.location_id), None)
 
     with st.form("edit_lid_seal_form"):
-        new_serial = st.text_input("Serial Number", value=inventory_item.serial_number)
+        new_serial = st.text_input("Serial Number", value=inventory_item.serial_number).strip()
         new_quantity = st.number_input("Quantity", value=inventory_item.quantity, min_value=1, step=1)
         new_qc_result = st.selectbox("QC Result", ["PASS", "FAIL"], index=0 if inventory_item.qc_result == "PASS" else 1)
         new_location_label = st.selectbox("Storage Location", list(location_map.keys()), index=list(location_map.keys()).index(current_location_label))
-        reason = st.text_area("Reason for Change", max_chars=255)
+        reason = st.text_area("Reason for Change", max_chars=255).strip()
 
         submitted = st.form_submit_button("Submit Changes")
 
         if submitted:
-            if not reason.strip():
+            if not reason:
                 st.warning("A reason for the change is required.")
-                return
+                st.stop()
             
             updates = {}
             if inventory_item.serial_number != new_serial:

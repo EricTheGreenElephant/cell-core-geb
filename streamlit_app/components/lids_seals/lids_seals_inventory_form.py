@@ -5,7 +5,16 @@ from db.orm_session import get_session
 
 
 def render_lids_seals_inventory(mode):
-    st.markdown(f"{mode} Inventory")
+    """
+    Creates inventory dataframe (table) view
+
+    Parameters
+        mode: str
+            Passed parameter from component of either 'Lid' or 'Seal'
+
+    - Fetches available lids or seals based on selection (mode) passed
+    """
+    st.subheader(f"{mode} Inventory")
 
     try:
         with get_session() as db:
