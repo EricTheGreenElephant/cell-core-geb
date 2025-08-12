@@ -1,8 +1,8 @@
-from sqlalchemy import text
+from sqlalchemy import text, select
 from sqlalchemy.orm import Session
 from schemas.sales_schemas import SalesOrderInput
-from models.sales_models import Order, OrderItem
-from models.production_models import ProductType
+from models.sales_models import Order, OrderItem, OrderSupplement
+from models.production_models import ProductType, Supplement
 from utils.db_transaction import transactional
 
 
@@ -62,36 +62,89 @@ def get_sales_ready_quantities_by_type(db: Session):
     return [dict(row._mapping) for row in result]
 
 def get_orderable_product_types(db: Session) -> list[ProductType]:
-    return db.query(ProductType).order_by(ProductType.name).all()
+    stmt = select(ProductType).where(ProductType.is_active == True).order_by(ProductType.name)
+    return db.execute(stmt).scalars().all()
+
+def get_active_supplements(db: Session) -> list[dict]:
+    stmt = select(Supplement).where(Supplement.is_active == True).order_by(Supplement.name)
+    return db.execute(stmt).scalars().all()
 
 @transactional
 def create_sales_order(db: Session, data: SalesOrderInput):
     # === Create Order Object === 
     order = Order(
         customer_id=data.customer_id,
+        parent_order_id=data.parent_order_id,
         order_creator_id=data.created_by,
-        status="Processing"
+        updated_by=data.updated_by,
+        status="Processing",
+        notes=data.notes
     )
     db.add(order)
     db.flush()
 
-    # === Get product_type ===
-    types = db.query(ProductType).all()
-    type_lookup = {t.name: t.id for t in types}
+    # === Insert product items ===
+    for product_type_id, qty in data.product_quantities.items():
+        if qty > 0:
+            db.add(OrderItem(order_id=order.id, product_type_id=product_type_id, quantity=qty))
 
-    # === Insert order_items
-    for type_name, qty in data.product_quantities.items():
-        if qty <= 0:
-            continue
-        type_id = type_lookup.get(type_name)
-        if not type_id:
-            raise ValueError(f"Invalid product type: {type_name}")
-        
-        item = OrderItem(
-            order_id=order.id,
-            product_type_id=type_id,
-            quantity=qty
-        )
-        db.add(item)
+    # === Insert supplements ===
+    for supplement_id, qty in data.supplement_quantities.items():
+        if qty > 0:
+            db.add(OrderSupplement(order_id=order.id, supplement_id=supplement_id, quantity=qty))
 
     db.commit()
+
+def get_canceled_order_headers(db: Session) -> list[dict]:
+    rows = db.execute(text(
+        """
+            SELECT
+                o.id AS order_id,
+                o.customer_id,
+                c.customer_name,
+                o.order_date,
+                o.notes
+            FROM orders o 
+            JOIN customers c ON o.customer_id = c.id
+            WHERE 
+                o.status = 'Canceled'
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM orders child
+                    WHERE child.parent_order_id = o.id
+                )
+            ORDER BY o.order_date DESC
+        """
+    )).fetchall()
+    return [dict(r._mapping) for r in rows]
+
+def get_canceled_orders_with_items(db: Session, order_id: int) -> dict:
+    product_rows = db.execute(text(
+        """
+            SELECT
+                oi.product_type_id,
+                pt.name AS product_type,
+                oi.quantity
+            FROM order_items oi
+            JOIN product_types pt ON oi.product_type_id = pt.id
+            WHERE oi.order_id = :order_id
+        """
+    ), {"order_id": order_id}).fetchall()
+
+    supplement_rows = db.execute(text(
+        """
+            SELECT
+                os.supplement_id,
+                s.name AS supplement_name,
+                os.quantity
+            FROM order_supplements os
+            JOIN supplements s ON os.supplement_id = s.id
+            WHERE os.order_id = :order_id
+        """
+    ), {"order_id": order_id}).fetchall()
+
+
+    return {
+        "product_items": [dict(r._mapping) for r in product_rows],
+        "supplements": [dict(r._mapping) for r in supplement_rows]
+    }

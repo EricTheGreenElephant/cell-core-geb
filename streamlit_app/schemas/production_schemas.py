@@ -23,6 +23,17 @@ class ProductRequestOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SupplementCreate(BaseModel):
+    name: str
+
+
+class SupplementOut(BaseModel):
+    id: int
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+    
 class HarvestedProductOut(BaseModel):
     harvest_id: int
     request_id: int

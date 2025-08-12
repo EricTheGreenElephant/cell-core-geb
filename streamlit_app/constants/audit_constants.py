@@ -11,5 +11,9 @@ ALLOWED_AUDIT_TABLES = {
     "treatment_batches",
     "treatment_batch_products",
     "post_treatment_inspections",
-    "users"
+    "users",
+    "orders",
+    "order_items",
+    "order_supplements",
+    "supplements"
 }

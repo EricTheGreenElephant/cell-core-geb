@@ -1,46 +1,58 @@
-from sqlalchemy import text
+from sqlalchemy import text, bindparam
 from sqlalchemy.orm import Session
+from datetime import datetime, timezone
+from schemas.audit_schemas import FieldChangeAudit
+from services.audit_services import update_record_with_audit
 from services.tracking_service import update_product_stage
 from models.shipment_models import Shipment, ShipmentItem
 from models.sales_models import Order
 from utils.db_transaction import transactional
 
 
-def get_open_orders_with_items(db: Session):
+def get_open_order_headers(db: Session) -> list[dict]:
     result = db.execute(text(
         """
             SELECT
                 o.id AS order_id,
-                o.customer_id,
                 c.customer_name,
                 o.order_date,
-                pt.name AS product_type,
-                oi.quantity
-            FROM orders o 
-            JOIN customers c ON o.customer_id = c.id
-            JOIN order_items oi ON o.id = oi.order_id
-            JOIN product_types pt ON oi.product_type_id = pt.id
+                o.notes,
+                o.parent_order_id,
+                o.status,
+                o.updated_at,
+                o.updated_by,
+                o.customer_id
+            FROM orders o
+            JOIN customers c On o.customer_id = c.id
             WHERE o.status = 'Processing'
             ORDER BY o.order_date ASC
         """
     )).fetchall()
+    return [dict(r._mapping) for r in result]
 
-    orders = {}
-    for row in result:
-        oid = row.order_id
-        if oid not in orders:
-            orders[oid] = {
-                "customer_id": row.customer_id,
-                "customer": row.customer_name,
-                "order_date": row.order_date,
-                "items": []
-            }
-        orders[oid]["items"].append({
-            "product_type": row.product_type,
-            "quantity": row.quantity
-        })
+def get_open_orders_with_items(db: Session, order_id: int) -> dict:
+    product_items = db.execute(text(
+        """
+            SELECT pt.name AS product_type, oi.quantity
+            FROM order_items oi
+            JOIN product_types pt ON oi.product_type_id = pt.id
+            WHERE oi.order_id = :oid
+        """
+    ), {"oid": order_id}).fetchall()
 
-    return orders
+    supplements = db.execute(text(
+        """
+            SELECT s.name AS supplement_name, os.quantity
+            FROM order_supplements os
+            JOIN supplements s ON os.supplement_id = s.id
+            WHERE os.order_id = :oid
+        """
+    ), {"oid": order_id}).fetchall()
+
+    return {
+        "items": [dict(row._mapping) for row in product_items],
+        "supplements": [dict(row._mapping) for row in supplements]
+    }
 
 def get_fifo_inventory_by_type(db: Session, product_type_name: str, limit: int):
     result = db.execute(text(
@@ -75,17 +87,23 @@ def create_shipment_from_order(
     order_id: int,
     customer_id: int,
     creator_id: int,
-    selected_products_by_type: dict[str, list[dict]]
+    selected_products_by_type: dict[str, list[dict]],
+    updated_by: int,
+    notes: str = ""
 ):
+    # === Create Shipment ===
     shipment = Shipment(
         order_id=order_id,
         customer_id=customer_id,
         creator_id=creator_id,
-        status="Pending"
+        updated_by=updated_by,
+        status="Pending",
+        notes=notes
     )
     db.add(shipment)
     db.flush()
 
+    # === Product Lifecycle Update ===
     pending_shipment_stage_id = db.scalar(
         text("SELECT id FROM lifecycle_stages WHERE stage_code = 'PendingShipment'")
     )
@@ -107,8 +125,37 @@ def create_shipment_from_order(
                 user_id=creator_id
             )
 
+    # === Fetch Order ===
     order = db.query(Order).filter(Order.id == order_id).first()
+
+    # === Update Audit Logs ===
+    now_str = str(datetime.now(timezone.utc))
+
+    fields_to_audit = [
+        ("status", order.status, "Completed"),
+        ("updated_by", order.updated_by, updated_by),
+        ("updated_at", str(order.updated_at), now_str)
+    ]
+
+    for field, old, new in fields_to_audit:
+        update_record_with_audit(
+            db=db,
+            data=FieldChangeAudit(
+                table="orders",
+                record_id=order_id,
+                field=field,
+                old_value=old,
+                new_value=new,
+                reason="Shipment created",
+                changed_by=updated_by
+            ),
+            update=False
+        )
+    
+    # === Perform Final Update on Order ===
     order.status = "Completed"
+    order.updated_by = updated_by
+    order.updated_at = datetime.now(timezone.utc)
 
     db.commit()
 
@@ -122,7 +169,9 @@ def get_active_shipments(db: Session):
                 c.customer_name,
                 s.created_date,
                 s.ship_date,
-                s.delivery_date
+                s.delivery_date,
+                s.carrier,
+                s.tracking_number
             FROM shipments s
             JOIN customers c ON s.customer_id = c.id
             WHERE s.status IN ('Pending', 'Shipped')
@@ -153,16 +202,18 @@ def get_products_in_shipments(db: Session, shipment_id: int):
     return [dict(row._mapping) for row in result]
 
 @transactional
-def mark_shipment_as_shipped(db: Session, shipment_id: int, user_id: int):
+def mark_shipment_as_shipped(db: Session, shipment_id: int, user_id: int, carrier: str, tracking_number: str):
     db.execute(text(
         """
             UPDATE shipments
             SET status = 'Shipped',
                 ship_date = GETDATE(),
-                updated_at = GETDATE()
+                updated_at = GETDATE(),
+                carrier = :carrier,
+                tracking_number = :tracking
             WHERE id = :sid
         """
-    ), {"sid": shipment_id})
+    ), {"sid": shipment_id, "carrier": carrier, "tracking": tracking_number})
 
     products = db.execute(text("SELECT product_id FROM shipment_items WHERE shipment_id = :sid"),
                     {"sid": shipment_id}
@@ -200,5 +251,47 @@ def mark_shipment_as_delivered(db: Session, shipment_id: int):
             WHERE id = :sid
         """
     ), {"sid": shipment_id})
+
+    db.commit()
+
+@transactional
+def cancel_order_request(db: Session, order_id: int, user_id: int, old_status: str, old_updated_by: int, old_updated_at: str, notes: str = ""):
+    # === Prepare Audit Logs ===
+    fields_to_update = [
+        ("status", old_status, "Canceled"),
+        ("updated_by", old_updated_by, user_id),
+        ("updated_at", old_updated_at, datetime.now(timezone.utc))
+    ]
+
+    for field, old_value, new_value in fields_to_update:
+        audit = FieldChangeAudit(
+            table="orders",
+            record_id=order_id,
+            field=field,
+            old_value=old_value,
+            new_value=new_value,
+            reason="Order request canceled",
+            changed_by=user_id
+        )
+        update_record_with_audit(db, audit, update=False)
+
+    # === Perform actual update ===
+    db.execute(text(
+        """
+            UPDATE orders
+            SET 
+                status = 'Canceled',
+                updated_at = GETDATE(),
+                updated_by = :user_id,
+                notes = :notes
+            WHERE id = :oid
+        """
+        ), 
+            {
+                "oid": order_id,
+                "user_id": user_id,
+                "notes": notes
+            }
+    )
 
     db.commit()

@@ -12,6 +12,16 @@ class ProductType(Base):
     name = Column(String)
     average_weight = Column(Integer)
     buffer_weight = Column(Integer)
+    is_active = Column(Boolean, default=True)
+
+
+class Supplement(Base):
+    __tablename__ = 'supplements'
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(50), nullable=False)
+    is_active = Column(Boolean, default=True)
+
+    order_links = relationship("OrderSupplement", back_populates="supplement")
 
 
 class ProductRequest(Base):

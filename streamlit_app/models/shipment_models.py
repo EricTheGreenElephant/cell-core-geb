@@ -15,9 +15,11 @@ class Shipment(Base):
     ship_date = Column(DateTime)
     delivery_date = Column(DateTime)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    updated_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     status = Column(String(20), nullable=False, default="Pending")
     tracking_number = Column(String(50))
     carrier = Column(String(5))
+    notes = Column(String(255))
 
     items = relationship("ShipmentItem", back_populates="shipment")
 

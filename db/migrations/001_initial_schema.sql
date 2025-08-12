@@ -190,6 +190,15 @@ BEGIN
     );
 END;
 
+IF OBJECT_ID('supplements', 'U') IS NULL
+BEGIN
+    CREATE TABLE supplements (
+        id INT PRIMARY KEY IDENTITY(1,1),
+        name NVARCHAR(100) NOT NULL UNIQUE,
+        is_active BIT DEFAULT 1
+    );
+END;
+
 IF OBJECT_ID('product_statuses', 'U') IS NULL
 BEGIN
     CREATE TABLE product_statuses(
@@ -419,9 +428,12 @@ BEGIN
         order_creator_id INT NOT NULL,
         status NVARCHAR(20) NOT NULL CHECK (status IN ('Processing', 'Shipped', 'Completed', 'Canceled')),
         updated_at DATETIME2 DEFAULT GETDATE(),
+        updated_by INT NOT NULL,
+        notes NVARCHAR(255),
 
         CONSTRAINT fk_order_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
-        CONSTRAINT fk_order_creator FOREIGN KEY (order_creator_id) REFERENCES users(id)
+        CONSTRAINT fk_order_creator FOREIGN KEY (order_creator_id) REFERENCES users(id),
+        CONSTRAINT fk_order_updated_by FOREIGN KEY (updated_by) REFERENCES users(id)
     );
 END;
 
@@ -431,10 +443,23 @@ BEGIN
         id INT PRIMARY KEY IDENTITY(1,1),
         order_id INT NOT NULL,
         product_type_id INT NOT NULL,
-        quantity INT NOT NULL,
+        quantity INT NOT NULL CHECK (quantity > 0),
 
         CONSTRAINT fk_order_items_order FOREIGN KEY (order_id) REFERENCES orders(id),
         CONSTRAINT fk_order_items_type FOREIGN KEY (product_type_id) REFERENCES product_types(id)
+    );
+END;
+
+IF OBJECT_ID('order_supplements', 'U') IS NULL
+BEGIN
+    CREATE TABLE order_supplements (
+        id INT PRIMARY KEY IDENTITY(1,1),
+        order_id INT NOT NULL,
+        supplement_id INT NOT NULL,
+        quantity INT NOT NULL CHECK (quantity > 0),
+
+        CONSTRAINT fk_order_supp_order FOREIGN KEY (order_id) REFERENCES orders(id),
+        CONSTRAINT fk_order_supp_supplement FOREIGN KEY (supplement_id) REFERENCES supplements(id)
     );
 END;
 
@@ -450,12 +475,15 @@ BEGIN
         delivery_date DATETIME2,
         status NVARCHAR(20) NOT NULL CHECK (status IN ('Pending', 'Shipped', 'In Transit', 'Delivered', 'Returned', 'Canceled')),
         updated_at DATETIME2 DEFAULT GETDATE(),
+        updated_by INT NOT NULL,
         tracking_number NVARCHAR(50),
         carrier NVARCHAR(50),
+        notes NVARCHAR(255),
 
         CONSTRAINT fk_shipment_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
         CONSTRAINT fk_shipment_order FOREIGN KEY (order_id) REFERENCES orders(id),
-        CONSTRAINT fk_shipment_creator FOREIGN KEY (creator_id) REFERENCES users(id)
+        CONSTRAINT fk_shipment_creator FOREIGN KEY (creator_id) REFERENCES users(id),
+        CONSTRAINT fk_shipment_update_user FOREIGN KEY (updated_by) REFERENCES users(id)
     );
 END;
 

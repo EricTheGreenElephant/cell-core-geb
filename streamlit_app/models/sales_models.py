@@ -14,11 +14,14 @@ class Order(Base):
     __tablename__ = "orders"
 
     id = Column(Integer, primary_key=True)
+    parent_order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     order_date = Column(DateTime, nullable=False, server_default=func.now())
     order_creator_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     status = Column(String(20), nullable=False, default="Processing")
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    updated_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    notes = Column(String(255))
 
     order_items = relationship("OrderItem", back_populates="order")
 
@@ -32,3 +35,14 @@ class OrderItem(Base):
     quantity = Column(Integer, nullable=False)
 
     order = relationship("Order", back_populates="order_items")
+
+
+class OrderSupplement(Base):
+    __tablename__ = 'order_supplements'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
+    supplement_id = Column(Integer, ForeignKey("supplements.id"), nullable=False)
+    quantity = Column(Integer, nullable=False)
+
+    supplement = relationship("Supplement", back_populates="order_links")

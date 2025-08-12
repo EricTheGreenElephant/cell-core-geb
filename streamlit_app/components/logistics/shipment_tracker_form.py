@@ -38,14 +38,30 @@ def render_shipment_tracker():
             st.dataframe(df, hide_index=True, use_container_width=True)
 
             if shipment["status"] == "Pending":
+                carrier = st.text_input("Carrier", key=f"carrier_{shipment['shipment_id']}").strip()
+                tracking_number = st.text_input("Tracking Number", key=f"tracking_{shipment['shipment_id']}").strip()
+
                 if st.button("Mark as Shipped", key=f"ship_{shipment['shipment_id']}"):
+                    if not carrier or not tracking_number:
+                        st.warning("Carrier and Tracking Number are required to ship.")
+                        return
+                    
                     user_id = st.session_state.get("user_id")
                     with get_session() as db:
-                        mark_shipment_as_shipped(db, shipment["shipment_id"], user_id)
+                        mark_shipment_as_shipped(
+                            db=db, 
+                            shipment_id=shipment["shipment_id"], 
+                            user_id=user_id,
+                            carrier=carrier,
+                            tracking_number=tracking_number
+                        )
                     st.success("Shipment marked as Shipped.")
                     time.sleep(1.5)
                     st.rerun()
             elif shipment["status"] == "Shipped":
+                st.markdown(f"**Carrier:** {shipment.get('carrier') or 'N/A'}")
+                st.markdown(f"**Tracking #:** {shipment.get('tracking_number') or 'N/A'}")
+                
                 if st.button("Mark as Delivered", key=f"deliver_{shipment['shipment_id']}"):
                     with get_session() as db:
                         mark_shipment_as_delivered(db, shipment["shipment_id"])
