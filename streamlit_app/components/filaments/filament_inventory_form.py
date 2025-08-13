@@ -5,11 +5,20 @@ from services.filament_service import get_all_filament_statuses
 from db.orm_session import get_session
 
 def render_filament_inventory():
+    """
+    Provides a table of view of all filament spools. 
+
+    - Fetches all filaments with database query
+    - Builds dataframe (table) 
+    """
     try:
+        # Creates database session and calls services function to query all filament data
         with get_session() as db:
             all_filaments = get_all_filament_statuses(db)
 
         if all_filaments:
+
+            # Builds dataframe with returned data and creates display
             df_filaments = pd.DataFrame(all_filaments)
 
             gb = GridOptionsBuilder.from_dataframe(df_filaments)

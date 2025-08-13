@@ -5,6 +5,7 @@ from datetime import datetime
 
 class LidCreate(BaseModel):
     serial_number: str
+    quantity: int
     location_id: int
     qc_result: str
     received_by: int
@@ -13,6 +14,7 @@ class LidCreate(BaseModel):
 class LidOut(BaseModel):
     id: int
     serial_number: str
+    quantity: int
     location_id: int
     qc_result: str
     received_by: int

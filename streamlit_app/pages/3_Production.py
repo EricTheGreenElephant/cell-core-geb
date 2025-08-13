@@ -6,8 +6,8 @@ from components.production.request_form import render_product_request_form
 from components.production.harvest_form import render_harvest_form
 from components.production.harvest_edit_form import render_harvest_edit_form
 from components.production.harvest_undo_form import render_harvest_undo_form
-from components.logistics.qc_form import render_qc_form
-from components.logistics.qc_edit_form import render_qc_edit_form
+from components.production.qc_form import render_qc_form
+from components.production.qc_edit_form import render_qc_edit_form
 from components.common.toggle import toggle_button
 
 

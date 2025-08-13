@@ -10,3 +10,7 @@ from . import lifecycle_stages_models
 from . import product_quality_control_models
 from . import investigation_models
 from . import quarantined_products_models
+from . import seal_models
+from . import material_usage_models
+from . import sales_models
+from . import shipment_models

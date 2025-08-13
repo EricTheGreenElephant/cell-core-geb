@@ -9,6 +9,7 @@ class Lid(Base):
 
     id = Column(Integer, primary_key=True)
     serial_number = Column(String, nullable=False)
+    quantity = Column(Integer, nullable=False)
     location_id = Column(Integer, ForeignKey('storage_locations.id'))
     qc_result = Column(String, nullable=False)
     received_by = Column(Integer, ForeignKey('users.id'))

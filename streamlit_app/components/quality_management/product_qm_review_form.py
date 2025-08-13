@@ -40,11 +40,11 @@ def render_product_qm_review():
     except Exception as e:
         st.error("Failed to load products.")
         st.exception(e)
-        st.stop()
+        return
         
     if not products:
         st.info("No products found for QM review.")
-        st.stop()
+        return
     
     data_rows = [p.model_dump() for p in products]
     st.dataframe(data_rows, use_container_width=True)
@@ -113,7 +113,7 @@ def render_product_qm_review():
                     if st.button(f"Decline {p.product_id}", key=f"decline_{p.product_id}"):
                         if not reason.strip():
                             st.warning("You must provide a reason before declining.")
-                            st.stop()
+                            return
     
                         try:
                             with get_session() as db:

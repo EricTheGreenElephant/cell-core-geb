@@ -6,6 +6,17 @@ from services.filament_service import get_storage_locations
 from db.orm_session import get_session
 
 def render_storage_edit_form():
+    """
+    Creates form to allow user to edit the storage shelf
+
+    - Requires product ID input
+    - Fetches product based on search
+    - Fetches storage locations
+    - On submission
+        - Updates audit_log table
+        - Updates product_tracking
+        - Updates product_status_history
+    """
     st.subheader("Edit Storage Assignment")
 
     search_input = st.text_input("Search by Product ID", placeholder="e.g. 100124")
@@ -64,10 +75,10 @@ def render_storage_edit_form():
     else:
         new_status = selected["current_status"]
 
-    reason = st.text_area("Reason for Edit", max_chars=255)
+    reason = st.text_area("Reason for Edit", max_chars=255).strip()
 
     if st.button("Submit Edit"):
-        if not reason.strip():
+        if not reason:
             st.warning("Please provide a reason for the update.")
             return
 

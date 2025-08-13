@@ -7,17 +7,31 @@ from services.logistics_services import (
     update_post_treatment_qc,
     mark_batch_as_inspected
 )
+from constants.general_constants import COLOR_MAP
 from db.orm_session import get_session
 
 
-color_map = {
-    "Passed": "green",
-    "B-Ware": "orange",
-    "Quarantine": "blue",
-    "Waste": "red"
-}
-
 def determine_qc_result(prior_result, surface_treat_required, surface_treated, sterilized, quarantine, visual_pass):
+    """
+    Helper function to help determine QC result display label
+
+    Parameters
+        - prior_result: str
+            QC result from post-harvest qc
+        - surface_treat_required: bool
+            Boolean indication if product required surface treatment
+        - surface_treated: bool
+            Boolean indication of whether or not product actually received surface treatment
+        - sterilized: bool
+            Boolean indication of whether or not product actually received sterilization
+        - quarantine: bool
+            Boolean indication from user if product should be quarantined
+        - visual_pass: bool
+            Boolean indication of whether or not product passed visual inspection
+
+    Returns
+        - String text to display for suggested qc result
+    """
     if not sterilized or not visual_pass:
         return "Waste"
     if surface_treat_required and not surface_treated:
@@ -29,6 +43,19 @@ def determine_qc_result(prior_result, surface_treat_required, surface_treated, s
     return "B-Ware"
     
 def render_treatment_qc_form():
+    """
+    Creates form that allows user to provide qc result post-treatment
+
+    - Fetches outstanding shipment batches and products
+    - Pulls randomized sample size to check for QC pass/fail
+    - If randomized sample fails, all products will have option to pass/fail
+    - Allows selection of quarantine
+    - On submission
+        - treatment_batches table updated to 'inspected'
+        - QC record inserted into post_treatment_inspections
+        - If quarantined, record inserted into quarantined_products table
+        - Updates product_tracking product stage and product_status_history tables
+    """
     st.subheader("Treatment Quality Control")
 
     try:
@@ -82,7 +109,7 @@ def render_treatment_qc_form():
                 "Reason for Quarantining All Products",
                 max_chars=255,
                 key="quarantine_all_reason"
-            )
+            ).strip()
 
         full_qc = []
         for p in products:
@@ -103,7 +130,7 @@ def render_treatment_qc_form():
                     max_chars=255,
                     value=quarantine_all_reason if quarantine_all else "",
                     key=f"quar_reason_{p['product_id']}"
-                )
+                ).strip()
 
             visual = None
             if failed_sample:
@@ -117,7 +144,7 @@ def render_treatment_qc_form():
             visual_val = visual if visual is not None else True
 
             qc_result = determine_qc_result(prior_result, treat_required, surface, sterilized, quarantine, visual_val)
-            color = color_map.get(qc_result, "black")
+            color = COLOR_MAP.get(qc_result, "black")
 
             st.markdown(f"**Suggested QC Result:** <span style='color:{color}; font-weight:bold'>{qc_result}</span>", unsafe_allow_html=True)
             full_qc.append({

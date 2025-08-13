@@ -4,12 +4,19 @@ from db.orm_session import get_session
 
 
 def render_health_status():
-    st.markdown("### Filament Health Status")
+    """
+    Renders a view of the currrently mounted filaments. 
+    
+    - Indicates the weight and criticality of filament.
+    """
+    st.subheader("Filament Health Status")
 
     try:
+        # Creates database session and calls service function to get all filaments
         with get_session() as db:
             all_filaments = get_all_filament_statuses(db)
-            
+
+        # Filters for filaments currently in use    
         in_use = [f for f in all_filaments if f["current_status"] == "In Use"]
 
         if not in_use:
@@ -19,6 +26,7 @@ def render_health_status():
                 remaining = filament.get("remaining_weight")
                 label = f"**{filament['serial_number']}** on {filament['printer_name']}"
 
+                # Displays remaining weights and levels of criticality
                 if remaining is not None:
                     if remaining < 500:
                         st.error(f"{label} - **Critical** - Replace Now ({remaining}g left)")

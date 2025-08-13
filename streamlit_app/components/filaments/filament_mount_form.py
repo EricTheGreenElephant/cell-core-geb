@@ -10,7 +10,15 @@ from schemas.printer_schemas import PrinterOut
 
 
 def render_mount_form():
-    st.markdown("Mount Acclimatized Filament")
+    """
+    Creates form that allows user to select filament to mount to printer.
+
+    - Select filaments available from filament_acclimatization table
+    - Selects printers that are currently active and not in use.
+    - On submission, filament and printer are added to filament_mounting table
+        creating new id. 
+    """
+    st.subheader("Mount Acclimatized Filament")
 
     with get_session() as db:
         filaments = get_acclimatized_filaments(db)

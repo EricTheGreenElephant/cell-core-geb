@@ -8,7 +8,17 @@ from datetime import datetime
 
 
 def render_edit_mount_form():
-    st.markdown("### Edit Filament Mounting Info")
+    """
+    Creates form that allows user to edit mounted filament
+
+    - Fetches mounted filaments, users, and printers
+    - Allows user to edit status
+    - Allows user to edit information of record
+    - On submission
+        - Updates filament_mounting table with new data
+        - Inserts record into audit_log
+    """
+    st.subheader("Edit Filament Mounting Info")
 
     with get_session() as db:
         mounts = get_mounts_with_filaments(db)
@@ -22,12 +32,15 @@ def render_edit_mount_form():
     mount_options = {
         f"{m.filament.serial_number} on {m.printer.name} (ID {m.id})": m for m in mounts
     }
+
     selection = st.selectbox("Select Mounting Record", list(mount_options.keys()))
+
     mount = mount_options[selection]
 
     user_labels = {f"{u.display_name} (ID {u.id})": u.id for u in users}
     user_names = list(user_labels.keys())
     current_user_label = next((label for label, id in user_labels.items() if id == mount.mounted_by), None)
+
     current_unmounted_by_label = None
     if mount.unmounted_by:
         current_unmounted_by_label = next(
@@ -38,7 +51,9 @@ def render_edit_mount_form():
     printer_labels = {f"{p.name} (ID {p.id})": p.id for p in printers}
     printer_names = list(printer_labels.keys())
     current_printer_label = next((label for label, id in printer_labels.items() if id == mount.printer_id), None)
+
     new_status = st.selectbox("Mounting Status", ["In Use", "Unmounted"], index=0 if mount.status == "In Use" else 1)
+
     with st.form("edit_mount_form"):
         if new_status == "In Use":
             new_weight = st.number_input("Remaining Weight (g)", min_value=0.0, value=mount.remaining_weight, format="%.2f")
@@ -63,12 +78,12 @@ def render_edit_mount_form():
             new_unmounted_by_id = None
             new_unmounted_at_full = None
 
-        reason = st.text_area("Reason for Change", max_chars=255)
+        reason = st.text_area("Reason for Change", max_chars=255).strip()
 
         submitted = st.form_submit_button("Submit Changes")
 
         if submitted:
-            if not reason.strip():
+            if not reason:
                 st.warning("A reason for the change is required.")
                 return
             

@@ -27,7 +27,7 @@ def render_ad_hoc_quarantine():
     if st.button("Search"):
         if not search_value:
             st.warning("Please enter a value to search.")
-            st.stop()
+            return
 
         try:
             with get_session() as db:
@@ -35,14 +35,14 @@ def render_ad_hoc_quarantine():
             if not results:
                 st.info("No products found matching the search criteria.")
                 st.session_state["adhoc_results"] = []
-                st.stop()
+                return
             
             st.session_state["adhoc_results"] = [r.model_dump() for r in results]
 
         except Exception as e:
             st.error("Failed to search for products.")
             st.exception(e)
-            st.stop()
+            return
     
     if st.session_state["adhoc_results"]:
         df = pd.DataFrame(st.session_state["adhoc_results"])
@@ -94,7 +94,7 @@ def render_ad_hoc_quarantine():
             if st.button("Confirm Quarantine"):
                 if not comment:
                     st.warning("You must provide a reason for quarantine.")
-                    st.stop()
+                    return
                 try:
                     user_id = st.session_state.get("user_id")
                     with get_session() as db:

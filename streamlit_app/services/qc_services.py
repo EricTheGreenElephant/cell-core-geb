@@ -1,9 +1,10 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, select
 from schemas.qc_schemas import ProductQCInput
 from schemas.audit_schemas import FieldChangeAudit
+from models.lifecycle_stages_models import LifecycleStages
 from services.audit_services import update_record_with_audit
-from services.tracking_service import update_product_stage, update_product_status
+from services.tracking_service import update_product_stage, update_product_status, record_filament_usage_post_qc
 from services.quality_management_services import create_quarantine_record
 from utils.db_transaction import transactional
 from constants.product_status_constants import STATUS_MAP_QC_TO_BUSINESS
@@ -54,6 +55,27 @@ def insert_product_qc(db: Session, data: ProductQCInput):
             "result": data.inspection_result,
             "notes": data.notes
         }
+    )
+
+    # === Get harvest ID from tracking table ===
+    result = db.execute(text("""
+        SELECT harvest_id
+        FROM product_tracking
+        WHERE id = :pid
+    """), {"pid": data.product_id}).fetchone()
+
+    if not result:
+        raise ValueError(f"No harvest found for product ID {data.product_id}")
+    
+    harvest_id = result.harvest_id
+
+    # === Record the filament usage ===
+    record_filament_usage_post_qc(
+        db=db,
+        harvest_id=harvest_id,
+        product_id=data.product_id,
+        weight_grams=data.weight_grams,
+        user_id=data.inspected_by
     )
 
     # === Update Lifecycle Stage ===
@@ -195,10 +217,41 @@ def get_completed_post_treatment_qc(db: Session) -> list[dict]:
 def update_post_treatment_qc_fields(
     db: Session,
     inspection_id: int,
+    product_id: int,
     updates: dict[str, tuple],
     reason: str,
+    q_reason: str,
     user_id: int
 ):
+    
+    # === Insert Product to Quarantine if Applicable ===
+    if updates["qc_result"][1] == "Quarantine":
+        create_quarantine_record(
+            db=db,
+            product_id=product_id,
+            source="Post-Treatment QC",
+            quarantined_by=user_id,
+            reason=q_reason
+        )
+
+        stmt_stage = select(LifecycleStages.id).where(LifecycleStages.stage_code == "Quarantine")
+        new_stage_id = db.scalar(stmt_stage)
+        update_product_stage(
+            db=db,
+            product_id=product_id,
+            new_stage_id=new_stage_id,
+            reason="Moved to quarantine",
+            user_id=user_id
+        )
+
+
+    status_name = STATUS_MAP_QC_TO_BUSINESS.get(updates["qc_result"][1], "Pending")
+    update_product_status(
+        db=db,
+        product_id=product_id,
+        status_name=status_name
+    )
+
     for field, (old_value, new_value) in updates.items():
         audit = FieldChangeAudit(
             table="post_treatment_inspections",

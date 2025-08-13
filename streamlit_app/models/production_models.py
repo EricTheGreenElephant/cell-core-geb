@@ -12,6 +12,16 @@ class ProductType(Base):
     name = Column(String)
     average_weight = Column(Integer)
     buffer_weight = Column(Integer)
+    is_active = Column(Boolean, default=True)
+
+
+class Supplement(Base):
+    __tablename__ = 'supplements'
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(50), nullable=False)
+    is_active = Column(Boolean, default=True)
+
+    order_links = relationship("OrderSupplement", back_populates="supplement")
 
 
 class ProductRequest(Base):
@@ -37,6 +47,7 @@ class ProductHarvest(Base):
     lid_id = Column(Integer, ForeignKey('lids.id'))
     seal_id = Column(String(50), nullable=False)
 
+    material_usages = relationship("MaterialUsage", back_populates="harvest")
 
 class ProductTracking(Base):
     __tablename__ = 'product_tracking'
@@ -59,6 +70,7 @@ class ProductTracking(Base):
     status_history = relationship("ProductStatusHistory", back_populates="product")
     quarantine_records = relationship("QuarantinedProducts", back_populates="product")
     current_status = relationship("ProductStatuses", back_populates="products")
+    material_usages = relationship("MaterialUsage", back_populates="product")
 
 class ProductStatusHistory(Base):
     __tablename__ = "product_status_history"

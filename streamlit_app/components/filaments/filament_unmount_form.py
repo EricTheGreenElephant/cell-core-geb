@@ -5,7 +5,14 @@ from db.orm_session import get_session
 
 
 def render_unmount_form():
-    st.markdown("Unmount Filament")
+    """
+    Creates form that allows users to unmount a filament from printer
+
+    - Selects currently mounted filaments
+    - Creates selection box of mounted filaments
+    - On submission, status of filament_mounting table changed to 'unmounted'. 
+    """
+    st.subheader("Unmount Filament")
 
     try:
         with get_session() as db:

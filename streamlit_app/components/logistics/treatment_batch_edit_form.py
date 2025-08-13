@@ -12,6 +12,16 @@ from schemas.audit_schemas import FieldChangeAudit
 
 
 def render_treatment_batch_edit_form():
+    """
+    Creates form that allows users to edit a created treatment batch.
+
+    - Fetches created treatment batches and allows user to select batch
+    - Fetches products from selected batch
+    - Creates form to allow user edits
+    - On submission
+            - updates treatment_batch_products table or deletes product
+            - updates audit log table
+    """
     st.subheader("Edit Treatment Batch Products")
 
     with get_session() as db:
@@ -36,12 +46,12 @@ def render_treatment_batch_edit_form():
         with st.expander(f"Product #{p['product_id']} - {p['product_type']} - {p['inspection_result']}"):
             surface_treat = st.checkbox("Surface Treat", value=p["surface_treat"], key=f"st_{idx}")
             sterilized = st.checkbox("Sterilize", value=p["sterilize"], key=f"ster_{p['product_id']}_{p['id']}_{idx}")
-            reason = st.text_area("Reason for Update", max_chars=255, key=f"rsn_{idx}")
+            reason = st.text_area("Reason for Update", max_chars=255, key=f"rsn_{idx}").strip()
 
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Update Product", key=f"btn_upd_{idx}"):
-                    if not reason.strip():
+                    if not reason:
                         st.warning("A reason is required to perform an update.")
                         return
 

@@ -11,6 +11,16 @@ from constants.storage_constants import STAGE_SHELF_RULES
 
 
 def render_shelf_stage_mismatch_report():
+    """
+    Component to compare product storage locations against product status
+    to ensure products are properly stored
+
+    - Fetches available storage locations
+    - Fetches products 
+    - Compares product status to storage location and identifies mismatch
+    - Allows user to update location if necessary
+    - Updates product_tracking table location_id
+    """
     st.subheader("🔍 Shelf/Stage Mismatch Report")
 
     with get_session() as db:
@@ -78,10 +88,10 @@ def render_shelf_stage_mismatch_report():
                 key=f"shelf_select_{item['product_id']}"
             )
 
-            reason = st.text_area("Reason for correction", key=f"reason_{item['product_id']}")
+            reason = st.text_area("Reason for correction", key=f"reason_{item['product_id']}").strip()
 
             if st.button(f"Submit Fix for {item['product_id']}", key=f"submit_{item['product_id']}"):
-                if not reason.strip():
+                if not reason:
                     st.warning("Please provide a reason.")
                     return
                 

@@ -83,6 +83,7 @@ BEGIN
     CREATE TABLE lids (
         id INT PRIMARY KEY IDENTITY(1,1),
         serial_number NVARCHAR(100) NOT NULL UNIQUE,
+        quantity INT NOT NULL,
         location_id INT NOT NULL,
         received_at DATETIME2 NOT NULL DEFAULT GETDATE(),
         received_by INT NOT NULL,
@@ -91,6 +92,23 @@ BEGIN
         CONSTRAINT fk_lid_location
             FOREIGN KEY (location_id) REFERENCES storage_locations(id),
         CONSTRAINT fk_lid_user FOREIGN KEY (received_by) REFERENCES users(id)
+    );
+END;
+
+IF OBJECT_ID('seals', 'U') IS NULL
+BEGIN 
+    CREATE TABLE seals (
+        id INT PRIMARY KEY IDENTITY(1,1),
+        serial_number NVARCHAR(100) NOT NULL UNIQUE,
+        quantity INT NOT NULL,
+        location_id INT NOT NULL,
+        received_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+        received_by INT NOT NULL,
+        qc_result NVARCHAR(10) NOT NULL CHECK (qc_result IN ('PASS', 'FAIL')),
+
+        CONSTRAINT fk_seal_location
+            FOREIGN KEY (location_id) REFERENCES storage_locations(id),
+        CONSTRAINT fk_seal_user FOREIGN KEY (received_by) REFERENCES users(id)
     );
 END;
 
@@ -169,6 +187,15 @@ BEGIN
         average_weight DECIMAL(6,2) NOT NULL,
         buffer_weight DECIMAL(4,2) NOT NULL,
         is_active BIT NOT NULL DEFAULT 1
+    );
+END;
+
+IF OBJECT_ID('supplements', 'U') IS NULL
+BEGIN
+    CREATE TABLE supplements (
+        id INT PRIMARY KEY IDENTITY(1,1),
+        name NVARCHAR(100) NOT NULL UNIQUE,
+        is_active BIT DEFAULT 1
     );
 END;
 
@@ -269,6 +296,26 @@ BEGIN
         CONSTRAINT fk_status_from_stage FOREIGN KEY (from_stage_id) REFERENCES lifecycle_stages(id),
         CONSTRAINT fk_status_to_stage FOREIGN KEY (to_stage_id) REFERENCES lifecycle_stages(id),
         CONSTRAINT fk_status_user FOREIGN KEY (changed_by) REFERENCES users(id)
+    );
+END;
+
+-- ======= MATERIAL USAGE TRACKING ========
+IF OBJECT_ID('material_usage', 'U') IS NULL
+BEGIN
+    CREATE TABLE material_usage (
+        id INT IDENTITY PRIMARY KEY,
+        product_id INT NOT NULL,
+        harvest_id INT NULL,
+        material_type NVARCHAR(50) NOT NULL CHECK (material_type IN ('Filament', 'Lid', 'Seal')),
+        lot_number NVARCHAR(100) NOT NULL,
+        used_quantity DECIMAL(10, 2) NOT NULL,
+        used_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+        used_by INT NOT NULL,
+        reason NVARCHAR(255),
+
+        CONSTRAINT fk_usage_product FOREIGN KEY (product_id) REFERENCES product_tracking(id),
+        CONSTRAINT fk_usage_harvest FOREIGN KEY (harvest_id) REFERENCES product_harvest(id),
+        CONSTRAINT fk_usage_user FOREIGN KEY (used_by) REFERENCES users(id)
     );
 END;
 
@@ -376,14 +423,45 @@ IF OBJECT_ID('orders', 'U') IS NULL
 BEGIN
     CREATE TABLE orders (
         id INT PRIMARY KEY IDENTITY(1,1),
+        parent_order_id INT,
         customer_id INT NOT NULL,
         order_date DATETIME2 NOT NULL DEFAULT GETDATE(),
         order_creator_id INT NOT NULL,
         status NVARCHAR(20) NOT NULL CHECK (status IN ('Processing', 'Shipped', 'Completed', 'Canceled')),
         updated_at DATETIME2 DEFAULT GETDATE(),
+        updated_by INT NOT NULL,
+        notes NVARCHAR(255),
 
+        CONSTRAINT fk_order_parent FOREIGN KEY (parent_order_id) REFERENCES orders(id),
         CONSTRAINT fk_order_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
-        CONSTRAINT fk_order_creator FOREIGN KEY (order_creator_id) REFERENCES users(id)
+        CONSTRAINT fk_order_creator FOREIGN KEY (order_creator_id) REFERENCES users(id),
+        CONSTRAINT fk_order_updated_by FOREIGN KEY (updated_by) REFERENCES users(id)
+    );
+END;
+
+IF OBJECT_ID('order_items', 'U') IS NULL
+BEGIN
+    CREATE TABLE order_items (
+        id INT PRIMARY KEY IDENTITY(1,1),
+        order_id INT NOT NULL,
+        product_type_id INT NOT NULL,
+        quantity INT NOT NULL CHECK (quantity > 0),
+
+        CONSTRAINT fk_order_items_order FOREIGN KEY (order_id) REFERENCES orders(id),
+        CONSTRAINT fk_order_items_type FOREIGN KEY (product_type_id) REFERENCES product_types(id)
+    );
+END;
+
+IF OBJECT_ID('order_supplements', 'U') IS NULL
+BEGIN
+    CREATE TABLE order_supplements (
+        id INT PRIMARY KEY IDENTITY(1,1),
+        order_id INT NOT NULL,
+        supplement_id INT NOT NULL,
+        quantity INT NOT NULL CHECK (quantity > 0),
+
+        CONSTRAINT fk_order_supp_order FOREIGN KEY (order_id) REFERENCES orders(id),
+        CONSTRAINT fk_order_supp_supplement FOREIGN KEY (supplement_id) REFERENCES supplements(id)
     );
 END;
 
@@ -399,12 +477,15 @@ BEGIN
         delivery_date DATETIME2,
         status NVARCHAR(20) NOT NULL CHECK (status IN ('Pending', 'Shipped', 'In Transit', 'Delivered', 'Returned', 'Canceled')),
         updated_at DATETIME2 DEFAULT GETDATE(),
+        updated_by INT NOT NULL,
         tracking_number NVARCHAR(50),
         carrier NVARCHAR(50),
+        notes NVARCHAR(255),
 
         CONSTRAINT fk_shipment_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
         CONSTRAINT fk_shipment_order FOREIGN KEY (order_id) REFERENCES orders(id),
-        CONSTRAINT fk_shipment_creator FOREIGN KEY (creator_id) REFERENCES users(id)
+        CONSTRAINT fk_shipment_creator FOREIGN KEY (creator_id) REFERENCES users(id),
+        CONSTRAINT fk_shipment_update_user FOREIGN KEY (updated_by) REFERENCES users(id)
     );
 END;
 

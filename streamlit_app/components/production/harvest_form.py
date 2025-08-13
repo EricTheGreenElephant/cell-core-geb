@@ -6,6 +6,7 @@ from services.production_services import (
     cancel_product_request
 )
 from services.lid_services import get_available_lid_batches
+from services.seal_services import get_available_seal_batches
 from services.filament_service import get_mountable_filament_mounts
 from db.orm_session import get_session
 
@@ -46,6 +47,7 @@ def render_harvest_form():
                 
                 with get_session() as db:
                     lid_batches = get_available_lid_batches(db)
+                    seal_batches = get_available_seal_batches(db)
 
                 if lid_batches:
                     lid_options = {f"{l['serial_number']}": l["id"] for l in lid_batches}
@@ -55,7 +57,13 @@ def render_harvest_form():
                     st.warning("No passing lid batches available.")
                     lid_id = None
 
-                seal_id = st.text_input("Input the seal id number", max_chars=50, key=f"seal_{unit['id']}")
+                if seal_batches:
+                    seal_options = {f"{s['serial_number']}": s["id"] for s in seal_batches}
+                    selected_seal = st.selectbox("Select Seal Batch", options=list(seal_options.keys()), key=f"seal_{unit['id']}")
+                    seal_id = seal_options[selected_seal]
+                else:
+                    st.warning("No passing seal batches available.")
+                    seal_id = None
 
                 # col_spacer is a column added only for width spacing
                 col1, col2, col_spacer = st.columns([0.5, 0.5, 1])
@@ -65,7 +73,7 @@ def render_harvest_form():
                     cancel = st.form_submit_button("❌ Cancel Product", use_container_width=True)
 
                 if submitted:
-                    if not seal_id.strip():
+                    if not seal_id:
                         st.warning("Please enter seal id.")
                         return
                     

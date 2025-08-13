@@ -5,7 +5,14 @@ from services.filament_service import restore_acclimatizing_filaments, delete_fi
 
 
 def render_restore_acclimatization_form():
-    st.markdown("### Restore Acclimatization")
+    """
+    Creates form that allows users remove filament mistakenly added to filament_acclimatization table
+
+    - Fetches filaments currently in acclimatization
+    - Deletes recored from the filament_acclimatization table
+    - Inserts record into audit_log table
+    """
+    st.subheader("Restore Acclimatization")
 
     try: 
         with get_session() as db:
@@ -21,10 +28,10 @@ def render_restore_acclimatization_form():
         }
 
         selection = st.selectbox("Select filament to restore", list(option_labels.keys()))
-        reason = st.text_area("Reason for restoration", max_chars=255)
+        reason = st.text_area("Reason for restoration", max_chars=255).strip()
 
         if st.button("Restore Acclimatization"):
-            if not reason.strip():
+            if not reason:
                 st.warning("Please provide a reason for the change.")
                 return
             
