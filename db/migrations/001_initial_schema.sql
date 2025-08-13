@@ -423,6 +423,7 @@ IF OBJECT_ID('orders', 'U') IS NULL
 BEGIN
     CREATE TABLE orders (
         id INT PRIMARY KEY IDENTITY(1,1),
+        parent_order_id INT,
         customer_id INT NOT NULL,
         order_date DATETIME2 NOT NULL DEFAULT GETDATE(),
         order_creator_id INT NOT NULL,
@@ -431,6 +432,7 @@ BEGIN
         updated_by INT NOT NULL,
         notes NVARCHAR(255),
 
+        CONSTRAINT fk_order_parent FOREIGN KEY (parent_order_id) REFERENCES orders(id),
         CONSTRAINT fk_order_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
         CONSTRAINT fk_order_creator FOREIGN KEY (order_creator_id) REFERENCES users(id),
         CONSTRAINT fk_order_updated_by FOREIGN KEY (updated_by) REFERENCES users(id)

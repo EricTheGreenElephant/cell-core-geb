@@ -39,7 +39,7 @@ def render_product_request_form():
                         st.error(e)
                     if info:
                         st.info(info)
-                    st.stop()
+                    return
                 else:
                     try:
                         payload = ProductRequestCreate(

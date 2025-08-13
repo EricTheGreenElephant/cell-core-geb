@@ -75,11 +75,11 @@ def render_harvest_form():
                 if submitted:
                     if not seal_id:
                         st.warning("Please enter seal id.")
-                        st.stop()
+                        return
                     
                     if not lid_id:
                         st.warning("Please select a lid.")
-                        st.stop()
+                        return
                     
                     try:
                         mount_id = mount_options[selected_mount]
