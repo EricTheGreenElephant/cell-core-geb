@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from schemas.sales_schemas import SalesOrderInput
 from models.sales_models import Order, OrderItem, OrderSupplement
 from models.production_models import ProductType, Supplement
+from models.sales_catalogue_models import SalesCatalogue
 from utils.db_transaction import transactional
 
 
@@ -148,3 +149,7 @@ def get_canceled_orders_with_items(db: Session, order_id: int) -> dict:
         "product_items": [dict(r._mapping) for r in product_rows],
         "supplements": [dict(r._mapping) for r in supplement_rows]
     }
+
+def get_active_sales_catalogue(db: Session) -> list[SalesCatalogue]:
+    stmt = select(SalesCatalogue).where(SalesCatalogue.is_active == True).order_by(SalesCatalogue.article_number)
+    return db.execute(stmt).scalars().all()
