@@ -1,5 +1,5 @@
 from sqlalchemy import text, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from schemas.sales_schemas import SalesOrderInput
 from models.sales_models import Order, OrderItem, OrderSupplement
 from models.production_models import ProductType, Supplement
@@ -151,5 +151,13 @@ def get_canceled_orders_with_items(db: Session, order_id: int) -> dict:
     }
 
 def get_active_sales_catalogue(db: Session) -> list[SalesCatalogue]:
-    stmt = select(SalesCatalogue).where(SalesCatalogue.is_active == True).order_by(SalesCatalogue.article_number)
+    stmt = (
+        select(SalesCatalogue)
+        .options(
+            selectinload(SalesCatalogue.products),
+            selectinload(SalesCatalogue.supplements)
+        )
+        .where(SalesCatalogue.is_active == True)
+        .order_by(SalesCatalogue.article_number)
+    )
     return db.execute(stmt).scalars().all()
