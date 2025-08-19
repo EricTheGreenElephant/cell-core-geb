@@ -2,6 +2,7 @@ from PIL import Image, ImageDraw, ImageFont
 import qrcode
 from io import BytesIO
 
+
 def generate_label_with_overlays(
     background_path: str,
     fields: list[dict],
@@ -29,7 +30,12 @@ def generate_label_with_overlays(
     qr_img = qrcode.make(qr_data).resize((qr_size, qr_size)).convert("RGBA")
     base.paste(qr_img, qr_position, qr_img)
 
+    bg = Image.new("RGBA", base.size, (255, 255, 255, 255))
+    flattened = Image.alpha_composite(bg, base)
+    rgb_base = flattened.convert("RGB")
+
     output = BytesIO()
-    base.save(output, format="PNG")
+    # base.save(output, format="PNG") 
+    rgb_base.save(output, format="PDF")
     output.seek(0)
     return output

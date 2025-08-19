@@ -1,7 +1,9 @@
 import streamlit as st
+import base64
 from components.label.label_generator import generate_label_with_overlays
 from services.label_services import get_label_data_by_product_id
 from db.orm_session import get_session
+from streamlit.components.v1 import html
 
 
 def render_label_form():
@@ -58,14 +60,31 @@ def render_label_form():
         )
 
         st.success("Label generated.")
-        st.image(label_img, caption="Generated Label", use_container_width=False)
+
+        # --- Inline PDF preview(iframe) ---
+        pdf_b64 = base64.b64encode(label_img.getvalue()).decode("utf-8")
+        html(
+            f"""
+            <iframe
+                src="data:application/pdf;base64,{pdf_b64}"
+                width="100%"
+                height="700"
+                style="border:1px solid #ddd; border-radius:8px;"
+            ></iframe>
+            """,
+            height=720
+        )
+
+        # st.image(label_img, caption="Generated Label", use_container_width=False)
 
         st.download_button(
             label="Download Label",
             type="primary",
             data=label_img,
-            file_name=f"label_{product_id}.png",
-            mime="image/png",
+            # file_name=f"label_{product_id}.png",
+            file_name=f"label_{product_id}.pdf",
+            # mime="image/png",
+            mime="application/pdf",
             use_container_width=True
         )
     
