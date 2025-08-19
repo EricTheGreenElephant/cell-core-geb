@@ -1,9 +1,12 @@
+from datetime import datetime, timezone
 from sqlalchemy import text, select
 from sqlalchemy.orm import Session, selectinload
 from schemas.sales_schemas import SalesOrderInput
+from schemas.audit_schemas import FieldChangeAudit
 from models.sales_models import Order, OrderItem, OrderSupplement
 from models.production_models import ProductType, Supplement
 from models.sales_catalogue_models import SalesCatalogue
+from services.audit_services import update_record_with_audit
 from utils.db_transaction import transactional
 
 
@@ -161,3 +164,189 @@ def get_active_sales_catalogue(db: Session) -> list[SalesCatalogue]:
         .order_by(SalesCatalogue.article_number)
     )
     return db.execute(stmt).scalars().all()
+
+@transactional
+def update_sales_order(db: Session, order_id: int, data: SalesOrderInput):
+    order = db.query(Order).filter(Order.id == order_id).first()
+
+    now = str(datetime.now(timezone.utc))
+    updates = {}
+
+    if order.notes != data.notes:
+        updates["notes"] = (order.notes, data.notes)
+        order.notes = data.notes
+
+    if order.updated_by != data.updated_by:
+        updates["updated_by"] = (order.updated_by, data.updated_by)
+    
+    if str(order.updated_at) != str(now):
+        updates["updated_at"] = (str(order.updated_at, now))
+        order.updated_at = now
+    
+    for field, (old, new) in updates.items():
+        audit = FieldChangeAudit(
+            table="orders",
+            record_id=order_id,
+            field=field,
+            old_value=old,
+            new_value=new,
+            reason="Sales order updated",
+            changed_by=data.updated_by
+        )
+        update_record_with_audit(db, audit)
+
+    existing_items = {
+        row.product_type_id: row
+        for row in db.execute(select(OrderItem).where(OrderItem.order_id == order_id)).scalars()
+    }
+
+    for pid, new_qty in data.product_quantities.items():
+        old_item = existing_items.get(pid)
+        if old_item:
+            if old_item.quantity != new_qty:
+                update_record_with_audit(
+                    db,
+                    FieldChangeAudit(
+                        table="order_items",
+                        record_id=old_item.id,
+                        field="quantity",
+                        old_value=old_item.quantity,
+                        new_value=new_qty,
+                        reason="Sales order updated",
+                        changed_by=data.updated_by
+                    ),
+                    update=True
+                )
+                old_item.quantity = new_qty
+            else:
+                item = OrderItem(order_id=order_id, product_type_id=pid, quantity=new_qty)
+                db.add(item)
+                db.flush()
+                update_record_with_audit(
+                    db,
+                    FieldChangeAudit(
+                        table="order_items",
+                        record_id=item.id,
+                        field="quantity",
+                        old_value=None,
+                        new_value=new_qty,
+                        reason="Product item added to order",
+                        changed_by=data.updated_by
+                    ),
+                    update=False
+                )
+    existing_supps = {
+        row.supplement_id: row 
+        for row in db.execute(select(OrderSupplement).where(OrderSupplement.order_id == order_id)).scalars()
+    }
+
+    for sid, new_qty in data.supplement_quantities.items():
+        old_supp = existing_supps.get(sid)
+        if old_supp:
+            if old_supp.quantity != new_qty:
+                update_record_with_audit(
+                    db,
+                    FieldChangeAudit(
+                        table="order_supplements",
+                        record_id=old_supp.id,
+                        field="quantity",
+                        old_value=old_supp.quantity,
+                        new_value=new_qty,
+                        reason="Sales order updated",
+                        changed_by=data.updated_by
+                    ),
+                    update=True
+                )
+                old_supp.quantity = new_qty
+        
+        else:
+            supp = OrderSupplement(order_id=order_id, supplement_id=sid, quantity=new_qty)
+            db.add(supp)
+            db.flush()
+            update_record_with_audit(
+                db,
+                FieldChangeAudit(
+                    table="order_supplements",
+                    record_id=supp.id,
+                    field="quantity",
+                    old_value=None,
+                    new_value=new_qty,
+                    reason="Supplement item added to order",
+                    changed_by=data.updated_by
+                ),
+                update=False
+            )
+    
+    db.commit()
+
+def _get_order_header_query() -> str:
+    return """
+        SELECT 
+            o.id AS order_id,
+            c.customer_name,
+            o.order_date,
+            o.notes,
+            o.parent_order_id,
+            o.status,
+            o.updated_at,
+            o.updated_by,
+            o.customer_id
+        FROM orders o
+        JOIN customers c ON o.customer_id = c.id
+
+    """
+
+def _get_product_items_query() -> str:
+    return """
+        SELECT
+            oi.id,
+            oi.product_type_id,
+            pt.name AS product_type,
+            oi.quantity
+        FROM order_items oi
+        JOIN product_types pt ON oi.product_type_id = pt.id
+        WHERE oi.order_id = :oid
+    """
+
+def _get_supplements_query() -> str:
+    return """
+        SELECT
+            os.id,
+            os.supplement_id,
+            s.name AS supplement_name,
+            os.quantity
+        FROM order_supplements os
+        JOIN supplements s ON os.supplement_id = s.id
+        WHERE os.order_id = :oid
+    """
+
+def get_processing_order_with_items(db: Session, order_id: int) -> dict | None: 
+    header_query = _get_order_header_query() + " WHERE o.id = :oid AND o.status = 'Processing'"
+    order_row = db.execute(text(header_query), {"oid": order_id}).mappings().first()
+
+    if not order_row:
+        return None
+    
+    product_items = db.execute(
+        text(_get_product_items_query()), {"oid": order_id}
+    ).mappings().all()
+
+    supplements = db.execute(
+        text(_get_supplements_query()), {"oid": order_id}
+    ).mappings().all()
+
+    return {
+        **order_row,
+        "product_items": list(product_items),
+        "supplements": list(supplements)
+    }
+
+def get_product_type_names(db: Session) -> dict[int, str]:
+    stmt = select(ProductType.id, ProductType.name).where(ProductType.is_active == True)
+    result = db.execute(stmt).fetchall()
+    return {id: name for id, name in result}
+
+def get_supplement_names(db: Session) -> dict[int, str]:
+    stmt = select(Supplement.id, Supplement.name).where(Supplement.is_active == True)
+    result = db.execute(stmt).fetchall()
+    return {id: name for id, name in result}

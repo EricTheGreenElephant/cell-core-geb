@@ -4,30 +4,33 @@ from datetime import datetime, timezone
 from schemas.audit_schemas import FieldChangeAudit
 from services.audit_services import update_record_with_audit
 from services.tracking_service import update_product_stage
+from services.sales_services import _get_order_header_query
 from models.shipment_models import Shipment, ShipmentItem
 from models.sales_models import Order
 from utils.db_transaction import transactional
 
 
 def get_open_order_headers(db: Session) -> list[dict]:
-    result = db.execute(text(
-        """
-            SELECT
-                o.id AS order_id,
-                c.customer_name,
-                o.order_date,
-                o.notes,
-                o.parent_order_id,
-                o.status,
-                o.updated_at,
-                o.updated_by,
-                o.customer_id
-            FROM orders o
-            JOIN customers c On o.customer_id = c.id
-            WHERE o.status = 'Processing'
-            ORDER BY o.order_date ASC
-        """
-    )).fetchall()
+    query = _get_order_header_query() + " WHERE o.status = 'Processing' ORDER BY o.order_date ASC"
+    result = db.execute(text(query)).fetchall()
+    # result = db.execute(text(
+    #     """
+    #         SELECT
+    #             o.id AS order_id,
+    #             c.customer_name,
+    #             o.order_date,
+    #             o.notes,
+    #             o.parent_order_id,
+    #             o.status,
+    #             o.updated_at,
+    #             o.updated_by,
+    #             o.customer_id
+    #         FROM orders o
+    #         JOIN customers c On o.customer_id = c.id
+    #         WHERE o.status = 'Processing'
+    #         ORDER BY o.order_date ASC
+    #     """
+    # )).fetchall()
     return [dict(r._mapping) for r in result]
 
 def get_open_orders_with_items(db: Session, order_id: int) -> dict:
