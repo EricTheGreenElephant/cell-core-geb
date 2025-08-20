@@ -76,29 +76,48 @@ def render_treatment_qc_form():
         sample_size = max(2, round(0.05 * total))
         actual_sample_size = min(sample_size, total)
 
-        # Sets the random sample to prevent re-randomizing product selection when user changes visual pass option
-        sample_key = f"sample_batch_{batch_id}"
-        if sample_key not in st.session_state:
-            st.session_state[sample_key] = sample(products, actual_sample_size)
-        random_sample = st.session_state[sample_key]
-
-        st.markdown(f"**Randomly Selected for Visual Inspection: {sample_size} of {total} products**")
+        mode_key = f"inspection_mode_{batch_id}"
+        inspection_mode = st.radio(
+            "Inspection Mode",
+            options=["Random sample (≈5%)", "Inspect all products (override)"],
+            index=0,
+            horizontal=True,
+            key=mode_key,
+            help="Choose 'Inspect all products' to force 100% visual inspection (useful for new 3rd-party treatment)."
+        )
+        override_all = inspection_mode == "Inspect all products (override)"
 
         failed_sample = False
         sample_visual_results = {}
-        for i, p in enumerate(random_sample):
-            if p["current_status"] == 'B-Ware':
-                inspection_result = 'B-Ware'
-            else:
-                inspection_result = 'A-Ware'
-            st.markdown(f"**Sample #{i+1}: Product #{p['product_id']} - {p['product_type']}: {inspection_result}**")
-            p["visual_pass"] = st.radio(
-                f"Visual Pass (Product #{p['product_id']})", [True, False], horizontal=True, key=f"vis_{p['product_id']}"
-            )
-            sample_visual_results[p["product_id"]] = p["visual_pass"]
-            if not p['visual_pass']:
-                failed_sample = True
+
+        if not override_all:
+            # Sets the random sample to prevent re-randomizing product selection when user changes visual pass option
+            sample_key = f"sample_batch_{batch_id}"
+            if sample_key not in st.session_state:
+                st.session_state[sample_key] = sample(products, actual_sample_size)
+            random_sample = st.session_state[sample_key]
+
+            st.markdown(f"**Randomly Selected for Visual Inspection: {sample_size} of {total} products**")
+
+
+            for i, p in enumerate(random_sample):
+                if p["current_status"] == 'B-Ware':
+                    inspection_result = 'B-Ware'
+                else:
+                    inspection_result = 'A-Ware'
+                st.markdown(f"**Sample #{i+1}: Product #{p['product_id']} - {p['product_type']}: {inspection_result}**")
+                p["visual_pass"] = st.radio(
+                    f"Visual Pass (Product #{p['product_id']})", [True, False], horizontal=True, key=f"vis_{p['product_id']}"
+                )
+                sample_visual_results[p["product_id"]] = p["visual_pass"]
+                if not p['visual_pass']:
+                    failed_sample = True
+        else:
+            st.info("Override enabled: 100% visual inspection required for this batch.")
         
+        if override_all:
+            failed_sample = True
+
         st.divider()
         st.markdown("### Full Inspection")
 
@@ -136,7 +155,11 @@ def render_treatment_qc_form():
             if failed_sample:
                 default_vis = sample_visual_results.get(p["product_id"], True)
                 visual = st.radio(
-                    "Visual Pass", [True, False], index=0 if default_vis else 1, horizontal=True, key=f"full_vis_{p['product_id']}"
+                    "Visual Pass", 
+                    [True, False], 
+                    index=0 if default_vis else 1, 
+                    horizontal=True, 
+                    key=f"full_vis_{p['product_id']}"
                 )
             
             prior_result = p["current_status"]

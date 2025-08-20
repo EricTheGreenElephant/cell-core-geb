@@ -557,6 +557,86 @@ BEGIN
     );
 END;
 
+-- ======= ISSUE CODES =======
+IF OBJECT_ID('issue_reasons', 'U') IS NULL
+BEGIN
+    CREATE TABLE issue_reasons (
+        id INT IDENTITY PRIMARY KEY,
+        reason_code NVARCHAR(50) NOT NULL UNIQUE,
+        reason_label NVARCHAR(120) NOT NULL,
+        category NVARCHAR(50) NOT NULL,
+        default_outcome NVARCHAR(20) NULL CHECK (default_outcome IN ('B-Ware', 'Waste', 'Quarantine')),
+        severity TINYINT NULL,
+        is_active BIT NOT NULL DEFAULT 1,
+        created_at DATETIME2 NOT NULL DEFAULT GETDATE()
+    );
+END;
+
+IF OBJECT_ID('issue_contexts', 'U') IS NULL
+BEGIN 
+    CREATE TABLE issue_contexts (
+        id INT IDENTITY PRIMARY KEY,
+        context_code NVARCHAR(50) NOT NULL UNIQUE
+    );
+
+    INSERT INTO issue_contexts (context_code)
+    SELECT v.context_code
+    FROM (VALUES ('HarvestQC'), ('PostTreatmentQC'), ('Quarantine'), ('AdHoc')) v(context_code)
+    WHERE NOT EXISTS (SELECT 1 FROM issue_contexts ic WHERE ic.context_code = v.context_code);
+END;
+
+IF OBJECT_ID('issue_reason_contexts', 'U') IS NULL
+BEGIN
+    CREATE TABLE issue_reason_contexts (
+        id INT IDENTITY PRIMARY KEY,
+        reason_id INT NOT NULL,
+        context_id INT NOT NULL,
+        
+        CONSTRAINT fk_irc_reason FOREIGN KEY (reason_id) REFERENCES issue_reasons(id),
+        CONSTRAINT fk_irc_context FOREIGN KEY (context_id) REFERENCES issue_contexts(id),
+        CONSTRAINT uc_reason_context UNIQUE (reason_id, context_id)
+    );
+END;
+
+IF OBJECT_ID('product_quality_control_reasons', 'U') IS NULL
+BEGIN
+    CREATE TABLE product_quality_control_reasons (
+        id INT IDENTITY PRIMARY KEY,
+        qc_id INT NOT NULL,
+        reason_id INT NOT NULL,
+
+        CONSTRAINT fk_pqc_reason_qc FOREIGN KEY (qc_id) REFERENCES product_quality_control(id),
+        CONSTRAINT fk_pqc_reason_reason FOREIGN KEY (reason_id) REFERENCES issue_reasons(id),
+        CONSTRAINT uc_pqc_reason UNIQUE (qc_id, reason_id)
+    );
+END;
+
+IF OBJECT_ID('post_treatment_inspection_reasons', 'U') IS NULL
+BEGIN
+    CREATE TABLE post_treatment_inspection_reasons (
+        id INT IDENTITY PRIMARY KEY,
+        inspection_id INT NOT NULL,
+        reason_id INT NOT NULL,
+
+        CONSTRAINT fk_pti_reason_inspection FOREIGN KEY (inspection_id) REFERENCES post_treatment_inspections(id),
+        CONSTRAINT fk_pti_reason_reason FOREIGN KEY (reason_id) REFERENCES issue_reasons(id),
+        CONSTRAINT uc_pti_reason UNIQUE (inspection_id, reason_id)
+    );
+END;
+
+IF OBJECT_ID('quarantined_product_reasons', 'U') IS NULL
+BEGIN
+    CREATE TABLE quarantined_product_reasons (
+        id INT IDENTITY PRIMARY KEY,
+        quarantine_id INT NOT NULL,
+        reason_id INT NOT NULL,
+
+        CONSTRAINT fk_qpr_quarantine FOREIGN KEY (quarantine_id) REFERENCES quarantined_products(id),
+        CONSTRAINT fk_qpr_reason FOREIGN KEY (reason_id) REFERENCES issue_reasons(id),
+        CONSTRAINT uc_qpr UNIQUE (quarantine_id, reason_id)
+    );
+END;
+
 -- ========== VIEWS ==========
 IF OBJECT_ID('v_product_lifecycle', 'V') IS NULL
 BEGIN
