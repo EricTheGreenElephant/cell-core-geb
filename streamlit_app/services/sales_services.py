@@ -1,3 +1,5 @@
+import streamlit as st
+from collections import defaultdict
 from datetime import datetime, timezone
 from sqlalchemy import text, select
 from sqlalchemy.orm import Session, selectinload
@@ -180,8 +182,8 @@ def update_sales_order(db: Session, order_id: int, data: SalesOrderInput):
         updates["updated_by"] = (order.updated_by, data.updated_by)
     
     if str(order.updated_at) != str(now):
-        updates["updated_at"] = (str(order.updated_at, now))
-        order.updated_at = now
+        updates["updated_at"] = (str(order.updated_at), now)
+        order.updated_at = datetime.now(timezone.utc)
     
     for field, (old, new) in updates.items():
         audit = FieldChangeAudit(
@@ -218,23 +220,23 @@ def update_sales_order(db: Session, order_id: int, data: SalesOrderInput):
                     update=True
                 )
                 old_item.quantity = new_qty
-            else:
-                item = OrderItem(order_id=order_id, product_type_id=pid, quantity=new_qty)
-                db.add(item)
-                db.flush()
-                update_record_with_audit(
-                    db,
-                    FieldChangeAudit(
-                        table="order_items",
-                        record_id=item.id,
-                        field="quantity",
-                        old_value=None,
-                        new_value=new_qty,
-                        reason="Product item added to order",
-                        changed_by=data.updated_by
-                    ),
-                    update=False
-                )
+        else:
+            item = OrderItem(order_id=order_id, product_type_id=pid, quantity=new_qty)
+            db.add(item)
+            db.flush()
+            update_record_with_audit(
+                db,
+                FieldChangeAudit(
+                    table="order_items",
+                    record_id=item.id,
+                    field="quantity",
+                    old_value=None,
+                    new_value=new_qty,
+                    reason="Product item added to order",
+                    changed_by=data.updated_by
+                ),
+                update=False
+            )
     existing_supps = {
         row.supplement_id: row 
         for row in db.execute(select(OrderSupplement).where(OrderSupplement.order_id == order_id)).scalars()
@@ -320,33 +322,137 @@ def _get_supplements_query() -> str:
         WHERE os.order_id = :oid
     """
 
-def get_processing_order_with_items(db: Session, order_id: int) -> dict | None: 
-    header_query = _get_order_header_query() + " WHERE o.id = :oid AND o.status = 'Processing'"
-    order_row = db.execute(text(header_query), {"oid": order_id}).mappings().first()
+def get_processing_order_with_items(db: Session, order_id: int = None, all_orders: bool = False) -> dict | list[dict] | None: 
+    base_query = _get_order_header_query()
 
-    if not order_row:
-        return None
+    if all_orders:
+        query = base_query + " WHERE o.status = 'Processing' ORDER BY o.order_date ASC"
+        orders = db.execute(text(query)).mappings().all()
+        results = []
+
+        for order in orders:
+            oid = order["order_id"]
+            product_items = db.execute(text(_get_product_items_query()), {"oid": oid}).mappings().all()
+            supplements = db.execute(text(_get_supplements_query()), {"oid": oid}).mappings().all()
+
+            results.append({
+                **order,
+                "product_items": list(product_items),
+                "supplements": list(supplements)
+            })
+        return results
     
-    product_items = db.execute(
-        text(_get_product_items_query()), {"oid": order_id}
-    ).mappings().all()
+    elif order_id is not None:
+        query = base_query + " WHERE o.id = :oid AND o.status = 'Processing'"
+        order_row = db.execute(text(query), {"oid": order_id}).mappings().first()
+        if not order_row:
+            return None
+        
+        product_items = db.execute(text(_get_product_items_query()), {"oid": order_id}).mappings().all()
+        supplements = db.execute(text(_get_supplements_query()), {"oid": order_id}).mappings().all()
 
-    supplements = db.execute(
-        text(_get_supplements_query()), {"oid": order_id}
-    ).mappings().all()
+        return {
+            **order_row,
+            "product_items": list(product_items),
+            "supplements": list(supplements)
+        }
+    
+    return None
 
-    return {
-        **order_row,
-        "product_items": list(product_items),
-        "supplements": list(supplements)
-    }
+def build_catalogue_quantity_inputs(catalogues, mode: str) -> dict[int, int]:
+    """
+        Display catalogue packages in expandable panels and collect quantity inputs.
 
-def get_product_type_names(db: Session) -> dict[int, str]:
-    stmt = select(ProductType.id, ProductType.name).where(ProductType.is_active == True)
-    result = db.execute(stmt).fetchall()
-    return {id: name for id, name in result}
+        Returns a dict of {catalogue_id: quantity}
+    """
+    st.markdown("#### Select Catalogue Packages and Quantities")
+    package_quantities = {}
 
-def get_supplement_names(db: Session) -> dict[int, str]:
-    stmt = select(Supplement.id, Supplement.name).where(Supplement.is_active == True)
-    result = db.execute(stmt).fetchall()
-    return {id: name for id, name in result}
+    for cat in catalogues:
+        key = f"catalogue:{mode}:{cat.id}"
+
+        with st.expander(f"{cat.package_name} (${cat.price:.2f})"):
+            st.markdown(f"*{cat.package_desc}*")
+            qty = st.number_input(
+                label="Quantity",
+                min_value=0,
+                step=1,
+                value=st.session_state.get(key, 0),
+                key=key
+            )
+            package_quantities[cat.id] = qty
+    
+    return package_quantities
+
+def show_order_quantity_summary(product_quantities, supplement_quantities, product_lookup, supplement_lookup):
+    if not product_quantities and not supplement_quantities:
+        return
+    
+    st.markdown("#### Summary of Order Quantities")
+
+    if product_quantities:
+        st.markdown("**Products:**")
+        for pid, qty in product_quantities.items():
+            name = product_lookup.get(pid, f"Unknown Product {pid}")
+            st.markdown(f"- {name}: {qty}")
+    
+    if supplement_quantities:
+        st.markdown("**Supplements:**")
+        for sid, qty in supplement_quantities.items():
+            name = supplement_lookup.get(sid, f"Unknown Supplement {sid}")
+            st.markdown(f"- {name}: {qty}")
+
+def calculate_order_totals_from_catalogue(catalogues: list[SalesCatalogue], package_quantities: dict[int, int]) -> tuple[dict[int, int], dict[int, int]]:
+    """
+    Given cataloge packages and selected package quantities, returns total product
+    quantities and supplement quantities.
+
+    Returns:
+        - dict[product_type_id, total_quantity]
+        - dict[supplement_id, total_quantity]
+    """
+    product_quantities = defaultdict(int)
+    supplement_quantities = defaultdict(int)
+
+    for cat in catalogues:
+        count = package_quantities.get(cat.id, 0)
+        if count == 0:
+            continue
+
+        for p in cat.products:
+            product_quantities[p.product_id] += p.product_quantity * count
+        
+        for s in cat.supplements:
+            supplement_quantities[s.supplement_id] += s.supplement_quantity * count
+        
+    return dict(product_quantities), dict(supplement_quantities)
+
+#     header_query = _get_order_header_query() + " WHERE o.id = :oid AND o.status = 'Processing'"
+#     order_row = db.execute(text(header_query), {"oid": order_id}).mappings().first()
+
+#     if not order_row:
+#         return None
+    
+#     product_items = db.execute(
+#         text(_get_product_items_query()), {"oid": order_id}
+#     ).mappings().all()
+
+#     supplements = db.execute(
+#         text(_get_supplements_query()), {"oid": order_id}
+#     ).mappings().all()
+
+#     return {
+#         **order_row,
+#         "product_items": list(product_items),
+#         "supplements": list(supplements)
+#     }
+
+# def get_product_type_names(db: Session) -> dict[int, str]:
+#     stmt = select(ProductType.id, ProductType.name).where(ProductType.is_active == True)
+#     result = db.execute(stmt).fetchall()
+#     return {id: name for id, name in result}
+
+# def get_supplement_names(db: Session) -> dict[int, str]:
+#     stmt = select(Supplement.id, Supplement.name).where(Supplement.is_active == True)
+#     result = db.execute(stmt).fetchall()
+#     return {id: name for id, name in result}

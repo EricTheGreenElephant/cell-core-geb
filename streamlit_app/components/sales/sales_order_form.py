@@ -1,104 +1,145 @@
 import streamlit as st
 import time
-from services.sales_services import get_customers, get_active_sales_catalogue, get_orderable_product_types, create_sales_order, get_active_supplements
+from collections import defaultdict
+from services.sales_services import (
+    get_customers, 
+    get_active_sales_catalogue, 
+    get_orderable_product_types, 
+    create_sales_order, 
+    get_active_supplements,
+    get_processing_order_with_items,
+    update_sales_order,
+    build_catalogue_quantity_inputs,
+    show_order_quantity_summary,
+    calculate_order_totals_from_catalogue
+)
+from services.shipment_services import cancel_order_request
 from schemas.sales_schemas import SalesOrderInput
 from db.orm_session import get_session
-from collections import defaultdict
+from utils.state_manager import StateManager
 
 
-def render_sales_order_form():
-    st.subheader("Create Sales Order")
-
+def render_sales_order_form(mode: str = "new"):
+    st.subheader("Create Sales Order" if mode == "new" else "Update Sales Order")
+    
     with get_session() as db:
         customers = get_customers(db)
         catalogues = get_active_sales_catalogue(db)
         product_types = get_orderable_product_types(db)
         supplements = get_active_supplements(db)
 
-    if not customers:
-        st.warning("No customers found.")
-        return
-    
-    if not catalogues:
-        st.warning("No active catalogue packages found.")
-        return
-    
-    if not product_types:
-        st.warning("No product types found.")
-        return
-    
-    if not supplements:
-        st.warning("No supplement items found.")
+    if not all([customers, catalogues, product_types, supplements]):
+        st.warning("Missing required setup data.")
         return
     
     product_lookup = {p.id: p.name for p in product_types}
     supplement_lookup = {s.id: s.name for s in supplements}
 
+    # === Handle Order Selection if Updating ===
+    order_data = None
+    if mode == "update":
+        with get_session() as db:
+            orders = get_processing_order_with_items(db, all_orders=True)
+        if not orders:
+            st.warning("No active sales orders found.")
+            return
+
+        order_lookup = {
+            f"Order #{o['order_id']} - {o['customer_name']} ({o['order_date'].date()})": o["order_id"]
+            for o in orders
+        }
+        selected_label = st.selectbox("Select Sales Order to Edit", ["Select..."] + list(order_lookup.keys()))
+        if selected_label == "Select...":
+            return
+        
+        selected_order_id = order_lookup[selected_label]
+
+        with get_session() as db:
+            order_data = get_processing_order_with_items(db, selected_order_id)
+
+        customer_id = order_data["customer_id"]
+        notes = order_data["notes"] or ""
+
+    else:
+        customer_id = None
+        notes = ""
+    
+    # === Customer Selection ===
     customer_options = {c["customer_name"]: c["id"] for c in customers}
-    customer_choice = st.selectbox("Select Customer", list(customer_options.keys()))
+    default_customer_idx = list(customer_options.values()).index(customer_id) if customer_id else 0
+    customer_choice = st.selectbox("Select Customer", list(customer_options.keys()), index=default_customer_idx)
 
-    st.markdown("#### Select Catalogue Packages and Quantities")
-
-    package_quantities = {}
-    for cat in catalogues:
-        with st.expander(f"{cat.package_name} (${cat.price:.2f})"):
-            st.markdown(f"*{cat.package_desc}*")
-            qty = st.number_input(
-                label="Quantity",
-                min_value=0,
-                step=1,
-                key=f"catalogue_{cat.id}"
-            )
-            package_quantities[cat.id] = qty
+    # === Catalogue Quantities ===
+    package_quantities = build_catalogue_quantity_inputs(catalogues, mode)
     
-    product_quantites = defaultdict(int)
-    supplement_quantities = defaultdict(int)
+    # === Calculate Final Quantities ===
+    product_quantities_raw, supplement_quantities_raw = calculate_order_totals_from_catalogue(
+        catalogues=catalogues,
+        package_quantities=package_quantities
+    )
+    product_quantities = defaultdict(int, product_quantities_raw)
+    supplement_quantities = defaultdict(int, supplement_quantities_raw)
 
-    for cat in catalogues:
-        count = package_quantities.get(cat.id, 0)
-        if count == 0:
-            continue
+    # === Overlay Existing Order Quantities if Update Mode ===
+    if mode == "update" and order_data:
+        for item in order_data["product_items"]:
+            product_quantities[item["product_type_id"]] += item["quantity"]
+        for supp in order_data["supplements"]:
+            supplement_quantities[supp["supplement_id"]] += supp["quantity"]
 
-        for p in cat.products:
-            product_quantites[p.product_id] += p.product_quantity * count
-        for s in cat.supplements:
-            supplement_quantities[s.supplement_id] += s.supplement_quantity * count
-
-    if any(package_quantities.values()):
-        st.markdown("#### Summary of Order Quantities")
-        st.markdown("**Products:**")
-        for pid, qty in product_quantites.items():
-            name = product_lookup.get(pid, f"Unknown Product ({pid})")
-            st.markdown(f"- {name}: {qty}")
-
-        if supplement_quantities:
-            st.markdown("**Supplements:**")
-            for sid, qty in supplement_quantities.items():
-                name = supplement_lookup.get(sid, f"Uknown Supplement ({sid})")
-                st.markdown(f"- {name}: {qty}")
+    # === Show Summary ===
+    if any(package_quantities.values()) or mode == "update":
+        show_order_quantity_summary(product_quantities, supplement_quantities, product_lookup, supplement_lookup)
     
-    notes = st.text_area("Order Notes (Optional)", max_chars=255).strip()
+    notes = st.text_area("Order Notes (Optional)", max_chars=255, value=notes).strip()
 
-    submitted = st.button("Create Sales Order", use_container_width=True)
+    # === Submission Buttons ===
+    col1, col2 = st.columns(2)
+    user_id = st.session_state.get("user_id")
 
-    if submitted:
-        user_id = st.session_state.get("user_id")
-
+    if col1.button("Update Sales Order" if mode == "update" else "Create Sales Order", use_container_width=True):
         data = SalesOrderInput(
             customer_id=customer_options[customer_choice],
             created_by=user_id,
             updated_by=user_id,
-            product_quantities=dict(product_quantites),
+            product_quantities=dict(product_quantities),
             supplement_quantities=dict(supplement_quantities),
             notes=notes
         )
 
         try:
             with get_session() as db:
-                create_sales_order(db, data)
+                if mode == "update":
+                    update_sales_order(db=db, order_id=selected_order_id, data=data)
+                else:
+                    create_sales_order(db, data)
             st.success("Sales order created successfully.")
             time.sleep(1.5)
+            StateManager.clear(scope="catalogue", id_=mode)
             st.rerun()
         except Exception as e:
-            st.error("Failed to create order.")
+            st.error("Failed to process sales order.")
             st.exception(e)
+    # === Cancel Option ===
+    if mode == "update":
+        if col2.button("Cancel Sales Order", use_container_width=True):
+            if not notes:
+                st.warning("Cancellation requires a note.")
+                return
+            try:
+                with get_session() as db:
+                    cancel_order_request(
+                        db=db,
+                        order_id=selected_order_id,
+                        user_id=user_id,
+                        old_status=order_data["status"],
+                        old_updated_by=order_data["updated_by"],
+                        old_updated_at=str(order_data["updated_at"]),
+                        notes=notes
+                    )
+                st.warning("Order cancelled.")
+                time.sleep(1.5)
+                st.rerun()
+            except Exception as e:
+                st.error("Failed to cancel sales order.")
+                st.exception(e)

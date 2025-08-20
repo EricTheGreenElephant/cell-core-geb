@@ -32,10 +32,10 @@ if toggle == "View Sales Inventory":
     render_sales_tab()
 
 elif toggle == "Create Sales Order":
-    render_sales_order_form()
+    render_sales_order_form(mode="new")
 
 elif toggle == "Update or Cancel Order":
-    render_update_order_form()
+    render_sales_order_form(mode="update")
     
 elif toggle == "Re-submit Canceled Orders":
     render_canceled_orders_form()
