@@ -410,6 +410,43 @@ BEGIN
     );
 END;
 
+-- ========= SALES CATALOGUE ===========
+IF OBJECT_ID('sales_catalogue', 'U') IS NULL
+BEGIN 
+    CREATE TABLE sales_catalogue (
+        id INT PRIMARY KEY IDENTITY(1,1),
+        article_number INT UNIQUE NOT NULL,
+        package_name VARCHAR(100) UNIQUE NOT NULL,
+        package_desc VARCHAR (255) NOT NULL,
+        price DECIMAL(10,2) NOT NULL,
+        is_active BIT NOT NULL
+    );
+END;
+
+IF OBJECT_ID('sales_catalogue_products', 'U') IS NULL
+BEGIN 
+    CREATE TABLE sales_catalogue_products (
+        id INT PRIMARY KEY IDENTITY(1,1),
+        catalogue_id INT NOT NULL,
+        product_id INT NULL,
+        product_quantity INT NULL,
+
+        CONSTRAINT fk_prod_cat_pid FOREIGN KEY (product_id) REFERENCES product_types(id)
+    );
+END;
+
+IF OBJECT_ID('sales_catalogue_supplements', 'U') IS NULL
+BEGIN
+    CREATE TABLE sales_catalogue_supplements(
+        id INT PRIMARY KEY IDENTITY(1,1),
+        catalogue_id INT NOT NULL,
+        supplement_id INT NULL,
+        supplement_quantity INT NULL,
+
+        CONSTRAINT fk_prod_cat_sid FOREIGN KEY (supplement_id) REFERENCES supplements(id)
+    );
+END;
+
 -- ========== ORDER FULFILLMENT ==========
 IF OBJECT_ID('customers', 'U') IS NULL
 BEGIN

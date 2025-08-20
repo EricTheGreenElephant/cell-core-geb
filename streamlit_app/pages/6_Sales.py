@@ -4,6 +4,7 @@ from utils.auth import show_user_sidebar
 from components.sales.sales_inventory_form import render_sales_tab
 from components.sales.sales_order_form import render_sales_order_form
 from components.sales.canceled_orders_form import render_canceled_orders_form
+from components.sales.update_order_form import render_update_order_form
 from components.common.toggle import toggle_button
 
 
@@ -22,6 +23,7 @@ toggle = st.selectbox(
         "Select an option...", 
         "View Sales Inventory", 
         "Create Sales Order",
+        "Update or Cancel Order",
         "Re-submit Canceled Orders"
     ],
     index=0,
@@ -30,7 +32,10 @@ if toggle == "View Sales Inventory":
     render_sales_tab()
 
 elif toggle == "Create Sales Order":
-    render_sales_order_form()
+    render_sales_order_form(mode="new")
 
+elif toggle == "Update or Cancel Order":
+    render_sales_order_form(mode="update")
+    
 elif toggle == "Re-submit Canceled Orders":
     render_canceled_orders_form()
