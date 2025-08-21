@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 class ProductQCInput(BaseModel):
@@ -10,3 +10,4 @@ class ProductQCInput(BaseModel):
     visual_pass: bool
     inspection_result: str
     notes: Optional[str] = None
+    reason_ids: Optional[List[int]] = None

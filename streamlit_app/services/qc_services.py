@@ -38,12 +38,13 @@ def get_printed_products(db: Session) -> list[dict]:
 @transactional
 def insert_product_qc(db: Session, data: ProductQCInput):
     # === Insert QC Result ===
-    db.execute(
+    qc_id = db.execute(
         text("""
             INSERT INTO product_quality_control (
                 product_id, inspected_by, weight_grams, pressure_drop,
                 visual_pass, inspection_result, notes
             )
+            OUTPUT INSERTED.id
             VALUES (:pid, :inspector, :weight, :pressure, :visual, :result, :notes)
         """),
         {
@@ -55,8 +56,20 @@ def insert_product_qc(db: Session, data: ProductQCInput):
             "result": data.inspection_result,
             "notes": data.notes
         }
-    )
+    ).scalar_one()
 
+    # === Link selected reasons (HarvestQC context) ===
+    if data.reason_ids: 
+        ids = list(dict.fromkeys(data.reason_ids))
+        db.execute(
+            text(
+                """
+                    INSERT INTO product_quality_control_reasons (qc_id, reason_id)
+                    VALUES (:qc_id, :rid)
+                """
+            ), [{"qc_id": qc_id, "rid": rid} for rid in ids]
+        )
+        
     # === Get harvest ID from tracking table ===
     result = db.execute(text("""
         SELECT harvest_id

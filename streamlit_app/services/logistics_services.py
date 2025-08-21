@@ -228,12 +228,13 @@ def update_post_treatment_qc(db: Session, product_qc: list[dict], inspected_by: 
     for item in product_qc:
         product_id = item["product_id"]
 
-        db.execute(
+        inspection_id = db.execute(
             text("""
                 INSERT INTO post_treatment_inspections (
-                    product_id, surface_treated, sterilized, visual_pass, qc_result, inspected_by
+                    product_id, surface_treated, sterilized, visual_pass, qc_result, inspected_by, notes
                 )
-                VALUES (:pid, :treated, :sterilized, :visual, :qc_result, :inspector)
+                OUTPUT INSERTED.id
+                VALUES (:pid, :treated, :sterilized, :visual, :qc_result, :inspector, :notes)
             """),
             {
                 "pid": product_id,
@@ -241,10 +242,23 @@ def update_post_treatment_qc(db: Session, product_qc: list[dict], inspected_by: 
                 "sterilized": item["sterilize"],
                 "visual": item["visual_pass"],
                 "qc_result": item["qc_result"],
-                "inspector": inspected_by
+                "inspector": inspected_by,
+                "notes": item.get("notes")
             }
-        )
+        ).scalar_one()
 
+        reason_ids = item.get("reason_ids") or []
+        if reason_ids:
+            reason_ids = list(dict.fromkeys(reason_ids))
+            db.execute(
+                text(
+                    """
+                        INSERT INTO post_treatment_inspection_reasons (inspection_id, reason_id)
+                        VALUES (:iid, :rid)
+                    """
+                ),
+                [{"iid": inspection_id, "rid": rid} for rid in reason_ids]
+            )
         # === Insert Product to Quarantine if Applicable ===
         if item["qc_result"] == "Quarantine":
             create_quarantine_record(
