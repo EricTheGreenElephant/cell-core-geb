@@ -1,13 +1,20 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import text, select
 from models.filament_models import Filament, FilamentMounting
-from models.production_models import ProductTracking, ProductHarvest, ProductRequest, ProductType
+from models.production_models import ProductTracking, ProductHarvest, ProductRequest, ProductType, ProductStatuses
 from models.lifecycle_stages_models import LifecycleStages
 from models.product_quality_control_models import ProductQualityControl, PostTreatmentInspection
 from models.storage_locations_models import StorageLocation
 from models.logistics_models import TreatmentBatch, TreatmentBatchProduct
+from models.quarantined_products_models import QuarantinedProducts
 from models.users_models import User
-from schemas.logistics_schemas import TreatmentBatchCreate, TreatmentBatchProductCandidate, PostHarvestStorageCandidate, PostTreatmentStorageCandidate
+from schemas.logistics_schemas import (
+    TreatmentBatchCreate, 
+    TreatmentBatchProductCandidate, 
+    PostHarvestStorageCandidate, 
+    PostTreatmentStorageCandidate,
+    AdHocQuarantineStorageCandidate
+)
 from schemas.audit_schemas import FieldChangeAudit
 from services.audit_services import update_record_with_audit
 from services.tracking_service import log_product_status_change, update_product_stage, update_product_status
@@ -141,7 +148,32 @@ def get_post_treatment_products_needing_storage(db: Session) -> list[PostTreatme
     return [PostTreatmentStorageCandidate(**row._mapping) for row in results]
 
 @transactional
-def assign_storage_to_products(db: Session, assignments: list[tuple[str, int, str]], user_id: int):
+def get_adhoc_products_needing_storage(db: Session) -> list[AdHocQuarantineStorageCandidate]:
+    stmt = (
+        select(
+            ProductTracking.id.label("product_id"),
+            QuarantinedProducts.id.label("quarantine_id"),
+            LifecycleStages.stage_name.label("current_stage_name"),
+            ProductType.name.label("product_type"),
+            ProductStatuses.status_name.label("inspection_result"),
+            ProductTracking.last_updated_at,
+            QuarantinedProducts.quarantined_by,
+            QuarantinedProducts.quarantine_date            
+        )
+        .join(LifecycleStages, ProductTracking.current_stage_id == LifecycleStages.id)
+        .join(QuarantinedProducts, ProductTracking.id == QuarantinedProducts.product_id)
+        .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
+        .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
+        .join(ProductType, ProductRequest.product_id == ProductType.id)
+        .join(ProductStatuses, ProductTracking.current_status_id == ProductStatuses.id)
+        .where(QuarantinedProducts.quarantine_status == "Active")
+        .where(QuarantinedProducts.location_id.is_(None))
+    )
+    results = db.execute(stmt).all()
+    return [AdHocQuarantineStorageCandidate(**row._mapping) for row in results]
+
+@transactional
+def assign_storage_to_products(db: Session, assignments: list[tuple[str, int, str]], user_id: int, update_stage: bool):
     for product_id, location_id, stage_code in assignments:
         to_stage_id = db.scalar(
             text("SELECT id FROM lifecycle_stages WHERE stage_code = :code"),
@@ -164,14 +196,15 @@ def assign_storage_to_products(db: Session, assignments: list[tuple[str, int, st
         else:
             reason = "Storage assignment"
 
-        update_product_stage(
-            db=db,
-            product_id=product_id,
-            new_stage_id=to_stage_id,
-            reason=reason,
-            user_id=user_id,
-            location_id=location_id
-        )
+        if update_stage is True:
+            update_product_stage(
+                db=db,
+                product_id=product_id,
+                new_stage_id=to_stage_id,
+                reason=reason,
+                user_id=user_id,
+                location_id=location_id
+            )
 
     db.commit()
 
@@ -228,12 +261,13 @@ def update_post_treatment_qc(db: Session, product_qc: list[dict], inspected_by: 
     for item in product_qc:
         product_id = item["product_id"]
 
-        db.execute(
+        inspection_id = db.execute(
             text("""
                 INSERT INTO post_treatment_inspections (
-                    product_id, surface_treated, sterilized, visual_pass, qc_result, inspected_by
+                    product_id, surface_treated, sterilized, visual_pass, qc_result, inspected_by, notes
                 )
-                VALUES (:pid, :treated, :sterilized, :visual, :qc_result, :inspector)
+                OUTPUT INSERTED.id
+                VALUES (:pid, :treated, :sterilized, :visual, :qc_result, :inspector, :notes)
             """),
             {
                 "pid": product_id,
@@ -241,10 +275,23 @@ def update_post_treatment_qc(db: Session, product_qc: list[dict], inspected_by: 
                 "sterilized": item["sterilize"],
                 "visual": item["visual_pass"],
                 "qc_result": item["qc_result"],
-                "inspector": inspected_by
+                "inspector": inspected_by,
+                "notes": item.get("notes")
             }
-        )
+        ).scalar_one()
 
+        reason_ids = item.get("reason_ids") or []
+        if reason_ids:
+            reason_ids = list(dict.fromkeys(reason_ids))
+            db.execute(
+                text(
+                    """
+                        INSERT INTO post_treatment_inspection_reasons (inspection_id, reason_id)
+                        VALUES (:iid, :rid)
+                    """
+                ),
+                [{"iid": inspection_id, "rid": rid} for rid in reason_ids]
+            )
         # === Insert Product to Quarantine if Applicable ===
         if item["qc_result"] == "Quarantine":
             create_quarantine_record(

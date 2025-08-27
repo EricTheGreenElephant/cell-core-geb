@@ -617,13 +617,15 @@ def search_products_for_quarantine(db: Session, mode:str, value: str) -> list[Pr
     return [ProductQuarantineSearchResult(**row._mapping) for row in results]
 
 @transactional
-def mark_products_ad_hoc_quarantine(db: Session, product_ids: list[int], user_id: int, comment: str):
+def mark_products_ad_hoc_quarantine(db: Session, product_ids: list[int], user_id: int, reason_ids: list[int], comment: str):
     """
     Marks products for ad-hoc quarantine, updates stage & status, and logs the reason.
     """
     if not product_ids:
         return
     
+    reason_ids = list(dict.fromkeys(reason_ids))
+
     quarantine_stage_id = db.scalar(
         select(LifecycleStages.id).where(LifecycleStages.stage_code == "Quarantine")
     )
@@ -631,19 +633,29 @@ def mark_products_ad_hoc_quarantine(db: Session, product_ids: list[int], user_id
         raise ValueError("Stage 'Quarantine' not found.")
     
     for product_id in product_ids:
-        db.add(
-            QuarantinedProducts(
-                product_id=product_id,
-                from_stage_id=db.scalar(
-                    select(ProductTracking.current_stage_id).where(ProductTracking.id == product_id)
-                ),
-                source="Ad-Hoc",
-                quarantined_by=user_id,
-                quarantine_reason=comment,
-                quarantine_status="Active"
-            )
+        qp = QuarantinedProducts(
+            product_id=product_id,
+            from_stage_id=db.scalar(
+                select(ProductTracking.current_stage_id).where(ProductTracking.id == product_id)
+            ),
+            source="Ad-Hoc",
+            quarantined_by=user_id,
+            quarantine_reason=comment,
+            quarantine_status="Active"
         )
+        db.add(qp)
+        db.flush()
 
+        db.execute(
+            text(
+                """
+                    INSERT INTO quarantined_product_reasons
+                        (quarantine_id, reason_id)
+                    VALUES (:qp_id, :rid)
+                """
+            ),
+            [{"qp_id": qp.id, "rid": rid} for rid in reason_ids]
+        )
         update_product_stage(
             db=db,
             product_id=product_id,

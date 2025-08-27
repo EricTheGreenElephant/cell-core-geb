@@ -4,3 +4,5 @@ COLOR_MAP = {
     "Quarantine": "blue",
     "Waste": "red"
 }
+
+VALID_OUTCOMES = {"B-Ware", "Quarantine", "Waste", None}

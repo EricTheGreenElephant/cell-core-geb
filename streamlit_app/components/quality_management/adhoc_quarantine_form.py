@@ -5,6 +5,7 @@ from services.quality_management_services import (
     search_products_for_quarantine, 
     mark_products_ad_hoc_quarantine
 )
+from services.reasons_services import get_reasons_for_context, filter_reasons_by_outcome
 from db.orm_session import get_session
 
 
@@ -71,30 +72,63 @@ def render_ad_hoc_quarantine():
                 "location_name", "last_updated_at"
             )
         )
-        # st.write(f"Found {len(results)} product(s). Select products to quarantine:")
-        # selected_products = []
-        # for r in results:
-        #     with st.expander(f"Product {r.product_id} - {r.product_type}"):
-        #         st.write(f"**Tracking ID:** {r.tracking_id}")
-        #         st.write(f"**Lot Number:** {r.lot_number or 'N/A'}")
-        #         st.write(f"**Current Stage:** {r.current_stage_name}")
-        #         st.write(f"**Current Status:** {r.current_status or 'N/A'}")
-        #         st.write(f"**Location:** {r.location_name or 'N/A'}")
-        #         st.write(f"**Last Updated:** {r.last_updated_at.strftime('%Y-%d-%m %H:%M')}")
 
-        #         if st.checkbox(f"Mark Product {r.product_id} for Quarantine", key=f"adhocq_{r.product_id}"):
-        #             selected_products.append(r.product_id)
         selected_products = edited_df.loc[edited_df["Select"], "product_id"].tolist()
 
         if selected_products:
             st.markdown("---")
             st.write(f"Selected {len(selected_products)} product(s) for quarantine.")
-            comment = st.text_area("Quarantine Reason (required)", max_chars=255).strip()
 
-            if st.button("Confirm Quarantine"):
-                if not comment:
-                    st.warning("You must provide a reason for quarantine.")
+            CONTEXT_CODE = "AdHoc"
+
+            try:
+                with get_session() as db:
+                    reasons = get_reasons_for_context(db, context_code=CONTEXT_CODE, include_inactive=False)
+                
+                reasons = filter_reasons_by_outcome(reasons, outcome="Quarantine")
+                
+            except Exception as e:
+                st.error("Failed to load quarantine reasons.")
+                st.exception(e)
+                return
+            
+            if not reasons:
+                st.warning(f"No reasons configured for context '{CONTEXT_CODE}'.")
+                return
+            
+            reason_options = {
+                (f"{r['reason_label']} [{r['category']}]" if r["category"] else r["reason_label"]): r["id"]
+                for r in reasons
+            }
+            other_id = next((r["id"] for r in reasons if r["reason_code"] == "OTHER_QUARANTINE"), None)
+
+            with st.form("adhoc_quarantine_confirm"):
+                chosen_reason_labels = st.multiselect(
+                    "Reason(s)",
+                    options=list(reason_options.keys()),
+                )
+                chosen_reason_ids = [reason_options[label] for label in chosen_reason_labels]
+                is_other_selected = (other_id is not None) and (other_id in chosen_reason_ids)
+                notes_placeholder = "; ".join(chosen_reason_labels)
+                
+                comment = st.text_area(
+                    "Comment" + (" (required for 'Other')" if is_other_selected else " (optional)"),
+                    value=notes_placeholder,
+                    max_chars=255,
+                    placeholder="Add details. If you picked 'Other', explain why."
+                ).strip()
+
+                submitted = st.form_submit_button("Confirm Quarantine")
+
+            if submitted:
+                if not chosen_reason_ids:
+                    st.warning("Please choose at least one reason.")
+                    return 
+                
+                if is_other_selected and not comment:
+                    st.warning("You must provide details for 'Other'.")
                     return
+                
                 try:
                     user_id = st.session_state.get("user_id")
                     with get_session() as db:
@@ -102,6 +136,7 @@ def render_ad_hoc_quarantine():
                             db=db,
                             product_ids=selected_products,
                             user_id=user_id,
+                            reason_ids=chosen_reason_ids,
                             comment=comment
                         )
                     st.success(f"{len(selected_products)} product(s) moved to quarantine.")
