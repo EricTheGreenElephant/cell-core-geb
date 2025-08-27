@@ -57,3 +57,16 @@ class PostTreatmentStorageCandidate(BaseModel):
     harvest_id: int
     product_type: str
     inspection_result: Optional[str]
+
+
+class AdHocQuarantineStorageCandidate(BaseModel):
+    product_id: int
+    quarantine_id: int
+    current_stage_name: str
+    last_updated_at: datetime
+    product_type: str
+    quarantined_by: int
+    quarantine_date: datetime
+    inspection_result: str
+
+    model_config = ConfigDict(from_attributes=True)

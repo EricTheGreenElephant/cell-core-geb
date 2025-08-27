@@ -9,7 +9,8 @@ SHELF_OPTIONS_BY_RESULT = {
     },
     "In Quarantine": {
         "Post-Harvest QC": ["CellScrew; Quarantine"],
-        "Post-Treatment QC": ["CellScrew; Quarantine"]
+        "Post-Treatment QC": ["CellScrew; Quarantine"],
+        "AdHoc Quarantine": ["CellScrew; Quarantine"]
     },
     "Waste": {
         "Post-Harvest QC": ["Disposed Product"],
@@ -28,7 +29,8 @@ NEXT_STAGE_BY_RESULT = {
     },
     "In Quarantine": {
         "Post-Harvest QC": "Quarantine",
-        "Post-Treatment QC": "Quarantine"
+        "Post-Treatment QC": "Quarantine",
+        "AdHoc Quarantine": "Quarantine"
     },
     "Waste": {
         "Post-Harvest QC": "Disposed",

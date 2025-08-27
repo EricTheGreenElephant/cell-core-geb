@@ -2,6 +2,7 @@ STATUS_MAP_QC_TO_BUSINESS = {
     "Passed": "A-Ware",
     "B-Ware": "B-Ware",
     "Quarantine": "In Quarantine",
+    "In Quarantine": "In Quarantine",
     "Waste": "Waste"
 }
 

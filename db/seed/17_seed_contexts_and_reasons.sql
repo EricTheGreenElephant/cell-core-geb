@@ -5,7 +5,10 @@ SELECT * FROM (VALUES
 ('VIS_CONTAMINATION', 'Contamination visible',  'Visual',    'Waste'),
 ('PKG_SEAL_ISSUE',    'Packaging seal issue',   'Packaging', 'B-Ware'),
 ('LBL_DAMAGED',       'Damaged label',          'Packaging', 'B-Ware'),
-('PROC_INCOMPLETE',   'Incomplete documentation','Process',  'Quarantine')
+('PROC_INCOMPLETE',   'Incomplete documentation','Process',  'Quarantine'),
+('OTHER_BWARE', 'Other - B-Ware (please specify)', 'General', 'B-Ware'),
+('OTHER_QUARANTINE', 'Other - Quarantine (please specify)', 'General', 'Quarantine'),
+('OTHER_WASTE', 'Other - Waste', 'General', 'Waste')
 ) v(reason_code, reason_label, category, default_outcome)
 WHERE NOT EXISTS (SELECT 1 FROM issue_reasons r WHERE r.reason_code = v.reason_code);
 
