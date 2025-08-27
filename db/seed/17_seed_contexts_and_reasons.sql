@@ -15,6 +15,6 @@ WHERE NOT EXISTS (SELECT 1 FROM issue_reasons r WHERE r.reason_code = v.reason_c
 INSERT INTO issue_reason_contexts (reason_id, context_id)
 SELECT r.id, c.id
 FROM issue_reasons r
-JOIN issue_contexts c ON c.context_code IN ('HarvestQC', 'PostTreatmentQC')
+JOIN issue_contexts c ON c.context_code IN ('HarvestQC', 'PostTreatmentQC', 'AdHoc')
 LEFT JOIN issue_reason_contexts x ON x.reason_id = r.id AND x.context_id = c.id
 WHERE x.id IS NULL;

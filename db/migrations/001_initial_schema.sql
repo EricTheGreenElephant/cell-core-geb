@@ -184,9 +184,24 @@ BEGIN
     CREATE TABLE product_types (
         id INT PRIMARY KEY IDENTITY(1,1),
         name NVARCHAR(100) NOT NULL UNIQUE,
-        average_weight DECIMAL(6,2) NOT NULL,
-        buffer_weight DECIMAL(4,2) NOT NULL,
         is_active BIT NOT NULL DEFAULT 1
+    );
+END;
+
+IF OBJECT_ID('product_skus', 'U') IS NULL
+BEGIN 
+    CREATE TABLE product_skus (
+        id INT PRIMARY KEY IDENTITY(1,1),
+        product_type_id INT NOT NULL,
+        sku NVARCHAR(64) NOT NULL,
+        height_mm DECIMAL(7,2) NOT NULL CHECK (height_mm > 0),
+        diameter_mm DECIMAL(7,2) NOT NULL CHECK (diameter_mm > 0),
+        average_weight_g DECIMAL(7,2) NOT NULL CHECK (average_weight_g > 0),
+        weight_buffer_g DECIMAL(4,2) NOT NULL CHECK (weight_buffer_g >= 0),
+        is_active BIT NOT NULL DEFAULT 1,
+
+        CONSTRAINT fk_sku_type FOREIGN KEY (product_type_id) REFERENCES product_types(id),
+        CONSTRAINT uq_sku_global UNIQUE (sku)
     );
 END;
 
@@ -213,7 +228,7 @@ BEGIN
     CREATE TABLE product_requests (
         id INT PRIMARY KEY IDENTITY(1,1),
         requested_by INT NOT NULL,
-        product_id INT NOT NULL,
+        sku_id INT NOT NULL
         lot_number NVARCHAR(50) NOT NULL,
         status NVARCHAR(50) DEFAULT 'Pending',
         requested_at DATETIME2 DEFAULT GETDATE(),
@@ -221,7 +236,7 @@ BEGIN
 
         CONSTRAINT chk_request_status CHECK (status IN ('Pending', 'Fulfilled', 'Cancelled')),
         CONSTRAINT fk_request_user FOREIGN KEY (requested_by) REFERENCES users(id),
-        CONSTRAINT fk_request_product FOREIGN KEY (product_id) REFERENCES product_types(id)
+        CONSTRAINT fk_request_sku FOREIGN KEY (sku_id) REFERENCES product_skus(id)
     );
 END;
 
@@ -428,10 +443,12 @@ BEGIN
     CREATE TABLE sales_catalogue_products (
         id INT PRIMARY KEY IDENTITY(1,1),
         catalogue_id INT NOT NULL,
-        product_id INT NULL,
+        sku_id INT NULL,
         product_quantity INT NULL,
 
-        CONSTRAINT fk_prod_cat_pid FOREIGN KEY (product_id) REFERENCES product_types(id)
+        CONSTRAINT fk_scprod_sku FOREIGN KEY (sku_id) REFERENCES product_skus(id),
+        CONSTRAINT fk_scprod_catalogue FOREIGN KEY (catalogue_id) sales_catalogue(id),
+        CONSTRAINT uc_scprod UNIQUE (catalogue_id, sku_id)
     );
 END;
 
@@ -443,7 +460,9 @@ BEGIN
         supplement_id INT NULL,
         supplement_quantity INT NULL,
 
-        CONSTRAINT fk_prod_cat_sid FOREIGN KEY (supplement_id) REFERENCES supplements(id)
+        CONSTRAINT fk_scsupp_supp FOREIGN KEY (supplement_id) REFERENCES supplements(id),
+        CONSTRAINT fk_scsupp_catalogue FOREIGN KEY (catalogue_id) REFERENCES sales_catalogue(id),
+        CONSTRAINT uc_scsupp UNIQUE (catalogue_id, supplement_id)
     );
 END;
 
