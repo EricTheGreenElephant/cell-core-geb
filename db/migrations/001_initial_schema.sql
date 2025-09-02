@@ -8,6 +8,7 @@ IF OBJECT_ID('departments', 'U') IS NULL
 BEGIN
     CREATE TABLE departments (
         id INT PRIMARY KEY IDENTITY(1,1),
+        department_code NVARCHAR(50) NULL UNIQUE,
         department_name NVARCHAR(50) NOT NULL UNIQUE,
         is_active BIT NOT NULL DEFAULT 1
     );
@@ -191,28 +192,44 @@ END;
 IF OBJECT_ID('product_skus', 'U') IS NULL
 BEGIN 
     CREATE TABLE product_skus (
-        id INT PRIMARY KEY IDENTITY(1,1),
+        id INT PRIMARY KEY IDENTITY(1, 1),
         product_type_id INT NOT NULL,
-        sku NVARCHAR(64) NOT NULL,
+        sku NVARCHAR(64) NOT NULL UNIQUE,
+        name NVARCHAR(120) NOT NULL,
+        is_serialized BIT NOT NULL,
+        is_bundle BIT NOT NULL DEFAULT 0,
+        is_active BIT NOT NULL DEFAULT 1,
+
+        CONSTRAINT fk_sku_type FOREIGN KEY (product_type_id) REFERENCES product_types(id)
+    );
+END;
+
+IF OBJECT_ID('sku_bom', 'U') IS NULL
+BEGIN 
+    CREATE TABLE sku_bom(
+        id INT PRIMARY KEY IDENTITY(1,1),
+        parent_sku_id INT NOT NULL,
+        component_sku_id INT NOT NULL,
+        component_qty INT NOT NULL CHECK (component_qty > 0),
+
+        CONSTRAINT fk_bom_parent FOREIGN KEY (parent_sku_id) REFERENCES product_skus(id),
+        CONSTRAINT fk_bom_component FOREIGN KEY (component_sku_id) REFERENCES product_skus(id),
+        CONSTRAINT uc_bom UNIQUE (parent_sku_id, component_sku_id)
+    );
+END; 
+
+IF OBJECT_ID('sku_print_specs', 'U') IS NULL 
+BEGIN
+    CREATE TABLE sku_print_specs (
+        sku_id INT PRIMARY KEY,
         height_mm DECIMAL(7,2) NOT NULL CHECK (height_mm > 0),
         diameter_mm DECIMAL(7,2) NOT NULL CHECK (diameter_mm > 0),
         average_weight_g DECIMAL(7,2) NOT NULL CHECK (average_weight_g > 0),
         weight_buffer_g DECIMAL(4,2) NOT NULL CHECK (weight_buffer_g >= 0),
-        is_active BIT NOT NULL DEFAULT 1,
 
-        CONSTRAINT fk_sku_type FOREIGN KEY (product_type_id) REFERENCES product_types(id),
-        CONSTRAINT uq_sku_global UNIQUE (sku)
+        CONSTRAINT fk_printspecs_sku FOREIGN KEY (sku_id) REFERENCES product_skus(id)
     );
-END;
-
-IF OBJECT_ID('supplements', 'U') IS NULL
-BEGIN
-    CREATE TABLE supplements (
-        id INT PRIMARY KEY IDENTITY(1,1),
-        name NVARCHAR(100) NOT NULL UNIQUE,
-        is_active BIT DEFAULT 1
-    );
-END;
+END; 
 
 IF OBJECT_ID('product_statuses', 'U') IS NULL
 BEGIN
@@ -221,14 +238,14 @@ BEGIN
         status_name NVARCHAR(50) NOT NULL UNIQUE,
         is_active BIT NOT NULL DEFAULT 1
     );
-END
+END;
 
 IF OBJECT_ID('product_requests', 'U') IS NULL
 BEGIN
     CREATE TABLE product_requests (
         id INT PRIMARY KEY IDENTITY(1,1),
         requested_by INT NOT NULL,
-        sku_id INT NOT NULL
+        sku_id INT NOT NULL,
         lot_number NVARCHAR(50) NOT NULL,
         status NVARCHAR(50) DEFAULT 'Pending',
         requested_at DATETIME2 DEFAULT GETDATE(),
@@ -264,6 +281,7 @@ BEGIN
         id INT PRIMARY KEY IDENTITY(1,1),
         harvest_id INT NOT NULL UNIQUE,
         tracking_id NVARCHAR(50) NOT NULL UNIQUE,
+        sku_id INT NOT NULL,
         current_status_id INT NULL,
         previous_stage_id INT NULL,
         current_stage_id INT NOT NULL,
@@ -271,6 +289,7 @@ BEGIN
         last_updated_at DATETIME2 DEFAULT GETDATE(),
 
         CONSTRAINT fk_tracking_harvest FOREIGN KEY (harvest_id) REFERENCES product_harvest(id),
+        CONSTRAINT fk_tracking_sku FOREIGN KEY (sku_id) REFERENCES product_skus(id),
         CONSTRAINT fk_tracking_status FOREIGN KEY (current_status_id) REFERENCES product_statuses(id),
         CONSTRAINT fk_tracking_location FOREIGN KEY (location_id) REFERENCES storage_locations(id),
         CONSTRAINT fk_tracking_stage FOREIGN KEY (current_stage_id) REFERENCES lifecycle_stages(id),
@@ -426,45 +445,45 @@ BEGIN
 END;
 
 -- ========= SALES CATALOGUE ===========
-IF OBJECT_ID('sales_catalogue', 'U') IS NULL
-BEGIN 
-    CREATE TABLE sales_catalogue (
-        id INT PRIMARY KEY IDENTITY(1,1),
-        article_number INT UNIQUE NOT NULL,
-        package_name VARCHAR(100) UNIQUE NOT NULL,
-        package_desc VARCHAR (255) NOT NULL,
-        price DECIMAL(10,2) NOT NULL,
-        is_active BIT NOT NULL
-    );
-END;
+-- IF OBJECT_ID('sales_catalogue', 'U') IS NULL
+-- BEGIN 
+--     CREATE TABLE sales_catalogue (
+--         id INT PRIMARY KEY IDENTITY(1,1),
+--         article_number INT UNIQUE NOT NULL,
+--         package_name VARCHAR(100) UNIQUE NOT NULL,
+--         package_desc VARCHAR (255) NOT NULL,
+--         price DECIMAL(10,2) NOT NULL,
+--         is_active BIT NOT NULL
+--     );
+-- END;
 
-IF OBJECT_ID('sales_catalogue_products', 'U') IS NULL
-BEGIN 
-    CREATE TABLE sales_catalogue_products (
-        id INT PRIMARY KEY IDENTITY(1,1),
-        catalogue_id INT NOT NULL,
-        sku_id INT NULL,
-        product_quantity INT NULL,
+-- IF OBJECT_ID('sales_catalogue_products', 'U') IS NULL
+-- BEGIN 
+--     CREATE TABLE sales_catalogue_products (
+--         id INT PRIMARY KEY IDENTITY(1,1),
+--         catalogue_id INT NOT NULL,
+--         product_sku_id INT NOT NULL,
+--         product_quantity INT NOT NULL CHECK (product_quantity > 0),
 
-        CONSTRAINT fk_scprod_sku FOREIGN KEY (sku_id) REFERENCES product_skus(id),
-        CONSTRAINT fk_scprod_catalogue FOREIGN KEY (catalogue_id) sales_catalogue(id),
-        CONSTRAINT uc_scprod UNIQUE (catalogue_id, sku_id)
-    );
-END;
+--         CONSTRAINT fk_scprod_sku FOREIGN KEY (product_sku_id) REFERENCES product_skus(id),
+--         CONSTRAINT fk_scprod_catalogue FOREIGN KEY (catalogue_id) REFERENCES sales_catalogue(id),
+--         CONSTRAINT uc_scprod UNIQUE (catalogue_id, product_sku_id)
+--     );
+-- END;
 
-IF OBJECT_ID('sales_catalogue_supplements', 'U') IS NULL
-BEGIN
-    CREATE TABLE sales_catalogue_supplements(
-        id INT PRIMARY KEY IDENTITY(1,1),
-        catalogue_id INT NOT NULL,
-        supplement_id INT NULL,
-        supplement_quantity INT NULL,
+-- IF OBJECT_ID('sales_catalogue_supplements', 'U') IS NULL
+-- BEGIN
+--     CREATE TABLE sales_catalogue_supplements(
+--         id INT PRIMARY KEY IDENTITY(1,1),
+--         catalogue_id INT NOT NULL,
+--         supplement_sku_id INT NOT NULL,
+--         supplement_quantity INT NOT NULL CHECK (supplement_quantity > 0),
 
-        CONSTRAINT fk_scsupp_supp FOREIGN KEY (supplement_id) REFERENCES supplements(id),
-        CONSTRAINT fk_scsupp_catalogue FOREIGN KEY (catalogue_id) REFERENCES sales_catalogue(id),
-        CONSTRAINT uc_scsupp UNIQUE (catalogue_id, supplement_id)
-    );
-END;
+--         CONSTRAINT fk_scsupp_supp FOREIGN KEY (supplement_sku_id) REFERENCES supplement_skus(id),
+--         CONSTRAINT fk_scsupp_catalogue FOREIGN KEY (catalogue_id) REFERENCES sales_catalogue(id),
+--         CONSTRAINT uc_scsupp UNIQUE (catalogue_id, supplement_id)
+--     );
+-- END;
 
 -- ========== ORDER FULFILLMENT ==========
 IF OBJECT_ID('customers', 'U') IS NULL
@@ -495,30 +514,33 @@ BEGIN
     );
 END;
 
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes WHERE name = 'ix_orders_customer_date'
+        AND object_id = OBJECT_ID('orders')
+)
+BEGIN 
+    CREATE INDEX ix_orders_customer_date ON orders(customer_id, order_date);
+END;
+
 IF OBJECT_ID('order_items', 'U') IS NULL
 BEGIN
     CREATE TABLE order_items (
         id INT PRIMARY KEY IDENTITY(1,1),
         order_id INT NOT NULL,
-        product_type_id INT NOT NULL,
+        product_sku_id INT NOT NULL,
         quantity INT NOT NULL CHECK (quantity > 0),
 
         CONSTRAINT fk_order_items_order FOREIGN KEY (order_id) REFERENCES orders(id),
-        CONSTRAINT fk_order_items_type FOREIGN KEY (product_type_id) REFERENCES product_types(id)
+        CONSTRAINT fk_order_items_sku FOREIGN KEY (product_sku_id) REFERENCES product_skus(id)
     );
 END;
 
-IF OBJECT_ID('order_supplements', 'U') IS NULL
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes WHERE name = 'ix_oi_order'
+        AND object_id = OBJECT_ID('order_items')
+)
 BEGIN
-    CREATE TABLE order_supplements (
-        id INT PRIMARY KEY IDENTITY(1,1),
-        order_id INT NOT NULL,
-        supplement_id INT NOT NULL,
-        quantity INT NOT NULL CHECK (quantity > 0),
-
-        CONSTRAINT fk_order_supp_order FOREIGN KEY (order_id) REFERENCES orders(id),
-        CONSTRAINT fk_order_supp_supplement FOREIGN KEY (supplement_id) REFERENCES supplements(id)
-    );
+    CREATE INDEX ix_oi_order ON order_items(order_id);
 END;
 
 IF OBJECT_ID('shipments', 'U') IS NULL
@@ -545,17 +567,53 @@ BEGIN
     );
 END;
 
-IF OBJECT_ID('shipment_items', 'U') IS NULL
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes WHERE name = 'ix_shipments_customer_date'
+        AND object_id = OBJECT_ID('shipments')
+)
 BEGIN
-    CREATE TABLE shipment_items (
-        id INT PRIMARY KEY IDENTITY(1,1),
-        shipment_id INT NOT NULL,
-        product_id INT NOT NULL,
-        quantity INT NOT NULL,
+    CREATE INDEX ix_shipments_customer_date ON shipments(customer_id, created_date);
+END;
 
-        CONSTRAINT fk_shipment_item_shipment FOREIGN KEY (shipment_id) REFERENCES shipments(id),
-        CONSTRAINT fk_shipment_item_product FOREIGN KEY (product_id) REFERENCES product_tracking(id)
+IF OBJECT_ID('shipment_sku_items', 'U') IS NULL
+BEGIN 
+    CREATE TABLE shipment_sku_items(
+        id INT PRIMARY KEY IDENTITY(1, 1),
+        shipment_id INT NOT NULL,
+        product_sku_id INT NOT NULL,
+        quantity INT NOT NULL CHECK (quantity > 0),
+
+        CONSTRAINT fk_shipsku_shipment FOREIGN KEY (shipment_id) REFERENCES shipments(id),
+        CONSTRAINT sk_shipsku_sku FOREIGN KEY (product_sku_id) REFERENCES product_skus(id)
     );
+END;
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes WHERE name = 'ix_shipsku_shipment'
+        AND object_id = OBJECT_ID('shipment_sku_items')
+)
+BEGIN
+    CREATE INDEX ix_shipsku_shipment ON shipment_sku_items(shipment_id);
+END;
+
+IF OBJECT_ID('shipment_unit_items', 'U') IS NULL
+BEGIN
+    CREATE TABLE shipment_unit_items(
+        id INT PRIMARY KEY IDENTITY(1, 1),
+        shipment_id INT NOT NULL,
+        product_id INT NOT NULL UNIQUE,
+
+        CONSTRAINT fk_shipunit_shipment FOREIGN KEY (shipment_id) REFERENCES shipments(id),
+        CONSTRAINT fk_shipunit_product FOREIGN KEY (product_id) REFERENCES product_tracking(id)
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes WHERE name = 'ix_shipunit_shipment'
+        AND object_id = OBJECT_ID('shipment_unit_items')
+)
+BEGIN
+    CREATE INDEX ix_shipunit_shipment ON shipment_unit_items(shipment_id);
 END;
 
 -- ========== AUDITS ==========
@@ -653,58 +711,5 @@ BEGIN
         CONSTRAINT fk_qpr_quarantine FOREIGN KEY (quarantine_id) REFERENCES quarantined_products(id),
         CONSTRAINT fk_qpr_reason FOREIGN KEY (reason_id) REFERENCES issue_reasons(id),
         CONSTRAINT uc_qpr UNIQUE (quarantine_id, reason_id)
-    );
-END;
-
--- ========== VIEWS ==========
-IF OBJECT_ID('v_product_lifecycle', 'V') IS NULL
-BEGIN
-    EXEC('CREATE VIEW v_product_lifecycle AS
-        SELECT 
-            pt.id AS product_id,
-            lc.stage_name AS current_status,
-            pt.last_updated_at,
-            loc.location_name,
-
-            pr.id AS request_id,
-            ptype.name AS product_type_name,
-            pr.status AS request_status,
-            pr.requested_at,
-
-            ph.id AS harvest_id,
-            ph.print_date,
-            u.display_name AS printed_by,
-
-            pqc.inspection_result AS initial_qc_result,
-            pqc.weight_grams,
-            pqc.pressure_drop,
-            pqc.visual_pass,
-
-            tb.id AS treatment_batch_id,
-            tb.status AS treatment_status,
-            tb.sent_at AS treatment_sent_at,
-            pti.qc_result AS final_qc_result,
-            pti.sterilized AS treatment_sterilized,
-
-            s.id AS shipment_id,
-            s.status AS shipment_status,
-            s.ship_date,
-            s.delivery_date,
-            s.tracking_number,
-            s.carrier
-
-        FROM product_tracking pt
-        LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
-        LEFT JOIN storage_locations loc ON pt.location_id = loc.id
-        LEFT JOIN product_harvest ph ON pt.harvest_id = ph.id
-        LEFT JOIN users u ON ph.printed_by = u.id
-        LEFT JOIN product_requests pr ON ph.request_id = pr.id
-        LEFT JOIN product_types ptype ON pr.product_id = ptype.id
-        LEFT JOIN product_quality_control pqc ON pqc.product_id = pt.id
-        LEFT JOIN treatment_batch_products tbp ON tbp.product_id = pt.id
-        LEFT JOIN treatment_batches tb ON tbp.batch_id = tb.id
-        LEFT JOIN post_treatment_inspections pti ON pti.product_id = pt.id
-        LEFT JOIN shipment_items si ON si.product_id = pt.id
-        LEFT JOIN shipments s ON si.shipment_id = s.id'
     );
 END;
