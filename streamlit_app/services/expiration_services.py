@@ -6,11 +6,11 @@ def get_expiring_products(db: Session):
     # Products within 7 days of expiry, but not over a year old
     expiring_soon = db.execute(text(
         """
-            SELECT pt.id, ph.print_date, ptype.name AS product_type
+            SELECT pt.id, ph.print_date, s.sku, s.name AS sku_name
             FROM product_tracking pt
             JOIN product_harvest ph ON pt.harvest_id = ph.id
             JOIN product_requests pr ON ph.request_id = pr.id
-            JOIN product_types ptype ON pr.product_id = ptype.id
+            JOIN product_skus s ON s.id = pt.sku_id
             JOIN lifecycle_stages ls ON pt.current_stage_id = ls.id
             WHERE
                 ls.stage_code != 'Expired'
@@ -22,11 +22,11 @@ def get_expiring_products(db: Session):
     # Products that are over 1 year old, not already expired
     expired = db.execute(text(
         """
-            SELECT pt.id, ph.print_date, ptype.name AS product_type
+            SELECT pt.id, ph.print_date, s.sku, s.name AS sku_name
             FROM product_tracking pt
             JOIN product_harvest ph ON pt.harvest_id = ph.id
             JOIN product_requests pr ON ph.request_id = pr.id
-            JOIN product_types ptype ON pr.product_id = ptype.id
+            JOIN product_skus s ON s.id = pt.sku_id
             JOIN lifecycle_stages ls ON pt.current_stage_id = ls.id
             WHERE 
                 ls.stage_code != 'Expired'

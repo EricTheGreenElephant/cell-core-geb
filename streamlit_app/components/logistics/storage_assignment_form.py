@@ -64,7 +64,7 @@ def render_storage_assignment_form():
                     if any(keyword in loc.description for keyword in allowed_keywords)
                 ]
 
-                label = f"#{prod.product_id} - {prod.product_type} ({business_status})"
+                label = f"#{prod.product_id} - {prod.sku} - {prod.sku_name} ({business_status})"
                 selected_shelf = st.selectbox(
                     label,
                     options=valid_shelves,

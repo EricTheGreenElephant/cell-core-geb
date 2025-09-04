@@ -8,7 +8,8 @@ class ProductQMReview(BaseModel):
     current_stage_name: str
     last_updated_at: datetime
     lot_number: str
-    product_type_name: str
+    sku: str
+    sku_name: str
     inspection_result: str
     inspected_by: str
     weight_grams: float
@@ -22,7 +23,8 @@ class ProductQMReview(BaseModel):
 
 class PostTreatmentApprovalCandidate(BaseModel):
     product_id: int
-    product_type_name: str
+    sku: str
+    sku_name: str
     inspection_result: Optional[str]
     inspected_by: str
     visual_pass: Optional[bool]
@@ -36,7 +38,8 @@ class PostTreatmentApprovalCandidate(BaseModel):
 class QuarantinedProductRow(BaseModel):
     product_id: int
     tracking_id: str
-    product_type: str
+    sku: str
+    sku_name: str
     previous_stage_name: Optional[str]
     current_stage_name: str
     location_name: Optional[str]
@@ -62,7 +65,8 @@ class InvestigationEntry(BaseModel):
 
 class InvestigatedProductRow(BaseModel):
     product_id: int
-    product_type: str
+    sku: str
+    sku_name: str
     previous_stage_name: str
     current_stage_name: str
     last_updated_at: datetime
@@ -77,7 +81,8 @@ class InvestigatedProductRow(BaseModel):
 class ProductQuarantineSearchResult(BaseModel):
     product_id: int
     tracking_id: str
-    product_type: str
+    sku: str
+    sku_name: str
     lot_number: Optional[str]
     current_stage_name: str
     current_status: Optional[str]

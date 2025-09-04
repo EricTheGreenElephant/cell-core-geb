@@ -1,7 +1,7 @@
 from sqlalchemy import select, text, bindparam, or_, and_
 from sqlalchemy.orm import Session, aliased
 from typing import Optional
-from models.production_models import ProductTracking, ProductHarvest, ProductType, ProductRequest, ProductStatuses
+from models.production_models import ProductTracking, ProductHarvest, ProductType, ProductRequest, ProductStatuses, ProductSKU
 from models.lifecycle_stages_models import LifecycleStages
 from models.users_models import User
 from models.investigation_models import ProductInvestigation
@@ -34,7 +34,8 @@ def get_qm_review_products(db: Session) -> list[ProductQMReview]:
             LifecycleStages.stage_name.label("current_stage_name"),
             ProductTracking.last_updated_at,
             ProductRequest.lot_number,
-            ProductType.name.label("product_type_name"),
+            ProductSKU.sku,
+            ProductSKU.name.label("sku_name"),
             ProductQualityControl.inspection_result,
             User.display_name.label("inspected_by"),
             ProductQualityControl.weight_grams,
@@ -46,7 +47,7 @@ def get_qm_review_products(db: Session) -> list[ProductQMReview]:
         .join(LifecycleStages, ProductTracking.current_stage_id == LifecycleStages.id)
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
-        .join(ProductType, ProductRequest.product_id == ProductType.id)
+        .join(ProductSKU, ProductSKU.id == ProductTracking.sku_id)
         .join(ProductQualityControl, ProductQualityControl.product_id == ProductTracking.id)
         .join(User, ProductQualityControl.inspected_by == User.id)
         .outerjoin(StorageLocation, ProductTracking.location_id == StorageLocation.id)
@@ -63,7 +64,8 @@ def get_qm_review_products(db: Session) -> list[ProductQMReview]:
             last_updated_at=row.last_updated_at,
             current_location=row.current_location,
             lot_number=row.lot_number,
-            product_type_name=row.product_type_name,
+            sku=row.sku,
+            sku_name=row.sku_name,
             inspection_result=row.inspection_result,
             inspected_by=row.inspected_by,
             weight_grams=float(row.weight_grams),
@@ -83,7 +85,8 @@ def get_post_treatment_qm_candidates(db: Session) -> list[PostTreatmentApprovalC
             ProductTracking.id.label("product_id"),
             LifecycleStages.stage_name.label("current_stage_name"),
             ProductTracking.last_updated_at,
-            ProductType.name.label("product_type_name"),
+            ProductSKU.sku,
+            ProductSKU.name.label("sku_name"),
             PostTreatmentInspection.qc_result.label("inspection_result"),
             User.display_name.label("inspected_by"),
             PostTreatmentInspection.visual_pass,
@@ -93,7 +96,7 @@ def get_post_treatment_qm_candidates(db: Session) -> list[PostTreatmentApprovalC
         )
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
-        .join(ProductType, ProductRequest.product_id == ProductType.id)
+        .join(ProductSKU, ProductSKU.id == ProductTracking.sku_id)
         .join(LifecycleStages, ProductTracking.current_stage_id == LifecycleStages.id)
         .outerjoin(PostTreatmentInspection, PostTreatmentInspection.product_id == ProductTracking.id)
         .outerjoin(User, PostTreatmentInspection.inspected_by == User.id)
@@ -128,29 +131,6 @@ def approve_products_for_treatment(db: Session, products: list[dict], user_id: i
             reason=approval_reason,
             user_id=user_id
         )
-        # from_stage_id = db.scalar(
-        #     text("SELECT current_stage_id FROM product_tracking WHERE id = :product_id"),
-        #     {"product_id": product_id}
-        # )
-    
-        # db.execute(
-        #     text("""
-        #         UPDATE product_tracking
-        #         SET current_stage_id = :new_stage_id,
-        #             last_updated_at = GETDATE()
-        #         WHERE id = :product_id
-        #     """),
-        #     {"new_stage_id": new_stage_id, "product_id": product_id}
-        # )
-
-        # log_product_status_change(
-        #     db=db,
-        #     product_id=product_id,
-        #     from_stage_id=from_stage_id,
-        #     to_stage_id=new_stage_id,
-        #     reason="QM Approved for Treatment",
-        #     user_id=user_id
-        # )
 
     db.commit()
 
@@ -193,29 +173,6 @@ def approve_products_for_sales(db: Session, products: list[dict], user_id: int):
             reason=approval_reason,
             user_id=user_id
         )
-
-        # from_stage_id = db.scalar(
-        #     text("SELECT current_stage_id FROM product_tracking WHERE id = :product_id"),
-        #     {"product_id": product_id}
-        # )
-        # db.execute(
-        #     text("""
-        #         UPDATE product_tracking
-        #         SET current_stage_id = :new_stage_id,
-        #             last_updated_at = GETDATE()
-        #         WHERE id = :product_id
-        #     """),
-        #     {"new_stage_id": target_stage_id, "product_id": product_id}
-        # )
-
-        # log_product_status_change(
-        #     db=db,
-        #     product_id=product_id,
-        #     from_stage_id=from_stage_id,
-        #     to_stage_id=target_stage_id,
-        #     reason="QM Approved for Sales",
-        #     user_id=user_id
-        # )
 
     db.commit()
 
@@ -270,7 +227,8 @@ def get_quarantined_products(db: Session) -> list[QuarantinedProductRow]:
         select(
             ProductTracking.id.label("product_id"),
             ProductTracking.tracking_id,
-            ProductType.name.label("product_type"),
+            ProductSKU.sku,
+            ProductSKU.name.label("sku_name"),
             StagePrev.stage_name.label("previous_stage_name"),
             LifecycleStages.stage_name.label("current_stage_name"),
             StorageLocation.location_name,
@@ -286,7 +244,7 @@ def get_quarantined_products(db: Session) -> list[QuarantinedProductRow]:
         .join(QuarantinedProducts, QuarantinedProducts.product_id == ProductTracking.id)
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
-        .join(ProductType, ProductRequest.product_id == ProductType.id)
+        .join(ProductSKU, ProductSKU.id == ProductTracking.sku_id)
         .outerjoin(ProductQualityControl, ProductQualityControl.product_id == ProductTracking.id)
         .outerjoin(PostTreatmentInspection, ProductTracking.id == PostTreatmentInspection.product_id)
         .outerjoin(StorageLocation, ProductTracking.location_id == StorageLocation.id)
@@ -334,21 +292,6 @@ def escalate_to_investigation(db: Session, entry: InvestigationEntry):
     )
     db.add(investigation)
 
-    # log_product_status_change(
-    #     db=db,
-    #     product_id=entry.product_id,
-    #     from_stage_id=None,
-    #     to_stage_id=None,
-    #     status="Under Investigation",
-    #     reason="Flagged by QM",
-    #     user_id=entry.created_by
-    # )
-
-# @transactional
-# def resolve_quarantine_approval(
-#     db: Session, product_id: int, resolution: str, user_id: int, comment: str = ""
-# )
-
 @transactional
 def sort_qm_reviewed_products(db: Session, product_id: int, stage_name: str, resolution: str, user_id: int):
     if resolution == "Waste":
@@ -391,7 +334,8 @@ def get_investigated_products(db: Session) -> list[InvestigatedProductRow]:
     stmt = (
         select(
             ProductTracking.id.label("product_id"),
-            ProductType.name.label("product_type"),
+            ProductSKU.sku,
+            ProductSKU.name.label("sku_name"),
             StagePrev.stage_name.label("previous_stage_name"),
             LifecycleStages.stage_name.label("current_stage_name"),
             ProductTracking.last_updated_at,
@@ -405,7 +349,7 @@ def get_investigated_products(db: Session) -> list[InvestigatedProductRow]:
         .join(LifecycleStages, ProductTracking.current_stage_id == LifecycleStages.id)
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
-        .join(ProductType, ProductRequest.product_id == ProductType.id)
+        .join(ProductSKU, ProductSKU.id == ProductTracking.sku_id)
         .outerjoin(StorageLocation, ProductTracking.location_id == StorageLocation.id)
         .outerjoin(ProductQualityControl, ProductQualityControl.product_id == ProductTracking.id)
         .outerjoin(StagePrev, ProductTracking.previous_stage_id == StagePrev.id)
@@ -571,7 +515,8 @@ def search_products_for_quarantine(db: Session, mode:str, value: str) -> list[Pr
         select(
             ProductTracking.id.label("product_id"),
             ProductTracking.tracking_id,
-            ProductType.name.label("product_type"),
+            ProductSKU.sku,
+            ProductSKU.name.label("sku_name"),
             ProductRequest.lot_number,
             ProductRequest.id.label("request_id"),
             ProductHarvest.id.label("harvest_id"),
@@ -582,7 +527,7 @@ def search_products_for_quarantine(db: Session, mode:str, value: str) -> list[Pr
         )
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
-        .join(ProductType, ProductRequest.product_id == ProductType.id)
+        .join(ProductSKU, ProductSKU.id == ProductTracking.sku_id)
         .join(LifecycleStages, ProductTracking.current_stage_id == LifecycleStages.id)
         .outerjoin(ProductStatuses, ProductTracking.current_status_id == ProductStatuses.id)
         .outerjoin(StorageLocation, ProductTracking.location_id == StorageLocation.id)

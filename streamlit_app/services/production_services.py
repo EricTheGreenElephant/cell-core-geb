@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import text, select
 from datetime import datetime
-from models.production_models import ProductRequest, ProductHarvest, ProductTracking, ProductType
+from models.production_models import ProductRequest, ProductHarvest, ProductTracking, ProductSKU
 from schemas.production_schemas import ProductRequestCreate
 from schemas.audit_schemas import FieldChangeAudit
 from services.audit_services import update_record_with_audit
@@ -13,9 +13,26 @@ def generate_lot_number() -> str:
     return f"LOT-{datetime.now().strftime('%Y%d%m%H%S')}"
 
 @transactional
-def get_product_types(db: Session) -> list[tuple[int, str]]:
-    stmt = select(ProductType.id, ProductType.name).order_by(ProductType.name)
+def get_requestable_skus(db: Session) -> list[tuple[int, str, str]]:
+    """
+    Return (sku_id, sku_code, name) for SKUs a user can request to print:
+    serialized single units, not bundles, active.
+    """
+    stmt = select(
+        ProductSKU.id,
+        ProductSKU.sku,
+        ProductSKU.name  
+    ).where(
+        ProductSKU.is_serialized == True,
+        ProductSKU.is_bundle == False,
+        ProductSKU.is_active == True
+    ).order_by(ProductSKU.name)
     return db.execute(stmt).all()
+
+# @transactional
+# def get_product_types(db: Session) -> list[tuple[int, str]]:
+#     stmt = select(ProductType.id, ProductType.name).order_by(ProductType.name)
+#     return db.execute(stmt).all()
 
 @transactional
 def insert_product_request(db: Session, data: ProductRequestCreate):
@@ -23,7 +40,7 @@ def insert_product_request(db: Session, data: ProductRequestCreate):
     for _ in range(data.quantity):
         request = ProductRequest(
             requested_by=data.requested_by,
-            product_id=data.product_id,
+            sku_id=data.sku_id,
             lot_number=lot,
             notes=data.notes
         )
@@ -35,15 +52,17 @@ def get_pending_requests(db: Session) -> list[dict]:
     sql = """
         SELECT
             pr.id,
-            pt.name AS product_type,
+            ps.sku AS sku,
+            ps.name AS sku_name,
             u.display_name AS requested_by,
             pr.lot_number,
             pr.status,
             pr.requested_at,
-            pt.average_weight,
-            pt.buffer_weight
+            sps.average_weight_g,
+            sps.weight_buffer_g
         FROM product_requests pr
-        JOIN product_types pt ON pt.id = pr.product_id
+        JOIN product_skus ps ON ps.id = pr.sku_id
+        LEFT JOIN sku_print_specs sps ON sps.sku_id = ps.id
         JOIN users u ON u.id = pr.requested_by
         WHERE pr.status = 'Pending'
         ORDER BY pr.requested_at ASC
@@ -73,10 +92,14 @@ def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int,
         text("SELECT id FROM product_statuses WHERE status_name = 'Pending'")
     )
 
+    # === Derive the SKU for this unit (direct via request) ===
+    sku_id = db.scalar(text("SELECT sku_id FROM product_requests WHERE id = :rid"), {"rid": request_id})
+
     # === Insert Product Tracking Record ===
     tracking = ProductTracking(
         harvest_id=harvest.id,
         tracking_id=tracking_id,
+        sku_id=sku_id,
         current_stage_id=1,
         current_status_id=pending_status_id
     )
@@ -111,7 +134,8 @@ def get_harvested_products(db: Session) -> list[dict]:
             ph.lid_id AS lid_id,
             ph.seal_id,
             pr.id AS request_id,
-            pt.name AS product_type,
+            ps.sku AS sku,
+            ps.name AS sku_name,
             f.serial_number AS filament_serial,
             p.name AS printer_name,
             l.serial_number AS lid_serial,
@@ -119,7 +143,7 @@ def get_harvested_products(db: Session) -> list[dict]:
             ph.print_date
         FROM product_harvest ph
         JOIN product_requests pr ON ph.request_id = pr.id
-        JOIN product_types pt ON pr.product_id = pt.id
+        JOIN product_skus ps ON pr.sku_id = ps.id
         JOIN filament_mounting fm ON ph.filament_mounting_id = fm.id
         JOIN filaments f ON fm.filament_id = f.id
         JOIN printers p ON fm.printer_id = p.id

@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import text, select
 from models.filament_models import Filament, FilamentMounting
-from models.production_models import ProductTracking, ProductHarvest, ProductRequest, ProductType, ProductStatuses
+from models.production_models import ProductTracking, ProductHarvest, ProductRequest, ProductType, ProductStatuses, ProductSKU
 from models.lifecycle_stages_models import LifecycleStages
 from models.product_quality_control_models import ProductQualityControl, PostTreatmentInspection
 from models.storage_locations_models import StorageLocation
@@ -28,18 +28,21 @@ def get_qc_passed_products(db: Session) -> list[TreatmentBatchProductCandidate]:
     stmt = (
         select(
             ProductTracking.id.label("product_id"),
-            LifecycleStages.stage_name.label("current_status"),
+            LifecycleStages.stage_name.label("current_stage"),
+            ProductStatuses.status_name.label("current_status"),
             ProductTracking.last_updated_at,
             ProductHarvest.id.label("harvest_id"),
-            ProductType.name.label("product_type"),
+            ProductSKU.sku,
+            ProductSKU.name.label("sku_name"),
             ProductQualityControl.inspection_result,
             StorageLocation.location_name.label("location_name"),
         )
         .join(LifecycleStages, ProductTracking.current_stage_id == LifecycleStages.id)
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
-        .join(ProductType, ProductRequest.product_id == ProductType.id)
+        .join(ProductSKU, ProductSKU.id == ProductTracking.sku_id)
         .join(ProductQualityControl, ProductQualityControl.product_id == ProductTracking.id)
+        .join(ProductStatuses, ProductStatuses.id == ProductTracking.current_status_id)
         .outerjoin(StorageLocation, ProductTracking.location_id == StorageLocation.id)
         .where(LifecycleStages.stage_code == "QMTreatmentApproval")
         .order_by(ProductTracking.last_updated_at.desc())
@@ -48,10 +51,12 @@ def get_qc_passed_products(db: Session) -> list[TreatmentBatchProductCandidate]:
     products = [
         TreatmentBatchProductCandidate(
             product_id=row.product_id,
-            current_stage_name=row.current_status,
+            current_stage_name=row.current_stage,
+            current_status=row.current_status,
             last_updated_at=row.last_updated_at,
             harvest_id=row.harvest_id,
-            product_type=row.product_type,
+            sku=row.sku,
+            sku_name=row.sku_name,
             inspection_result=row.inspection_result,
             location_name=row.location_name,
         )
@@ -108,14 +113,15 @@ def get_qc_products_needing_storage(db: Session) -> list[PostHarvestStorageCandi
             ProductTracking.last_updated_at,
             ProductQualityControl.inspection_result,
             Filament.serial_number.label("filament_serial"),
-            ProductType.name.label("product_type"),
+            ProductSKU.sku,
+            ProductSKU.name.label("sku_name"),
             User.display_name.label("printed_by"),
             ProductHarvest.print_date
         )
         .join(LifecycleStages, ProductTracking.current_stage_id == LifecycleStages.id)
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
-        .join(ProductType, ProductRequest.product_id == ProductType.id)
+        .join(ProductSKU, ProductSKU.id == ProductTracking.sku_id)
         .join(ProductQualityControl, ProductQualityControl.product_id == ProductTracking.id)
         .join(FilamentMounting, ProductHarvest.filament_mounting_id == FilamentMounting.id)
         .join(Filament, FilamentMounting.filament_id == Filament.id)
@@ -134,12 +140,13 @@ def get_post_treatment_products_needing_storage(db: Session) -> list[PostTreatme
         select(
             ProductTracking.id.label("product_id"),
             ProductHarvest.id.label("harvest_id"),
-            ProductType.name.label("product_type"),
+            ProductSKU.sku,
+            ProductSKU.name.label("sku_name"),
             PostTreatmentInspection.qc_result.label("inspection_result"),
         )
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
-        .join(ProductType, ProductRequest.product_id == ProductType.id)
+        .join(ProductSKU, ProductSKU.id == ProductTracking.sku_id)
         .join(PostTreatmentInspection, ProductTracking.id == PostTreatmentInspection.product_id)
         .join(LifecycleStages, ProductTracking.current_stage_id == LifecycleStages.id)
         .where(LifecycleStages.stage_code == "PostTreatmentQC")
@@ -154,7 +161,8 @@ def get_adhoc_products_needing_storage(db: Session) -> list[AdHocQuarantineStora
             ProductTracking.id.label("product_id"),
             QuarantinedProducts.id.label("quarantine_id"),
             LifecycleStages.stage_name.label("current_stage_name"),
-            ProductType.name.label("product_type"),
+            ProductSKU.sku,
+            ProductSKU.name.label("sku_name"),
             ProductStatuses.status_name.label("inspection_result"),
             ProductTracking.last_updated_at,
             QuarantinedProducts.quarantined_by,
@@ -164,7 +172,7 @@ def get_adhoc_products_needing_storage(db: Session) -> list[AdHocQuarantineStora
         .join(QuarantinedProducts, ProductTracking.id == QuarantinedProducts.product_id)
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
-        .join(ProductType, ProductRequest.product_id == ProductType.id)
+        .join(ProductSKU, ProductSKU.id == ProductTracking.sku_id)
         .join(ProductStatuses, ProductTracking.current_status_id == ProductStatuses.id)
         .where(QuarantinedProducts.quarantine_status == "Active")
         .where(QuarantinedProducts.location_id.is_(None))
@@ -227,10 +235,11 @@ def get_products_by_batch_id(db: Session, batch_id: int) -> list[dict]:
         SELECT
             tbp.id,
             pt.id AS product_id,
-            ps.status_name AS current_status,
+            pst.status_name AS current_status,
             lc.stage_name AS current_stage,
             pt.location_id,
-            t.name AS product_type,
+            ps.sku,
+            ps.name AS sku_name,
             pqc.inspection_result,
             tbp.surface_treat,
             tbp.sterilize,
@@ -239,10 +248,10 @@ def get_products_by_batch_id(db: Session, batch_id: int) -> list[dict]:
         JOIN product_tracking pt ON tbp.product_id = pt.id
         JOIN product_harvest ph ON ph.id = pt.harvest_id
         JOIN product_requests pr ON pr.id = ph.request_id
-        JOIN product_types t ON t.id = pr.product_id
+        JOIN product_skus ps ON pt.sku_id = ps.id
         LEFT JOIN product_quality_control pqc ON pt.id = pqc.product_id
         LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
-        LEFT JOIN product_statuses ps ON pt.current_status_id = ps.id
+        LEFT JOIN product_statuses pst ON pt.current_status_id = pst.id
         WHERE tbp.batch_id = :batch_id
     """
     result = db.execute(text(sql), {"batch_id": batch_id})
@@ -338,7 +347,8 @@ def get_stored_products(db: Session, product_id: str | None = None) -> list[dict
         SELECT
             t.id AS product_id,
             ph.id AS harvest_id,
-            pt.name AS product_type,
+            ps.sku,
+            ps.name AS sku_id,
             lc.stage_name AS current_status,
             sl.id AS location_id,
             sl.location_name,
@@ -346,7 +356,7 @@ def get_stored_products(db: Session, product_id: str | None = None) -> list[dict
         FROM product_tracking t
         JOIN product_harvest ph ON t.harvest_id = ph.id
         JOIN product_requests pr ON ph.request_id = pr.id
-        JOIN product_types pt ON pr.product_id = pt.id
+        JOIN product_skus ps ON pt.sku_id = ps.id
         JOIN storage_locations sl ON t.location_id = sl.id
         LEFT JOIN lifecycle_stages lc ON t.current_stage_id = lc.id
         

@@ -6,16 +6,10 @@ from services.quality_management_services import (
     resolve_quarantine_record
 )
 from schemas.quality_management_schemas import InvestigationEntry
+from constants.general_constants import RESOLUTION_OPTIONS
 from db.orm_session import get_session
 import time
 
-
-RESOLUTION_OPTIONS = {
-    "Approve as A-Ware": "Passed",
-    "Approve as B-Ware": "B-Ware",
-    "Mark as Waste": "Waste",
-    "Under Investigation": "Investigation",
-}
 
 def render_quarantine_review_form():
     st.subheader("Quarantine Product Review")
@@ -31,7 +25,7 @@ def render_quarantine_review_form():
             return
 
         for prod in products:
-            with st.expander(f"Product #{prod.product_id} - {prod.product_type}"):
+            with st.expander(f"Product #{prod.product_id} - {prod.sku} - {prod.sku_name}"):
                 # === Quarantine Info ===
                 st.write(f"**Quarantined At:** {prod.quarantine_date.strftime('%Y-%d-%m %H:%M')}")
                 st.write(f"**Quarantined By:** {prod.quarantined_by}")
