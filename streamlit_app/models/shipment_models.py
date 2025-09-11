@@ -21,8 +21,8 @@ class Shipment(Base):
     carrier = Column(String(5))
     notes = Column(String(255))
 
-    unit_items = relationship("ShipmentUnitItems", back_populates="shipments")
-    sku_items = relationship("ShipmentSKUItems", back_populates="shipments")
+    unit_items = relationship("ShipmentUnitItems", back_populates="shipments", cascade="all, delete-orphan")
+    sku_items = relationship("ShipmentSKUItems", back_populates="shipments", cascade="all, delete-orphan")
 
 
 class ShipmentUnitItems(Base):
@@ -33,7 +33,7 @@ class ShipmentUnitItems(Base):
     product_id = Column(Integer, ForeignKey("product_tracking.id"), nullable=False)
 
     shipments = relationship("Shipment", back_populates="unit_items")
-    
+    product = relationship("ProductTracking")
 
 class ShipmentSKUItems(Base):
     __tablename__ = "shipment_sku_items"
@@ -44,4 +44,5 @@ class ShipmentSKUItems(Base):
     quantity = Column(Integer, nullable=False)
 
     shipments = relationship("Shipment", back_populates="sku_items")
+    product_sku = relationship("ProductSKU")
     

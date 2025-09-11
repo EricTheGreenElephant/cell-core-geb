@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import text, select
+from sqlalchemy import text, select, or_
 from datetime import datetime
 from models.production_models import ProductRequest, ProductHarvest, ProductTracking, ProductSKU
 from schemas.production_schemas import ProductRequestCreate
@@ -21,11 +21,12 @@ def get_requestable_skus(db: Session) -> list[tuple[int, str, str]]:
     stmt = select(
         ProductSKU.id,
         ProductSKU.sku,
-        ProductSKU.name  
+        ProductSKU.name,
+        ProductSKU.is_bundle,
+        ProductSKU.pack_qty,
     ).where(
-        ProductSKU.is_serialized == True,
-        ProductSKU.is_bundle == False,
-        ProductSKU.is_active == True
+        ProductSKU.is_active == True,
+        or_(ProductSKU.is_serialized == True, ProductSKU.is_bundle == True,)
     ).order_by(ProductSKU.name)
     return db.execute(stmt).all()
 
@@ -62,7 +63,7 @@ def get_pending_requests(db: Session) -> list[dict]:
             sps.weight_buffer_g
         FROM product_requests pr
         JOIN product_skus ps ON ps.id = pr.sku_id
-        LEFT JOIN sku_print_specs sps ON sps.sku_id = ps.id
+        LEFT JOIN product_print_specs sps ON sps.sku_id = ps.id
         JOIN users u ON u.id = pr.requested_by
         WHERE pr.status = 'Pending'
         ORDER BY pr.requested_at ASC
@@ -94,12 +95,14 @@ def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int,
 
     # === Derive the SKU for this unit (direct via request) ===
     sku_id = db.scalar(text("SELECT sku_id FROM product_requests WHERE id = :rid"), {"rid": request_id})
+    product_type_id = db.scalar(text("SELECT product_type_id FROM product_skus WHERE id = :sid"), {"sid": sku_id})
 
     # === Insert Product Tracking Record ===
     tracking = ProductTracking(
         harvest_id=harvest.id,
         tracking_id=tracking_id,
         sku_id=sku_id,
+        product_type_id=product_type_id,
         current_stage_id=1,
         current_status_id=pending_status_id
     )
@@ -120,7 +123,7 @@ def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int,
 @transactional
 def cancel_product_request(db: Session, request_id: int):
     db.execute(
-        text("UDPATE product_requests SET status = 'Cancelled' WHERE id = :id"),
+        text("UPDATE product_requests SET status = 'Cancelled' WHERE id = :id"),
         {"id": request_id}
     )
     db.commit()

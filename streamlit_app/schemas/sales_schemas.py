@@ -14,7 +14,8 @@ class SalesOrderInput(BaseModel):
 class OrderItemOut(BaseModel):
     id: int
     product_sku_id: int 
-    quantity: int 
+    quantity: int
+    required_units: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

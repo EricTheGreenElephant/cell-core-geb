@@ -23,18 +23,17 @@ class ProductSKU(Base):
     name = Column(String(120), nullable=False)
     is_serialized = Column(Boolean, nullable=False)
     is_bundle = Column(Boolean, default=False, nullable=False)
+    pack_qty = Column(Integer, nullable=False, default=1)
     is_active = Column(Boolean, default=True, nullable=False)
 
-    product_type = relationship("ProductType", back_populates="skus")
+    product_type = relationship("ProductType", back_populates="skus", foreign_keys=[product_type_id])
     print_specs = relationship("SKUPrintSpecs", back_populates="sku", uselist=False)
-    bom_components = relationship("SKUBom", foreign_keys="SKUBom.parent_sku_id", back_populates="parent_sku")
-    bom_as_component = relationship("SKUBom", foreign_keys="SKUBom.component_sku_id", back_populates="component_sku")
-    requests = relationship("ProductRequest", back_populates="sku")
-    trackings = relationship("ProductTracking", back_populates="sku")
+    requests = relationship("ProductRequest", back_populates="sku", foreign_keys="ProductRequest.sku_id")
+    trackings = relationship("ProductTracking", back_populates="sku", foreign_keys="ProductTracking.sku_id")
 
 
 class SKUPrintSpecs(Base):
-    __tablename__ = 'sku_print_specs'
+    __tablename__ = 'product_print_specs'
     sku_id = Column(Integer, ForeignKey('product_skus.id'), primary_key=True)
     height_mm = Column(Numeric(7, 2), nullable=False)
     diameter_mm = Column(Numeric(7, 2), nullable=False)
@@ -42,17 +41,6 @@ class SKUPrintSpecs(Base):
     weight_buffer_g = Column(Numeric(4, 2), nullable=False)
 
     sku = relationship("ProductSKU", back_populates="print_specs")
-
-
-class SKUBom(Base):
-    __tablename__ = 'sku_bom'
-    id = Column(Integer, primary_key=True)
-    parent_sku_id = Column(Integer, ForeignKey('product_skus.id'), nullable=False)
-    component_sku_id = Column(Integer, ForeignKey('product_skus.id'), nullable=False)
-    component_qty = Column(Integer, nullable=False)
-
-    parent_sku = relationship("ProductSKU", foreign_keys=[parent_sku_id], back_populates="bom_components")
-    component_sku = relationship("ProductSKU", foreign_keys=[component_sku_id], back_populates="bom_as_component")
 
 
 class ProductRequest(Base):
@@ -65,7 +53,7 @@ class ProductRequest(Base):
     requested_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     notes = Column(String)
 
-    sku = relationship("ProductSKU", back_populates="requests")
+    sku = relationship("ProductSKU", back_populates="requests", foreign_keys=[sku_id])
 
 
 class ProductHarvest(Base):
@@ -87,6 +75,7 @@ class ProductTracking(Base):
     id = Column(Integer, primary_key=True)
     harvest_id = Column(Integer, ForeignKey('product_harvest.id'), unique=True, nullable=False)
     sku_id = Column(Integer, ForeignKey('product_skus.id'), nullable=False)
+    product_type_id = Column(Integer, ForeignKey('product_skus.id'), nullable=True)
     tracking_id = Column(String(50), unique=True, nullable=False)
     current_status_id = Column(Integer, ForeignKey("product_statuses.id"), nullable=True)
     previous_stage_id = Column(Integer, ForeignKey('lifecycle_stages.id'), nullable=True)
@@ -94,7 +83,7 @@ class ProductTracking(Base):
     location_id = Column(Integer, ForeignKey('storage_locations.id'), nullable=True)
     last_updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
-    sku = relationship("ProductSKU", back_populates="trackings")
+    sku = relationship("ProductSKU", back_populates="trackings", foreign_keys=[sku_id])
     stage = relationship('LifecycleStages', foreign_keys=[current_stage_id])
     previous_stage = relationship('LifecycleStages', foreign_keys=[previous_stage_id], backref="previous_stage_products")
     location = relationship('StorageLocation')

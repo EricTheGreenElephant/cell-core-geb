@@ -1,4 +1,4 @@
-INSERT INTO dbo.sku_print_specs
+INSERT INTO dbo.product_print_specs
     (sku_id, height_mm, diameter_mm, average_weight_g, weight_buffer_g)
 SELECT 
     s.id,
@@ -16,8 +16,6 @@ FROM (VALUES
 ) AS v(sku, height_mm, diameter_mm, average_weight_g, weight_buffer_g)
 JOIN dbo.product_skus s 
     ON s.sku = v.sku 
-LEFT JOIN dbo.sku_print_specs p 
+LEFT JOIN dbo.product_print_specs p 
     ON p.sku_id = s.id 
-WHERE s.is_serialized = 1
-    AND s.is_bundle = 0
-    AND p.sku_id IS NULL;
+WHERE p.sku_id IS NULL;

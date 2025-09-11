@@ -23,7 +23,7 @@ class Order(Base):
     updated_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     notes = Column(String(255))
 
-    order_items = relationship("OrderItem", back_populates="order")
+    order_items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
 
 
 class OrderItem(Base):
@@ -35,3 +35,4 @@ class OrderItem(Base):
     quantity = Column(Integer, nullable=False)
 
     order = relationship("Order", back_populates="order_items")
+    product_sku = relationship("ProductSKU")

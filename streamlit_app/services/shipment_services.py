@@ -26,6 +26,7 @@ def get_open_orders_with_items(db: Session, order_id: int) -> dict:
                 s.name AS sku_name,
                 s.is_bundle,
                 s.is_serialized, 
+                s.pack_qty,
                 oi.quantity
             FROM order_items oi
             JOIN product_skus s ON oi.product_sku_id = s.id
@@ -36,7 +37,25 @@ def get_open_orders_with_items(db: Session, order_id: int) -> dict:
     return {
         "items": [dict(r) for r in items]
     }
-    
+
+def build_unit_requirements(db: Session, order_items: list[dict]) -> dict[int, dict]:
+    out: dict[int, dict] = {}
+    for row in order_items:
+        sku_id = int(row["product_sku_id"])
+        pack_qty = int(row.get("pack_qty") or 1)
+        order_qty = int(row["quantity"])
+        required_units = order_qty * pack_qty
+        out[sku_id] = {
+            "required_units": required_units,
+            "order_qty": order_qty,
+            "sku": row["sku"],
+            "sku_name": row["sku_name"],
+            "pack_qty": pack_qty,
+            "is_bundle": bool(row.get("is_bundle")),
+            "is_serialized": bool(row.get("is_serialized"))
+        }
+    return out
+
 def expand_sku_to_components(db: Session, parent_sku_id: int, count: int = 1) -> dict[int, int]:
     """
     Returns {component_sku_id: total_required_qty} for 'count' of parent_sku_id.
@@ -105,7 +124,7 @@ def expand_sku_to_components(db: Session, parent_sku_id: int, count: int = 1) ->
     #     "components_required": expanded
     # }
 
-def get_fifo_inventory_by_sku(db: Session, component_sku_id: int, limit: int):
+def get_fifo_inventory_by_sku(db: Session, sku_id: int, limit: int):
     """
     Returns FIFO unites (serialized) available for a given SKU.
     """
@@ -132,7 +151,7 @@ def get_fifo_inventory_by_sku(db: Session, component_sku_id: int, limit: int):
             ORDER BY ph.print_date ASC
             OFFSET 0 ROWS FETCH NEXT :limit ROWS ONLY
         """
-    ), {"sku_id": component_sku_id, "limit": limit}).mappings().all()
+    ), {"sku_id": sku_id, "limit": limit}).mappings().all()
 
     return [dict(r) for r in rows]
 
@@ -162,7 +181,7 @@ def create_shipment_from_order(
     order_id: int,
     customer_id: int,
     creator_id: int,
-    picked_by_component: dict[int, list[dict]],
+    picked_by_sku: dict[int, list[dict]],
     non_serialized_counts: dict[int, int],
     updated_by: int,
     notes: str = ""
@@ -184,31 +203,50 @@ def create_shipment_from_order(
         text("SELECT id FROM lifecycle_stages WHERE stage_code = 'PendingShipment'")
     )
 
-    for units in picked_by_component.values():
-        for unit in units:
+    sku_meta = {
+        r["id"]: (int(r["pack_qty"] or 1), bool(r["is_bundle"]))
+        for r in db.execute(text("SELECT id, pack_qty, is_bundle FROM product_skus")).mappings().all()
+    }
+
+    per_sku_units_inserted: dict[int, int] = defaultdict(int)
+
+    for sku_id, units in picked_by_sku.items():
+        for unit in (units or []):
             item = ShipmentUnitItems(
                 shipment_id=shipment.id,
                 product_id=unit["product_id"],
             )
             db.add(item)
 
-            update_product_stage(
-                db=db,
-                product_id=unit["product_id"],
-                new_stage_id=pending_shipment_stage_id,
-                reason="Marked for Shipment",
-                user_id=creator_id
-            )
+            per_sku_units_inserted[sku_id] += 1
 
-    for sku_id, qty in (non_serialized_counts or {}).items():
+            if pending_shipment_stage_id:
+                update_product_stage(
+                    db=db,
+                    product_id=unit["product_id"],
+                    new_stage_id=pending_shipment_stage_id,
+                    reason="Marked for Shipment",
+                    user_id=creator_id
+                )
+
+    for sku_id, units in per_sku_units_inserted.items():
+        pack_qty, is_bundle = sku_meta.get(int(sku_id), (1, False))
+        qty = (units // pack_qty) if is_bundle and pack_qty > 0 else units
         if qty > 0:
             item = ShipmentSKUItems(
                 shipment_id=shipment.id,
-                product_sku_id=sku_id,
-                quantity=qty
+                product_sku_id=int(sku_id),
+                quantity=int(qty)
             )
             db.add(item)
 
+    for sku_id, qty in (non_serialized_counts or {}).items():
+        if qty and qty > 0:
+            db.add(ShipmentSKUItems(
+                shipment_id=shipment.id,
+                product_sku_id=int(sku_id),
+                quantity=int(qty)
+            ))
     # === Fetch Order ===
     order = db.query(Order).filter(Order.id == order_id).first()
 

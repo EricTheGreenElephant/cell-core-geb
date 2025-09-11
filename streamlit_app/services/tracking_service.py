@@ -199,7 +199,7 @@ def validate_materials_available(db: Session, sku_id: int, quantity: int):
         """
             SELECT sps.average_weight_g, sps.weight_buffer_g
             FROM product_skus ps
-            LEFT JOIN sku_print_specs sps ON sps.sku_id = ps.id
+            LEFT JOIN product_print_specs sps ON sps.sku_id = ps.id
             WHERE ps.id = :sid
         """
     ), {"sid": sku_id}).fetchone()

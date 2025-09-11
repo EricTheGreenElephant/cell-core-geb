@@ -4,7 +4,7 @@ import time
 from services.shipment_services import (
     get_open_order_headers,
     get_open_orders_with_items, 
-    expand_order_skus_to_components,
+    build_unit_requirements,
     get_fifo_inventory_by_sku, 
     create_shipment_from_order,
     cancel_order_request
@@ -48,9 +48,9 @@ def render_shipment_batch_form():
 
     with get_session() as db:
         details = get_open_orders_with_items(db, selected_order_id)
-        component_need = expand_order_skus_to_components(db, details["items"])
+        unit_need = build_unit_requirements(db, details["items"])
     
-    if not component_need:
+    if not unit_need:
         st.error("No open sales orders available for fulfillment.")
         return
 
@@ -64,51 +64,58 @@ def render_shipment_batch_form():
     st.markdown("---")
 
     # === Display lines as ordered ===
-    picked_by_component: dict[int, list[dict]] = {}
+    picked_by_sku: dict[int, list[dict]] = {}
     non_serialized_counts: dict[int, int] = {}
-    invalid_components: list[str] = []
+    invalid_skus: list[str] = []
 
-    for comp_sku_id, comp in component_need.items():
-        required = int(comp["required_qty"])
-        sku_label = f"{comp['sku']} - {comp['sku_name']}"
+    for sku_id, meta in unit_need.items():
+        required = int(meta["required_units"])
+        order_qty = int(meta["order_qty"])
+        is_serialized = bool(meta["is_serialized"])
+        is_bundle = bool(meta["is_bundle"])
+        requires_picking = is_serialized or is_bundle
+
+        sku_label = f"{meta['sku']} - {meta['sku_name']}"
         st.markdown(f"#### {sku_label} (need {required})")
 
-        if not comp["is_serialized"]:
+        if not requires_picking:
             st.info("Non-serialized item - no unit picking required.")
-            st.markdown(f"*Quantity to ship:* **{required}**")
-            non_serialized_counts[comp_sku_id] = required
-            picked_by_component[comp_sku_id] = []
+            st.markdown(f"*Quantity to ship:* **{order_qty}**")
+            non_serialized_counts[sku_id] = order_qty
+            picked_by_sku[sku_id] = []
             st.markdown("---")
             continue
+        
+        st.markdown(f"#### {sku_label} (need {required} unit{'s' if required != 1 else ''})")
 
         with get_session() as db:
-            fifo = get_fifo_inventory_by_sku(db, comp_sku_id, required)
+            fifo = get_fifo_inventory_by_sku(db, sku_id=sku_id, limit=required)
 
         if fifo and len(fifo) > 0:
             st.markdown("*Auto-selected by FIFO*")
-            st.data_editor(pd.DataFrame(fifo), hide_index=True, num_rows="fixed", disabled=True, key=f"fifo_{comp_sku_id}")
+            st.data_editor(pd.DataFrame(fifo), hide_index=True, num_rows="fixed", disabled=True, key=f"fifo_{sku_id}")
         else:
-            st.warning(f"No available inventory found for {comp['sku']}.")
+            st.warning(f"No available inventory found for {meta['sku']}.")
 
-        override = st.checkbox(f"Manual override for {comp['sku']}", key=f"ovr_{comp_sku_id}")
+        override = st.checkbox(f"Manual override for {meta['sku']}", key=f"ovr_{sku_id}")
 
         if override:
             with get_session() as db:
-                all_inv = get_fifo_inventory_by_sku(db, comp_sku_id, 500)
+                all_inv = get_fifo_inventory_by_sku(db, sku_id=sku_id, limit=500)
 
             options = [f"#{u['product_id']} | {u['print_date'].strftime('%Y-%d-%m')}" for u in all_inv]
             lookup = {lbl: u for lbl, u in zip(options, all_inv)}
             default = options[:required] if options else []
 
-            chosen = st.multiselect(f"Pick {required} unit(s) for {comp['sku']}", options=options, default=default, key=f"ms_{comp_sku_id}")
+            chosen = st.multiselect(f"Pick {required} unit(s) for {meta['sku']}", options=options, default=default, key=f"ms_{sku_id}")
             chosen_units = [lookup[x] for x in chosen]
             if len(chosen_units) != required:
-                invalid_components.append(comp["sku"])
-            picked_by_component[comp_sku_id] = chosen_units
+                invalid_skus.append(meta["sku"])
+            picked_by_sku[sku_id] = chosen_units
         else:
-            picked_by_component[comp_sku_id] = fifo or []
-            if len(picked_by_component[comp_sku_id]) != required:
-                invalid_components.append(comp["sku"])
+            picked_by_sku[sku_id] = fifo or []
+            if len(picked_by_sku[sku_id]) != required:
+                invalid_skus.append(meta["sku"])
         
         st.markdown("---")
 
@@ -146,8 +153,8 @@ def render_shipment_batch_form():
             st.exception(e)
 
     if submitted:
-        if invalid_components:
-            st.error("Shipment cannot be created. Incomplete component picks: " + ", ".join(invalid_components))
+        if invalid_skus:
+            st.error("Shipment cannot be created. Incomplete component picks: " + ", ".join(invalid_skus))
             return
         try:
             with get_session() as db:
@@ -157,7 +164,7 @@ def render_shipment_batch_form():
                     customer_id=selected_order["customer_id"],
                     creator_id=user_id,
                     updated_by=user_id,
-                    picked_by_component=picked_by_component,
+                    picked_by_component=picked_by_sku,
                     non_serialized_counts=non_serialized_counts,
                     notes=notes
                 )

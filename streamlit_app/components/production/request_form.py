@@ -14,7 +14,16 @@ def render_product_request_form():
         st.warning("No requestable SKUs found. Check your catalog.")
         return
     
-    label_map = {f"{sku} - {name}": sku_id for (sku_id, sku, name) in skus}
+    label_map: dict[str, int] = {}
+    meta_map: dict[int, dict] = {}
+
+    for sku_id, sku, name, is_bundle, pack_qty in skus:
+        label = f"{sku} - {name}"
+        label_map[label] = sku_id
+        meta_map[sku_id] = {
+            "is_bundle": bool(is_bundle),
+            "pack_qty": int(pack_qty or 1),
+        }
     
     with st.form("new_product_request_form"):
         label = st.selectbox("Select Product (SKU)", list(label_map.keys()))
@@ -30,9 +39,14 @@ def render_product_request_form():
                 return
             
             sku_id = label_map[label]
+            meta = meta_map[sku_id]
+            pack_qty = meta["pack_qty"]
+            is_bundle = meta["is_bundle"]
+
+            expanded_qty = quantity * pack_qty if is_bundle else quantity
 
             with get_session() as db:
-                errors, info = validate_materials_available(db, sku_id=sku_id, quantity=quantity)
+                errors, info = validate_materials_available(db, sku_id=sku_id, quantity=expanded_qty)
 
                 if errors:
                     for e in errors:
@@ -45,11 +59,15 @@ def render_product_request_form():
                         payload = ProductRequestCreate(
                             requested_by=user_id,
                             sku_id=sku_id,
-                            quantity=quantity,
+                            quantity=int(expanded_qty),
                             notes=notes
                         )
                         insert_product_request(db, payload)
-                        st.success("Product request submitted successfully!")
+
+                        if is_bundle and pack_qty > 1:
+                            st.success(f"Submitted! This will create {expanded_qty} individual bottles ({pack_qty} per bundle.)")
+                        else:
+                            st.success("Product request submitted successfully!")
                     except Exception as e:
                         st.error("Failed to submit request.")
                         st.exception(e)

@@ -198,29 +198,16 @@ BEGIN
         name NVARCHAR(120) NOT NULL,
         is_serialized BIT NOT NULL,
         is_bundle BIT NOT NULL DEFAULT 0,
+        pack_qty INT NOT NULL DEFAULT 1 CHECK (pack_qty > 0), 
         is_active BIT NOT NULL DEFAULT 1,
 
         CONSTRAINT fk_sku_type FOREIGN KEY (product_type_id) REFERENCES product_types(id)
     );
 END;
 
-IF OBJECT_ID('sku_bom', 'U') IS NULL
-BEGIN 
-    CREATE TABLE sku_bom(
-        id INT PRIMARY KEY IDENTITY(1,1),
-        parent_sku_id INT NOT NULL,
-        component_sku_id INT NOT NULL,
-        component_qty INT NOT NULL CHECK (component_qty > 0),
-
-        CONSTRAINT fk_bom_parent FOREIGN KEY (parent_sku_id) REFERENCES product_skus(id),
-        CONSTRAINT fk_bom_component FOREIGN KEY (component_sku_id) REFERENCES product_skus(id),
-        CONSTRAINT uc_bom UNIQUE (parent_sku_id, component_sku_id)
-    );
-END; 
-
-IF OBJECT_ID('sku_print_specs', 'U') IS NULL 
+IF OBJECT_ID('product_print_specs', 'U') IS NULL 
 BEGIN
-    CREATE TABLE sku_print_specs (
+    CREATE TABLE product_print_specs (
         sku_id INT PRIMARY KEY,
         height_mm DECIMAL(7,2) NOT NULL CHECK (height_mm > 0),
         diameter_mm DECIMAL(7,2) NOT NULL CHECK (diameter_mm > 0),
@@ -282,6 +269,7 @@ BEGIN
         id INT PRIMARY KEY IDENTITY(1,1),
         harvest_id INT NOT NULL UNIQUE,
         tracking_id NVARCHAR(50) NOT NULL UNIQUE,
+        product_type_id INT NOT NULL,
         sku_id INT NOT NULL,
         current_status_id INT NULL,
         previous_stage_id INT NULL,
@@ -291,6 +279,7 @@ BEGIN
 
         CONSTRAINT fk_tracking_harvest FOREIGN KEY (harvest_id) REFERENCES product_harvest(id),
         CONSTRAINT fk_tracking_sku FOREIGN KEY (sku_id) REFERENCES product_skus(id),
+        CONSTRAINT fk_tracking_type FOREIGN KEY (product_type_id) REFERENCES product_types(id), 
         CONSTRAINT fk_tracking_status FOREIGN KEY (current_status_id) REFERENCES product_statuses(id),
         CONSTRAINT fk_tracking_location FOREIGN KEY (location_id) REFERENCES storage_locations(id),
         CONSTRAINT fk_tracking_stage FOREIGN KEY (current_stage_id) REFERENCES lifecycle_stages(id),
