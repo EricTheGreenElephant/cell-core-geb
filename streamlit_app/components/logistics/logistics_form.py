@@ -29,11 +29,11 @@ def render_logistics_form():
             {
                 "Include": True,
                 "Product ID": p.product_id,
-                "Current Status": p.current_stage_name,
-                "Harvest ID": p.harvest_id,
-                "Product Type": p.product_type,
+                "SKU": p.sku,
+                "SKU Desc.": p.sku_name,
+                "Current Status": p.current_status,
+                "Current Stage": p.current_stage_name,
                 "Location": p.location_name,
-                "QC Result": p.inspection_result,
                 "Surface Treat": True,
                 "Sterilize": True
             }
@@ -43,7 +43,7 @@ def render_logistics_form():
         edited = st.data_editor(
             options,
             use_container_width=True,
-            disabled=["Product ID", "Current Status", "Harvest ID", "Product Type", "Location", "QC Result"],
+            disabled=["Product ID", "SKU", "SKU Desc.", "Current Status", "Current Stage",  "Location"],
             column_config={
                 "Include": st.column_config.CheckboxColumn("Include in Batch"),
                 "Surface Treat": st.column_config.CheckboxColumn("Surface Treat"),

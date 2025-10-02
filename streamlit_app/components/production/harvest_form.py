@@ -21,13 +21,13 @@ def render_harvest_form():
         return
 
     for unit in pending:
-        with st.expander(f"🧾 Request #{unit['id']} - {unit['product_type']} (Lot: {unit['lot_number']})"):
+        with st.expander(f"🧾 **Request #{unit['id']}** | {unit['sku']} - {unit['sku_name']} (Lot: {unit['lot_number']})"):
             st.markdown(f"**Requested by:** {unit['requested_by']}  \n**Date:** {unit['requested_at']}")
 
             # Calculate required weight with tolerated buffer weight and additional buffer  
-            avg = unit["average_weight"]
-            buffer = unit["buffer_weight"]
-            required_weight = avg + buffer + 10
+            avg = float(unit["average_weight_g"] or 0)
+            buffer = float(unit["weight_buffer_g"] or 0)
+            required_weight = avg + buffer + 10.0
             
             # Filter available printers based on weight
             with get_session() as db:

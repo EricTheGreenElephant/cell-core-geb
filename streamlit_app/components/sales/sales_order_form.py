@@ -1,17 +1,14 @@
 import streamlit as st
 import time
-from collections import defaultdict
 from services.sales_services import (
     get_customers, 
-    get_active_sales_catalogue, 
-    get_orderable_product_types, 
+    get_active_skus,
+    get_sales_ready_qty_by_sku,
     create_sales_order, 
-    get_active_supplements,
     get_processing_order_with_items,
     update_sales_order,
-    build_catalogue_quantity_inputs,
-    show_order_quantity_summary,
-    calculate_order_totals_from_catalogue
+    # show_order_quantity_summary,
+    # calculate_order_totals_from_catalogue
 )
 from services.shipment_services import cancel_order_request
 from schemas.sales_schemas import SalesOrderInput
@@ -24,102 +21,95 @@ def render_sales_order_form(mode: str = "new"):
     
     with get_session() as db:
         customers = get_customers(db)
-        catalogues = get_active_sales_catalogue(db)
-        product_types = get_orderable_product_types(db)
-        supplements = get_active_supplements(db)
+        skus = get_active_skus(db)
+        available_by_sku = get_sales_ready_qty_by_sku(db)
 
-    if not all([customers, catalogues, product_types, supplements]):
-        st.warning("Missing required setup data.")
+    if not customers or not skus:
+        st.warning("Missing customers or SKUs.")
         return
     
-    product_lookup = {p.id: p.name for p in product_types}
-    supplement_lookup = {s.id: s.name for s in supplements}
+    customer_options = {c["customer_name"]: c["id"] for c in customers}
 
     # === Handle Order Selection if Updating ===
     order_data = None
+    selected_order_id = None
     if mode == "update":
         with get_session() as db:
-            orders = get_processing_order_with_items(db, all_orders=True)
-        if not orders:
+            existing = get_processing_order_with_items(db, all_orders=True)
+        if not existing:
             st.warning("No active sales orders found.")
             return
 
         order_lookup = {
-            f"Order #{o['order_id']} - {o['customer_name']} ({o['order_date'].date()})": o["order_id"]
-            for o in orders
+            f"Order #{o['order_id']} - {o['customer_name']} ({o['order_date'].date()})": o
+            for o in existing
         }
         selected_label = st.selectbox("Select Sales Order to Edit", ["Select..."] + list(order_lookup.keys()))
         if selected_label == "Select...":
             return
         
-        selected_order_id = order_lookup[selected_label]
+        order_data = order_lookup[selected_label]
+        selected_order_id = order_data["order_id"]
 
-        with get_session() as db:
-            order_data = get_processing_order_with_items(db, selected_order_id)
+    default_idx = 0
+    if mode == "update":
+        cur_id = order_data["customer_id"]
+        if cur_id in customer_options.values():
+            default_idx = list(customer_options.values()).index(cur_id)
+    customer_label = st.selectbox("Customer", list(customer_options.keys()), index=default_idx)
 
-        customer_id = order_data["customer_id"]
-        notes = order_data["notes"] or ""
 
-    else:
-        customer_id = None
-        notes = ""
-    
-    # === Customer Selection ===
-    customer_options = {c["customer_name"]: c["id"] for c in customers}
-    default_customer_idx = list(customer_options.values()).index(customer_id) if customer_id else 0
-    customer_choice = st.selectbox("Select Customer", list(customer_options.keys()), index=default_customer_idx)
-
-    # === Catalogue Quantities ===
-    package_quantities = build_catalogue_quantity_inputs(catalogues, mode)
-    
-    # === Calculate Final Quantities ===
-    product_quantities_raw, supplement_quantities_raw = calculate_order_totals_from_catalogue(
-        catalogues=catalogues,
-        package_quantities=package_quantities
-    )
-    product_quantities = defaultdict(int, product_quantities_raw)
-    supplement_quantities = defaultdict(int, supplement_quantities_raw)
-
-    # === Overlay Existing Order Quantities if Update Mode ===
+    # SKU table of inputs
+    st.markdown("#### Select SKU quantities")
+    sku_quantities: dict[int, int] = {}
+    existing_map = {}
     if mode == "update" and order_data:
-        for item in order_data["product_items"]:
-            product_quantities[item["product_type_id"]] += item["quantity"]
-        for supp in order_data["supplements"]:
-            supplement_quantities[supp["supplement_id"]] += supp["quantity"]
+        existing_map = {i["product_sku_id"]: i["quantity"] for i in order_data["order_items"]}
 
-    # === Show Summary ===
-    if any(package_quantities.values()) or mode == "update":
-        show_order_quantity_summary(product_quantities, supplement_quantities, product_lookup, supplement_lookup)
+    for row in skus:
+        sid = row["id"]
+        sku_code = row["sku"]
+        name = row["name"]
+        is_bundle = bool(row["is_bundle"])
+
+        avail = available_by_sku.get(sid)
+        hint = f" (Available: {avail})" if avail is not None else ""
+        default_val = existing_map.get(sid, 0)
+        qty = st.number_input(
+            f"{sku_code} - {name}{' **--BUNDLE**' if is_bundle else ''} {hint}",
+            min_value=0, step=1, value=default_val, key=f"skuqty_{sid}"
+        )
+        if qty > 0:
+            sku_quantities[sid] = qty
     
-    notes = st.text_area("Order Notes (Optional)", max_chars=255, value=notes).strip()
+    notes_default = (order_data["notes"] or "") if (mode == "update" and order_data) else ""
+    notes = st.text_area("Order Notes (optional)", value=notes_default, max_chars=255).strip()
 
-    # === Submission Buttons ===
     col1, col2 = st.columns(2)
     user_id = st.session_state.get("user_id")
 
-    if col1.button("Update Sales Order" if mode == "update" else "Create Sales Order", use_container_width=True):
+    if col1.button("Update Order" if mode == "update" else "Create Order", use_container_width=True):
         data = SalesOrderInput(
-            customer_id=customer_options[customer_choice],
+            customer_id=customer_options[customer_label],
             created_by=user_id,
             updated_by=user_id,
-            product_quantities=dict(product_quantities),
-            supplement_quantities=dict(supplement_quantities),
-            notes=notes
+            sku_quantities=sku_quantities,
+            notes=notes,
+            parent_order_id=(order_data["parent_order_id"] if mode == "update" else None)
         )
-
         try:
             with get_session() as db:
                 if mode == "update":
-                    update_sales_order(db=db, order_id=selected_order_id, data=data)
+                    update_sales_order(db, selected_order_id, data)
                 else:
                     create_sales_order(db, data)
-            st.success("Sales order created successfully.")
+            st.success("Order processed.")
             time.sleep(1.5)
-            StateManager.clear(scope="catalogue", id_=mode)
             st.rerun()
         except Exception as e:
-            st.error("Failed to process sales order.")
+            st.error("Failed to process order.")
             st.exception(e)
+
     # === Cancel Option ===
     if mode == "update":
         if col2.button("Cancel Sales Order", use_container_width=True):

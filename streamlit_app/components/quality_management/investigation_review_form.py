@@ -1,14 +1,9 @@
 import streamlit as st
 from services.quality_management_services import get_investigated_products, sort_qm_reviewed_products, resolve_investigation
+from constants.general_constants import INVESTIGATION_RESOLUTION_OPTIONS
 from db.orm_session import get_session
 import time
 
-
-INVESTIGATION_RESOLUTION_OPTIONS = {
-    "Approve as A-Ware": "Passed",
-    "Approve as B-Ware": "B-Ware",
-    "Mark as Waste": "Waste",
-}
 
 def render_investigation_review():
     st.subheader("Products Under Investigation")
@@ -24,7 +19,7 @@ def render_investigation_review():
             return
         
         for prod in products:
-            with st.expander(f"Product #{prod.product_id} - {prod.product_type}"):
+            with st.expander(f"Product #{prod.product_id} - {prod.sku} - {prod.sku_name}"):
                 st.write(f"**Current Stage:** {prod.current_stage_name}")
                 st.write(f"**Previous stage:** `{prod.previous_stage_name or 'Unknown'}`")
                 st.write(f"**Last Updated:** {prod.last_updated_at.date()}")

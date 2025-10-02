@@ -17,7 +17,7 @@ def render_qc_form():
         return
     
     product_map = {
-        f"#{p['product_id']} - {p['product_type']} (Lot: {p['lot_number']})": p
+        f"#{p['product_id']} | {p['sku']} - {p['sku_name']} (Lot: {p['lot_number']})": p
         for p in printed
     }
 
@@ -27,8 +27,8 @@ def render_qc_form():
     with get_session() as db:
         reason_rows = get_reasons_for_context(db, "HarvestQC")
 
-    avg_weight = selected["average_weight"]
-    tolerance = selected["buffer_weight"]
+    avg_weight = float(selected["average_weight_g"] or 0)
+    tolerance = float(selected["weight_buffer_g"] or 0)
     weight_low = avg_weight - tolerance
     weight_high = avg_weight + tolerance
 
@@ -36,6 +36,12 @@ def render_qc_form():
     st.markdown(f"**Accepted Range:** {weight_low:.2f}g to {weight_high:.2f}g")
 
     weight = st.number_input("Measured Weight (g)", min_value=0.0, format="%.2f", key=f"hqc_weight_{selected['product_id']}")
+
+    st.markdown("**Pressure Testing parameters:**")
+    st.markdown("* 500 mbar ± 100 mbar")
+    st.markdown("* 6 mbar tolerance")
+    st.markdown("* 30 second measurement time")
+
     pressure = st.number_input("Pressure Drop (mbar)", min_value=0.0, format="%.2f", key=f"hqc_pressure_{selected['product_id']}")
     visual = st.radio("Visual Check", ["Pass", "Fail"], key=f"hqc_visual_{selected['product_id']}")
 
@@ -72,6 +78,8 @@ def render_qc_form():
     color = COLOR_MAP.get(result, "black")
 
     st.markdown(f"<p><strong>Final QC Result:</strong> <span style='color:{color}'>{result}</span></p>", unsafe_allow_html=True)
+    if result == "B-Ware":
+        st.info("Please don't forget to indicate B-Ware on the label!")
     
     with st.form("qc_form"):       
         notes = st.text_area("Notes (optional)", value=notes_placholder, max_chars=255, key=f"hqc_notes_{selected['product_id']}").strip()

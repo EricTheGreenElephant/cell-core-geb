@@ -10,7 +10,7 @@ SELECT pt.id AS product_id,
     pt.last_updated_at,
 
     ptype.name AS product_type,
-
+    sku.sku,
     ph.id AS harvest_id,
     pr.lot_number,
     ph.print_date,
@@ -35,7 +35,8 @@ SELECT pt.id AS product_id,
 FROM product_tracking pt
 JOIN product_harvest ph ON pt.harvest_id = ph.id
 JOIN product_requests pr ON ph.request_id = pr.id
-JOIN product_types ptype ON pr.product_id = ptype.id
+JOIN product_skus sku ON pr.sku_id = sku.id
+JOIN product_types ptype ON sku.product_type_id = ptype.id
 JOIN users printed_user ON ph.printed_by = printed_user.id
 
 LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
@@ -43,7 +44,7 @@ LEFT JOIN product_statuses ps ON pt.current_status_id = ps.id
 LEFT JOIN product_quality_control qc ON qc.product_id = pt.id
 LEFT JOIN treatment_batch_products tbi ON tbi.product_id = pt.id
 LEFT JOIN post_treatment_inspections pti ON pti.product_id = pt.id
-LEFT JOIN shipment_items si ON si.product_id = pt.id
+LEFT JOIN shipment_unit_items si ON si.product_id = pt.id
 LEFT JOIN shipments s ON si.shipment_id = s.id
 LEFT JOIN lids l ON ph.lid_id = l.id
 LEFT JOIN users qc_user ON qc.inspected_by = qc_user.id

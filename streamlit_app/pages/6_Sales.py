@@ -1,10 +1,10 @@
 import streamlit as st
 from utils.session import require_login, require_access
 from utils.auth import show_user_sidebar
-from components.sales.sales_inventory_form import render_sales_tab
+# from components.sales.sales_inventory_form import render_sales_tab
 from components.sales.sales_order_form import render_sales_order_form
 from components.sales.canceled_orders_form import render_canceled_orders_form
-from components.sales.update_order_form import render_update_order_form
+# from components.sales.update_order_form import render_update_order_form
 from components.common.toggle import toggle_button
 
 
@@ -29,7 +29,8 @@ toggle = st.selectbox(
     index=0,
 )
 if toggle == "View Sales Inventory":
-    render_sales_tab()
+    # render_sales_tab()
+    pass
 
 elif toggle == "Create Sales Order":
     render_sales_order_form(mode="new")

@@ -102,7 +102,7 @@ def render_treatment_qc_form():
             st.markdown(f"**Randomly Selected for Visual Inspection: {sample_size} of {total} products**")
             for i, p in enumerate(random_sample):
                 inspection_result = "B-Ware" if p["current_status"] == "B-Ware" else "A-Ware"
-                st.markdown(f"**Sample #{i+1}: Product #{p['product_id']} - {p['product_type']}: {inspection_result}**")
+                st.markdown(f"**Sample #{i+1}: Product #{p['product_id']} - {p['sku']} - {p['sku_name']}: {inspection_result}**")
                 p["visual_pass"] = st.radio(
                     f"Visual Pass (Product #{p['product_id']})", [True, False], horizontal=True, key=f"vis_{p['product_id']}"
                 )
@@ -142,7 +142,7 @@ def render_treatment_qc_form():
         full_qc = []
         for p in products:
             inspection_result = "B-Ware" if p["current_status"] == "B-Ware" else "A-Ware"
-            st.markdown(f"**Product #{p['product_id']} - {p['product_type']}: {inspection_result}**")
+            st.markdown(f"**Product #{p['product_id']} - {p['sku']} - {p['sku_name']}: {inspection_result}**")
 
             surface = st.checkbox("Surface Treated", value=p["surface_treat"], key=f"surf_{p['product_id']}")
             sterilized = st.checkbox("Sterilized", value=p["sterilize"], key=f"ster_{p['product_id']}")

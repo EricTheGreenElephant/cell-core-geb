@@ -4,6 +4,8 @@ import time
 from services.shipment_services import (
     get_active_shipments,
     get_products_in_shipments,
+    get_open_orders_with_items,
+    get_non_serialized_in_shipment,
     mark_shipment_as_shipped,
     mark_shipment_as_delivered
 )
@@ -33,9 +35,22 @@ def render_shipment_tracker():
             st.markdown(f"**Created:** {shipment['created_date'].strftime('%Y-%m-%d')} \n**Order ID:** {shipment['order_id']}")
 
             with get_session() as db:
+                order_request = get_open_orders_with_items(db, shipment["order_id"])
                 products = get_products_in_shipments(db, shipment["shipment_id"])
+                supplements = get_non_serialized_in_shipment(db, shipment["shipment_id"])
+
+            st.markdown("#### Order Request")
+            order_df = pd.DataFrame(order_request["items"])
+            st.dataframe(order_df, hide_index=True, use_container_width=True)
+
+            st.divider()
+
+            st.markdown("#### Chosen Products")
             df = pd.DataFrame(products)
             st.dataframe(df, hide_index=True, use_container_width=True)
+
+            df2 = pd.DataFrame(supplements)
+            st.dataframe(df2, hide_index=True, use_container_width=True)
 
             if shipment["status"] == "Pending":
                 carrier = st.text_input("Carrier", key=f"carrier_{shipment['shipment_id']}").strip()

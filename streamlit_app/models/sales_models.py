@@ -23,7 +23,7 @@ class Order(Base):
     updated_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     notes = Column(String(255))
 
-    order_items = relationship("OrderItem", back_populates="order")
+    order_items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
 
 
 class OrderItem(Base):
@@ -31,18 +31,8 @@ class OrderItem(Base):
 
     id = Column(Integer, primary_key=True)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
-    product_type_id = Column(Integer, ForeignKey("product_types.id"), nullable=False)
+    product_sku_id = Column(Integer, ForeignKey("product_skus.id"), nullable=False)
     quantity = Column(Integer, nullable=False)
 
     order = relationship("Order", back_populates="order_items")
-
-
-class OrderSupplement(Base):
-    __tablename__ = 'order_supplements'
-    
-    id = Column(Integer, primary_key=True, index=True)
-    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
-    supplement_id = Column(Integer, ForeignKey("supplements.id"), nullable=False)
-    quantity = Column(Integer, nullable=False)
-
-    supplement = relationship("Supplement", back_populates="order_links")
+    product_sku = relationship("ProductSKU")

@@ -15,7 +15,7 @@ def render_harvest_undo_form():
         return
     
     product_labels = {
-        f"#{p['harvest_id']} - {p['product_type']} - Printed on {p['print_date']}": p
+        f"#{p['harvest_id']} - {p['sku']} - {p['sku_name']} - Printed on {p['print_date']}": p
         for p in harvested
     }
 

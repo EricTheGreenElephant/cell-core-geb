@@ -26,7 +26,7 @@ def render_product_qm_review():
         target_stage_func = approve_products_for_treatment
 
     else:
-        stage_label = "Stored; Pending QM Approval for Sales"
+        stage_label = "Stored; Pending QM Approval"
         target_stage_func = approve_products_for_sales
 
     try:
@@ -69,17 +69,18 @@ def render_product_qm_review():
                 st.exception(e)
 
     for p in products:
-        with st.expander(f"Product {p.product_id}"):
-            st.write(f"Current Stage: {p.current_stage_name}")
-            st.write(f"Product Type: {p.product_type_name}")
-            st.write(f"Inspection Result: {p.inspection_result}")
+        with st.expander(f"**Product:** {p.product_id}"):
+            st.write(f"**Current Stage:** {p.current_stage_name}")
+            st.write(f"**Product SKU:** {p.sku}")
+            st.write(f"**SKU Description:** {p.sku_name}")
+            st.write(f"**Inspection Result:** {p.inspection_result}")
 
             if approval_type == "Post-Treatment Approval":
-                st.write(f"Visual Pass: {p.visual_pass}")
-                st.write(f"Surface Treated: {p.surface_treated}")
-                st.write(f"Sterilized: {p.sterilized}")
+                st.write(f"**Visual Pass:** {p.visual_pass}")
+                st.write(f"**Surface Treated:** {p.surface_treated}")
+                st.write(f"**Sterilized:** {p.sterilized}")
             
-            st.write(f"Location: {p.current_location}")
+            st.write(f"**Location:** {p.current_location}")
 
             reason = st.text_area(
                     f"Comment (required if declining)",

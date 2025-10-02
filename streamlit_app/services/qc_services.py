@@ -17,15 +17,17 @@ def get_printed_products(db: Session) -> list[dict]:
             pt.id AS product_id,
             pt.harvest_id,
             pr.id AS request_id,
-            ptype.name AS product_type,
-            ptype.average_weight,
-            ptype.buffer_weight,
+            ps.sku AS sku,
+            ps.name AS sku_name,
+            sps.average_weight_g,
+            sps.weight_buffer_g,
             pr.lot_number,
             ph.print_date
         FROM product_tracking pt
         JOIN product_harvest ph ON pt.harvest_id = ph.id
         JOIN product_requests pr ON ph.request_id = pr.id
-        JOIN product_types ptype ON pr.product_id = ptype.id
+        JOIN product_skus ps ON ps.id = pr.sku_id
+        LEFT JOIN product_print_specs sps ON sps.sku_id = ps.id
         LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
         WHERE lc.stage_order = 1
         ORDER BY ph.print_date
@@ -138,8 +140,10 @@ def get_completed_qc_products(db: Session) -> list[dict]:
     sql = """
         SELECT 
             qc.id AS qc_id,
-            qc.harvest_id,
-            pt.name AS product_type,
+            pt.id AS product_id,
+            ph.id AS harvest_id,
+            ps.sku,
+            ps.name AS sku_name,
             pr.lot_number,
             qc.weight_grams,
             qc.pressure_drop,
@@ -148,9 +152,10 @@ def get_completed_qc_products(db: Session) -> list[dict]:
             qc.notes,
             ph.print_date
         FROM product_quality_control qc
-        JOIN product_harvest ph ON qc.harvest_id = ph.id
+        JOIN product_tracking pt ON qc.product_id = pt.id
+        JOIN product_harvest ph ON pt.harvest_id = ph.id
         JOIN product_requests pr ON ph.request_id = pr.id
-        JOIN product_types pt ON pr.product_id = pt.id
+        JOIN product_skus ps ON pr.sku_id = ps.id
         ORDER BY qc.id DESC
     """
     result = db.execute(text(sql))
@@ -160,7 +165,8 @@ def get_completed_qc_products(db: Session) -> list[dict]:
 @transactional
 def update_qc_fields(
     db: Session,
-    harvest_id: int,
+    qc_id: int,
+    product_id: int,
     updates: dict[str, tuple],
     reason: str,
     user_id: int
@@ -175,7 +181,7 @@ def update_qc_fields(
 
         audit = FieldChangeAudit(
             table="product_quality_control",
-            record_id=harvest_id,
+            record_id=qc_id,
             field=field,
             old_value=old_value,
             new_value=new_value,
@@ -185,21 +191,31 @@ def update_qc_fields(
         update_record_with_audit(db, audit)
     
     if inspection_result_updated:
-        new_status = {
-            "Passed": 2,
-            "B-Ware": 2,
-            "Quarantine": 8,
-            "Waste": 9
-        }.get(new_result, 2)
-        
-        db.execute(
-            text("""
-                UPDATE product_tracking
-                SET current_stage_id = :status, last_updated_at = GETDATE()
-                WHERE harvest_id = :h_id
-            """),
-            {"status": new_status, "h_id": harvest_id}
-        )
+        new_status = STATUS_MAP_QC_TO_BUSINESS.get(new_result, "A-Ware")
+        update_product_status(db, product_id=product_id, status_name=new_status)
+
+        if new_result == "Quarantine":
+            create_quarantine_record(
+                db=db,
+                product_id=product_id,
+                source="Harvest QC",
+                quarantined_by=user_id,
+                reason=reason
+            )
+
+            new_stage_id = db.scalar(
+                text("SELECT id FROM lifecycle_stages WHERE stage_code = :code"),
+                {"code": "Quarantine"}
+            )
+            if new_stage_id:
+                update_product_stage(
+                    db=db,
+                    product_id=product_id,
+                    new_stage_id=new_stage_id,
+                    reason="QC edit: moved to Quarantine",
+                    user_id=user_id
+                )
+                
     db.commit()
 
 @transactional
