@@ -183,7 +183,7 @@ def get_mountable_filament_mounts(db: Session, required_weight: float) -> list[d
             p.name AS printer_name,
             fm.remaining_weight
         FROM filament_mounting fm
-        JOIN filaments f ON fm.printer_id = f.id
+        JOIN filaments f ON fm.filament_id = f.id
         JOIN printers p ON fm.printer_id = p.id
         WHERE fm.remaining_weight >= :weight
             AND fm.unmounted_at IS NULL

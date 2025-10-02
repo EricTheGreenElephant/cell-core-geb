@@ -20,6 +20,9 @@ def render_filament_inventory():
 
             # Builds dataframe with returned data and creates display
             df_filaments = pd.DataFrame(all_filaments)
+            
+            df_filaments["initial_weight"] = pd.to_numeric(df_filaments["initial_weight"], errors="coerce")
+            df_filaments["remaining_weight"] = pd.to_numeric(df_filaments["remaining_weight"], errors="coerce")
 
             gb = GridOptionsBuilder.from_dataframe(df_filaments)
             gb.configure_pagination(paginationAutoPageSize=True)

@@ -27,7 +27,7 @@ def get_printed_products(db: Session) -> list[dict]:
         JOIN product_harvest ph ON pt.harvest_id = ph.id
         JOIN product_requests pr ON ph.request_id = pr.id
         JOIN product_skus ps ON ps.id = pr.sku_id
-        LEFT JOIN sku_print_specs sps ON sps.sku_id = ps.id
+        LEFT JOIN product_print_specs sps ON sps.sku_id = ps.id
         LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
         WHERE lc.stage_order = 1
         ORDER BY ph.print_date
