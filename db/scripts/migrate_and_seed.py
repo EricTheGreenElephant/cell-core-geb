@@ -1,5 +1,6 @@
 import os, glob, hashlib, sys, argparse
 import subprocess
+import shlex
 from pathlib import Path
 from urllib.parse import quote_plus
 from sqlalchemy import create_engine, text
@@ -260,7 +261,7 @@ def main():
     parser = argparse.ArgumentParser(description="Apply migrations, seeds, and views.")
     parser.add_argument("--rebuild", action="store_true", help="(Dev) Drop & recreate the database before applying files.")
     parser.add_argument("--run-etl", action="store_true", help="Run the ETL (etl/one_shot_etl.py) after migrations/seeds/views.")
-    parser.add_argument("--etl-args", default="", help="Extra args to pass to the ETL script (e.g., '--smart --excel etl/data/...xlsm').")
+    parser.add_argument("--etl-args", default="", dest="etl_args", help="Extra args for etl/one_run_etl.py (e.g. --smart --excel etl/data/file.xlsm)")
 
     args = parser.parse_args()
 
@@ -277,10 +278,10 @@ def main():
         apply_dir(conn, DB_DIR / "views", "view", always_reapply=True)
 
     if args.run_etl:
-        etl_script = ROOT_DIR / "etl" / "one_shot_etl.py"
+        etl_script = ROOT_DIR / "etl" / "one_run_etl.py"
         cmd = [sys.executable, str(etl_script)]
-        if args.etl-args:
-            cmd.extend(args.etl_args.split())
+        if args.etl_args:
+            cmd.extend(shlex.split(args.etl_args))
         print(f"Running ETL: {' '.join(cmd)}")
         subprocess.check_call(cmd)
 

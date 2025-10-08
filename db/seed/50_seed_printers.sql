@@ -4,7 +4,10 @@ FROM (VALUES
     ('GEB1', '2250', 'Active', 1),
     ('GEB2', '2250', 'Active', 1),
     ('GEB3', '2250', 'Inactive', 1),
-    ('GEB4', '2250', 'Active', 1)
+    ('GEB4', '2250', 'Active', 1),
+    ('GEB5', '2250', 'Active', 1),
+    ('GEB6', '2250', 'Active', 1),
+    ('GEB7', '2250', 'Active', 1)
 ) AS v(name, location_name, status, is_active)
 JOIN dbo.storage_locations s 
     ON s.location_name = v.location_name
