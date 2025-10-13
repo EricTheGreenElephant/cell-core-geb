@@ -45,7 +45,7 @@ def build_database_url() -> str:
 
     if DB_AUTH_METHOD == "windows":
         odbc = (
-            f"Driver={{ODBC Driver 17 for SQL Server}};"
+            f"Driver={{ODBC Driver 18 for SQL Server}};"
             f"Server={DB_SERVER};"
             f"Database={DB_NAME};"
             f"Trusted_Connection=yes;"
@@ -54,7 +54,7 @@ def build_database_url() -> str:
         DB_USER = os.getenv("DB_USER")
         DB_PASSWORD = os.getenv("DB_PASSWORD")
         odbc = (
-            f"Driver={{ODBC Driver 17 for SQL Server}};"
+            f"Driver={{ODBC Driver 18 for SQL Server}};"
             f"Server={DB_SERVER};"
             f"Database={DB_NAME};"
             f"UID={DB_USER};"
@@ -83,7 +83,7 @@ def build_master_url_from_env() -> str:
 
     if DB_AUTH_METHOD == "windows":
         odbc = (
-            f"Driver={{ODBC Driver 17 for SQL Server}};"
+            f"Driver={{ODBC Driver 18 for SQL Server}};"
             f"Server={DB_SERVER};"
             f"Database=master;"
             f"Trusted_Connection=yes;"
@@ -92,7 +92,7 @@ def build_master_url_from_env() -> str:
         DB_USER = os.getenv("DB_USER")
         DB_PASSWORD = os.getenv("DB_PASSWORD")
         odbc = (
-            f"Driver={{ODBC Driver 17 for SQL Server}};"
+            f"Driver={{ODBC Driver 18 for SQL Server}};"
             f"Server={DB_SERVER};"
             f"UID={DB_USER};"
             f"PWD={DB_PASSWORD};"
