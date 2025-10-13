@@ -43,12 +43,9 @@ def get_all_filament_statuses(db: Session) -> list[dict]:
 @transactional
 def get_filaments_not_acclimatizing(db: Session) -> list[dict]:
     sql = """
-        SELECT f.id, f.serial_number
-        FROM filaments f
-        WHERE f.qc_result = 'PASS'
-        AND f.id NOT IN (
-            SELECT filament_id FROM filament_acclimatization
-        )
+        SELECT filament_id as id, serial_number FROM v_filament_status
+        WHERE qc_result = 'PASS'
+        AND current_status = 'In Storage';
     """
     result = db.execute(text(sql))
     cols = result.keys()
@@ -153,7 +150,7 @@ def get_mounted_filaments(db: Session) -> list[dict]:
         FROM filament_mounting fm
         JOIN filaments f ON fm.filament_id = f.id
         JOIN printers p ON fm.printer_id = p.id
-        WHERE fm.unmounted_at IS NULL
+        WHERE fm.status = 'In Use'
         ORDER BY p.name
     """
     result = db.execute(text(sql))

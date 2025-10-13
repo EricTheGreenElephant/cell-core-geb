@@ -18,5 +18,5 @@ def render_audit_log_view():
         st.info("No audit entries found.")
         return
     
-    st.dataframe(audit_entries, use_container_width=True)
+    st.dataframe(audit_entries, width='stretch')
     

@@ -7,7 +7,9 @@ SELECT
 
     -- Derived Current Status
     CASE
-        WHEN fm.id IS NOT NULL AND fm.unmounted_at IS NULL THEN 'In Use'
+        -- WHEN fm.id IS NOT NULL AND fm.unmounted_at IS NULL THEN 'In Use'
+        WHEN fm.status = 'In Use' THEN 'In Use'
+        WHEN fm.status = 'Unmounted' THEN 'Unmounted'
         WHEN fa.status = 'Acclimatizing' THEN 'Acclimatizing'
         WHEN fm.unmounted_at IS NOT NULL THEN 'Unmounted'
         ELSE 'In Storage'

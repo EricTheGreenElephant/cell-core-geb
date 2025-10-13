@@ -125,9 +125,9 @@ def render_shipment_batch_form():
     col1, col2 = st.columns([1, 1])
 
     with col1:
-        canceled = st.button("Cancel Order Request", type="secondary", use_container_width=True)
+        canceled = st.button("Cancel Order Request", type="secondary", width='stretch')
     with col2:
-        submitted = st.button("Create Shipment", type="primary", use_container_width=True)
+        submitted = st.button("Create Shipment", type="primary", width='stretch')
 
     if canceled:
         if not notes:

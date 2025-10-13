@@ -42,7 +42,7 @@ def render_logistics_form():
 
         edited = st.data_editor(
             options,
-            use_container_width=True,
+            width='stretch',
             disabled=["Product ID", "SKU", "SKU Desc.", "Current Status", "Current Stage",  "Location"],
             column_config={
                 "Include": st.column_config.CheckboxColumn("Include in Batch"),

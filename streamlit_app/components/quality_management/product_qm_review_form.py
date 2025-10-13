@@ -47,7 +47,7 @@ def render_product_qm_review():
         return
     
     data_rows = [p.model_dump() for p in products]
-    st.dataframe(data_rows, use_container_width=True)
+    st.dataframe(data_rows, width='stretch')
 
     eligible_products = [
         p for p in products if p.current_stage_name == stage_label
