@@ -9,8 +9,9 @@ SELECT pt.id AS product_id,
     loc.location_name,
     pt.last_updated_at,
 
-    ptype.name AS product_type,
-    sku.sku,
+    COALESCE(ptype_pt.name,  ptype_req.name) AS product_type,
+    COALESCE(sku_pt.sku,     sku_req.sku)    AS sku,
+
     ph.id AS harvest_id,
     pr.lot_number,
     ph.print_date,
@@ -35,9 +36,18 @@ SELECT pt.id AS product_id,
 FROM product_tracking pt
 JOIN product_harvest ph ON pt.harvest_id = ph.id
 JOIN product_requests pr ON ph.request_id = pr.id
-JOIN product_skus sku ON pr.sku_id = sku.id
-JOIN product_types ptype ON sku.product_type_id = ptype.id
 JOIN users printed_user ON ph.printed_by = printed_user.id
+-- SKU/Type from PRODUCT TRACKING (preferred)
+LEFT JOIN dbo.product_skus  sku_pt
+  ON pt.sku_id = sku_pt.id
+LEFT JOIN dbo.product_types ptype_pt
+  ON sku_pt.product_type_id = ptype_pt.id
+
+-- SKU/Type from REQUEST (fallback)
+LEFT JOIN dbo.product_skus  sku_req
+  ON pr.sku_id = sku_req.id
+LEFT JOIN dbo.product_types ptype_req
+  ON sku_req.product_type_id = ptype_req.id
 
 LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
 LEFT JOIN product_statuses ps ON pt.current_status_id = ps.id
