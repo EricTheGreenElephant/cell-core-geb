@@ -4,6 +4,7 @@ GO
 
 CREATE VIEW v_product_status AS
 SELECT pt.id AS product_id,
+    pt.tracking_id,
     lc.stage_name AS current_stage,
     ps.status_name AS current_status,
     loc.location_name,

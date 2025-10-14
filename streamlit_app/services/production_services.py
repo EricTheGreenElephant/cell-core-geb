@@ -66,6 +66,7 @@ def get_pending_requests(db: Session) -> list[dict]:
         LEFT JOIN product_print_specs sps ON sps.sku_id = ps.id
         JOIN users u ON u.id = pr.requested_by
         WHERE pr.status = 'Pending'
+        AND lot_number <> 'LEGACY_LOT'
         ORDER BY pr.requested_at ASC
     """
     result = db.execute(text(sql))

@@ -7,16 +7,34 @@ from utils.db_transaction import transactional
 
 
 def generate_tracking_id(db: Session, date=None) -> str:
-    if not date:
-        date = datetime.today()
+    """
+    Generate the next tracking_id based on the highest existing one in the product_tracking table.
+    Returns an integer (or string if you prefer).
+    """
+    result = db.execute(text(
+        """
+            SELECT MAX(CAST(tracking_id AS BIGINT)) 
+            FROM product_tracking
+        """
+    )).scalar()
     
-    prefix = date.strftime("PRD-%Y%d%m")
+    if result is None:
+        # If the table is empty, start with an initial value
+        next_id = 1000000
+    else:
+        next_id = result + 1
 
-    count = db.query(ProductTracking).filter(
-        ProductTracking.tracking_id.like(f"{prefix}-%")
-    ).count()
+    return str(next_id)
+    # if not date:
+    #     date = datetime.today()
+    
+    # prefix = date.strftime("PRD-%Y%d%m")
 
-    return f"{prefix}-{count + 1:05d}"
+    # count = db.query(ProductTracking).filter(
+    #     ProductTracking.tracking_id.like(f"{prefix}-%")
+    # ).count()
+
+    # return f"{prefix}-{count + 1:05d}"
 
 def log_product_status_change(db: Session, product_id: int, from_stage_id: int, to_stage_id: int, reason: str, user_id: int):
     db.execute(
