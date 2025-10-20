@@ -14,6 +14,7 @@ class FilamentCreate(BaseModel):
 
 class FilamentOut(BaseModel):
     id: int
+    filament_id: int
     lot_number: str
     serial_number: str
     weight_grams: float
@@ -27,7 +28,7 @@ class FilamentOut(BaseModel):
 
 class FilamentAcclimatizationOut(BaseModel):
     id: int
-    filament_id: int
+    filament_tracking_id: int
     status: str
     moved_at: datetime
     moved_by: int

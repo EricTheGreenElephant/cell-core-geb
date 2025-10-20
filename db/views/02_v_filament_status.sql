@@ -1,6 +1,7 @@
 CREATE OR ALTER VIEW v_filament_status AS
 SELECT
-    f.id AS filament_id,
+    f.id,
+    f.filament_id,
     f.lot_number,
     f.serial_number,
     sl.location_name,
@@ -33,8 +34,8 @@ SELECT
     fa.ready_at
 
 FROM filaments f
-LEFT JOIN filament_mounting fm ON fm.filament_id = f.id
+LEFT JOIN filament_mounting fm ON fm.filament_tracking_id = f.id
 LEFT JOIN printers p ON p.id = fm.printer_id
-LEFT JOIN filament_acclimatization fa ON fa.filament_id = f.id
+LEFT JOIN filament_acclimatization fa ON fa.filament_tracking_id = f.id
 LEFT JOIN users u ON f.received_by = u.id
 LEFT JOIN storage_locations sl ON f.location_id = sl.id;

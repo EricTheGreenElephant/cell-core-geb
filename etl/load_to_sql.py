@@ -22,7 +22,7 @@ def make_mssql_engine():
     elif auth == "windows":
         conn_str = (
             f"mssql+pyodbc://@{server}/{database}"
-            "?driver=ODBC+Driver+17+for+SQL+Server"
+            "?driver=ODBC+Driver+18+for+SQL+Server"
             "&Trusted_Connection=yes"
             "&Encrypt=yes&TrustServerCertificate=yes"
         )

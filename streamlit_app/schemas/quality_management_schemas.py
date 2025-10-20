@@ -4,7 +4,7 @@ from typing import Optional
 
 
 class ProductQMReview(BaseModel):
-    product_id: int
+    product_tracking_id: int
     current_stage_name: str
     last_updated_at: datetime
     lot_number: str
@@ -22,7 +22,7 @@ class ProductQMReview(BaseModel):
 
 
 class PostTreatmentApprovalCandidate(BaseModel):
-    product_id: int
+    product_tracking_id: int
     sku: str
     sku_name: str
     inspection_result: Optional[str]
@@ -36,7 +36,7 @@ class PostTreatmentApprovalCandidate(BaseModel):
 
 
 class QuarantinedProductRow(BaseModel):
-    product_id: int
+    product_tracking_id: int
     tracking_id: str
     sku: str
     sku_name: str
@@ -55,7 +55,7 @@ class QuarantinedProductRow(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class InvestigationEntry(BaseModel):
-    product_id: int
+    product_tracking_id: int
     status: str = Field(default="Under Investigation")
     comment: str = Field(..., max_length=255)
     deviation_number: str = Field(..., max_length=100)
@@ -64,7 +64,7 @@ class InvestigationEntry(BaseModel):
 
 
 class InvestigatedProductRow(BaseModel):
-    product_id: int
+    product_tracking_id: int
     sku: str
     sku_name: str
     previous_stage_name: str
@@ -79,7 +79,7 @@ class InvestigatedProductRow(BaseModel):
 
 
 class ProductQuarantineSearchResult(BaseModel):
-    product_id: int
+    product_tracking_id: int
     tracking_id: str
     sku: str
     sku_name: str

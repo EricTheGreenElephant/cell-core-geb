@@ -1,6 +1,7 @@
 CREATE OR ALTER VIEW dbo.v_product_lifecycle AS
 SELECT 
-    pt.id AS product_id,
+    pt.id,
+    pt.product_id,
     lc.stage_name AS current_status,
     pt.last_updated_at,
     loc.location_name,
@@ -41,9 +42,9 @@ LEFT JOIN users u              ON ph.printed_by = u.id
 LEFT JOIN product_requests pr  ON ph.request_id = pr.id
 LEFT JOIN product_skus ps      ON pr.sku_id = ps.id
 LEFT JOIN product_types ptype  ON ps.product_type_id = ptype.id
-LEFT JOIN product_quality_control pqc ON pqc.product_id = pt.id
-LEFT JOIN treatment_batch_products tbp ON tbp.product_id = pt.id
+LEFT JOIN product_quality_control pqc ON pqc.product_tracking_id = pt.id
+LEFT JOIN treatment_batch_products tbp ON tbp.product_tracking_id = pt.id
 LEFT JOIN treatment_batches tb         ON tbp.batch_id   = tb.id
-LEFT JOIN post_treatment_inspections pti ON pti.product_id = pt.id
-LEFT JOIN shipment_unit_items si            ON si.product_id = pt.id
+LEFT JOIN post_treatment_inspections pti ON pti.product_tracking_id = pt.id
+LEFT JOIN shipment_unit_items si            ON si.product_tracking_id = pt.id
 LEFT JOIN shipments s                  ON si.shipment_id = s.id;

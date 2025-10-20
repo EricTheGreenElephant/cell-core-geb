@@ -44,7 +44,7 @@ class HarvestedProductOut(BaseModel):
 
 class ProductTrackingRead(BaseModel):
     id: int
-    tracking_id: str
+    product_id: int
     sku_id: Optional[int] = None 
     sku: Optional[str] = None
     current_status_id: Optional[int]
@@ -61,7 +61,7 @@ class ProductTrackingRead(BaseModel):
 
 class ProductStatusHistoryEntry(BaseModel):
     id: int
-    product_id: int
+    product_tracking_id: int
     from_stage_id: Optional[int]
     to_stage_id: int
     reason: Optional[str]

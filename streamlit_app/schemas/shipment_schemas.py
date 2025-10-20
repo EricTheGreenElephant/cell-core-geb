@@ -11,7 +11,7 @@ class ShipmentCreate(BaseModel):
 
 class ShipmentUnitItemOut(BaseModel):
     id: int 
-    product_id: int
+    product_tracking_id: int
     tracking_id: Optional[str] = None 
     model_config = ConfigDict(from_attributes=True)
 

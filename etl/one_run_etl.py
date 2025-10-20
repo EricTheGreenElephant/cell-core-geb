@@ -101,8 +101,9 @@ def main():
         run_transform(Path("etl/transform_filaments.sql"), "filaments", only_set)
         run_transform(Path("etl/transform_filament_mounting.sql"), "filament_mounting", only_set)
         run_transform(Path("etl/transform_product_harvest.sql"), "product_harvest", only_set)
+        # run_transform(Path("etl/transform_harvest_map_and_clone.sql"), "etl_harvest_map", only_set)
         run_transform(Path("etl/transform_product_tracking.sql"), "product_tracking", only_set)
-        run_transform(Path("etl/transform_product_quality_control.sql"), "product_quality_control", only_set)
+        # run_transform(Path("etl/transform_product_quality_control.sql"), "product_quality_control", only_set)
 
 if __name__ == "__main__":
     main()

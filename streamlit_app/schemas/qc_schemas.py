@@ -3,7 +3,7 @@ from typing import Optional, List
 from datetime import datetime
 
 class ProductQCInput(BaseModel):
-    product_id: int
+    product_tracking_id: int
     inspected_by: int
     weight_grams: float
     pressure_drop: float

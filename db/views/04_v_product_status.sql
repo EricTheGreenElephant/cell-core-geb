@@ -3,8 +3,8 @@ IF OBJECT_ID('v_product_status', 'V') IS NOT NULL
 GO
 
 CREATE VIEW v_product_status AS
-SELECT pt.id AS product_id,
-    pt.tracking_id,
+SELECT pt.id,
+    pt.product_id,
     lc.stage_name AS current_stage,
     ps.status_name AS current_status,
     loc.location_name,
@@ -52,14 +52,14 @@ LEFT JOIN dbo.product_types ptype_req
 
 LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
 LEFT JOIN product_statuses ps ON pt.current_status_id = ps.id
-LEFT JOIN product_quality_control qc ON qc.product_id = pt.id
-LEFT JOIN treatment_batch_products tbi ON tbi.product_id = pt.id
-LEFT JOIN post_treatment_inspections pti ON pti.product_id = pt.id
-LEFT JOIN shipment_unit_items si ON si.product_id = pt.id
+LEFT JOIN product_quality_control qc ON qc.product_tracking_id = pt.id
+LEFT JOIN treatment_batch_products tbi ON tbi.product_tracking_id = pt.id
+LEFT JOIN post_treatment_inspections pti ON pti.product_tracking_id = pt.id
+LEFT JOIN shipment_unit_items si ON si.product_tracking_id = pt.id
 LEFT JOIN shipments s ON si.shipment_id = s.id
 LEFT JOIN lids l ON ph.lid_id = l.id
 LEFT JOIN users qc_user ON qc.inspected_by = qc_user.id
 LEFT JOIN filament_mounting fm ON ph.filament_mounting_id = fm.id
-LEFT JOIN filaments f ON fm.filament_id = f.id
+LEFT JOIN filaments f ON fm.filament_tracking_id = f.id
 LEFT JOIN printers p ON fm.printer_id = p.id
 LEFT JOIN storage_locations loc ON pt.location_id = loc.id

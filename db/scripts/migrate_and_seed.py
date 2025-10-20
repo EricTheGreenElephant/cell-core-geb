@@ -42,23 +42,30 @@ def build_database_url() -> str:
     DB_SERVER = os.getenv("DB_SERVER")
     DB_NAME = os.getenv("DB_NAME")
     DB_AUTH_METHOD = (os.getenv("DB_AUTH_METHOD") or "sql").lower()
+    DB_DRIVER=os.getenv("DB_DRIVER")
+    DB_ENCRYPT=os.getenv("DB_ENCRYPT")
+    DB_TRUST_CERT=os.getenv("DB_TRUST_CERT")
 
     if DB_AUTH_METHOD == "windows":
         odbc = (
-            f"Driver={{ODBC Driver 18 for SQL Server}};"
+            f"Driver={DB_DRIVER};"
             f"Server={DB_SERVER};"
             f"Database={DB_NAME};"
+            f"Encrypt={DB_ENCRYPT};"
             f"Trusted_Connection=yes;"
+            f"TrustServerCertificate={DB_TRUST_CERT};"
         )
     else:
         DB_USER = os.getenv("DB_USER")
         DB_PASSWORD = os.getenv("DB_PASSWORD")
         odbc = (
-            f"Driver={{ODBC Driver 18 for SQL Server}};"
+            f"Driver={DB_DRIVER};"
             f"Server={DB_SERVER};"
             f"Database={DB_NAME};"
             f"UID={DB_USER};"
             f"PWD={DB_PASSWORD};"
+            f"Encrypt={DB_ENCRYPT};"
+            f"TrustServerCertificate={DB_TRUST_CERT};"
         )
 
     return f"mssql+pyodbc:///?odbc_connect={quote_plus(odbc)}"
@@ -79,23 +86,31 @@ def build_master_url_from_env() -> str:
     load_dotenv(dotenv_path=env_path)
 
     DB_SERVER = os.getenv("DB_SERVER")
+    DB_DRIVER = os.getenv("DB_DRIVER")
+    DB_ENCRYPT = os.getenv("DB_ENCRYPT")
+    DB_TRUST_CERT = os.getenv("DB_TRUST_CERT")
     DB_AUTH_METHOD = (os.getenv("DB_AUTH_METHOD") or "sql").lower()
 
     if DB_AUTH_METHOD == "windows":
         odbc = (
-            f"Driver={{ODBC Driver 18 for SQL Server}};"
+            f"Driver={DB_DRIVER};"
             f"Server={DB_SERVER};"
             f"Database=master;"
+            f"Encrypt={DB_ENCRYPT};"
+            f"TrustServerCertificate={DB_TRUST_CERT};"
             f"Trusted_Connection=yes;"
         )
     else:
         DB_USER = os.getenv("DB_USER")
         DB_PASSWORD = os.getenv("DB_PASSWORD")
         odbc = (
-            f"Driver={{ODBC Driver 18 for SQL Server}};"
+            f"Driver={DB_DRIVER};"
             f"Server={DB_SERVER};"
             f"UID={DB_USER};"
             f"PWD={DB_PASSWORD};"
+            f"Encrypt={DB_ENCRYPT};"
+            f"TrustServerCertificate={DB_TRUST_CERT};"
+            f"Trusted_Connection=yes"
         )
     return f"mssql+pyodbc:///?odbc_connect={quote_plus(odbc)}"
 
@@ -284,6 +299,9 @@ def main():
             cmd.extend(shlex.split(args.etl_args))
         print(f"Running ETL: {' '.join(cmd)}")
         subprocess.check_call(cmd)
+
+    with engine.begin() as conn:
+        apply_dir(conn, DB_DIR / "postseed", "seed", reapply_on_change=True)
 
 if __name__ == "__main__":
     main()

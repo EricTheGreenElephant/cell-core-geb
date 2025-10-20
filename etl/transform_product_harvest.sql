@@ -1,225 +1,204 @@
+/* ===========================================================
+   Transform legacy rows into dbo.product_harvest
+   - Creates/ensures legacy rows (Unassigned location, legacy lid/seal, legacy requests)
+   - Ensures all referenced storage locations exist
+   - Filters staging to valid/typed rows (10K/6K; required cols; numeric ids)
+   - Resolves filament_mounting via (printer, filament_id)
+   - Maps operator_harvest -> users (fallback to first user)
+   - Inserts product_harvest rows idempotently using a natural key:
+       (filament_mounting_id, printed_by, print_date)
+   - Ignores staging rows already represented by an identical harvest row.
+   =========================================================== */
+
 BEGIN TRY
   BEGIN TRAN;
 
-  /* =======================
-     0) Preconditions / Setup
-     ======================= */
-
-  DECLARE @fallback_user_id INT = (SELECT TOP 1 id FROM dbo.users ORDER BY id);
+  /* -------- 0) Preconditions & helpers -------- */
+  DECLARE @fallback_user_id INT = (
+    SELECT TOP (1) id FROM dbo.users WITH (READPAST) ORDER BY id
+  );
   IF @fallback_user_id IS NULL
-    THROW 60010, 'No users present; seed users before loading product_harvest.', 1;
+    THROW 50010, 'No users present; seed users before loading product_harvest.', 1;
 
-  /* Ensure 'Unassigned' storage location exists (for legacy lids/seals) */
-  IF NOT EXISTS (SELECT 1 FROM dbo.storage_locations WHERE location_name = 'Unassigned')
+  /* Ensure Unassigned location exists */
+  DECLARE @unassigned_loc_id INT;
+  SELECT @unassigned_loc_id = id FROM dbo.storage_locations WHERE location_name = N'Unassigned';
+  IF @unassigned_loc_id IS NULL
   BEGIN
-    INSERT dbo.storage_locations(location_name, location_type, description, is_active)
-    VALUES ('Unassigned', 'Virtual', 'Fallback for legacy imports', 1);
-  END
-  DECLARE @unassigned_loc_id INT = (SELECT TOP 1 id FROM dbo.storage_locations WHERE location_name = 'Unassigned');
-
-  /* Ensure a LEGACY product type + SKU for placeholder product_requests */
-  IF NOT EXISTS (SELECT 1 FROM dbo.product_types WHERE name = 'LEGACY_TYPE')
-  BEGIN
-    INSERT dbo.product_types(name, is_active) VALUES ('LEGACY_TYPE', 1);
-  END
-  DECLARE @legacy_type_id INT = (SELECT id FROM dbo.product_types WHERE name = 'LEGACY_TYPE');
-
-  IF NOT EXISTS (SELECT 1 FROM dbo.product_skus WHERE sku = 'LEGACY_SKU')
-  BEGIN
-    INSERT dbo.product_skus(product_type_id, sku, name, is_serialized, is_bundle, pack_qty, is_active)
-    VALUES (@legacy_type_id, 'LEGACY_SKU', 'Legacy Placeholder SKU', 1, 0, 1, 1);
-  END
-  DECLARE @legacy_sku_id INT = (SELECT id FROM dbo.product_skus WHERE sku = 'LEGACY_SKU');
-
-  /* Ensure a single LEGACY product_request to satisfy NOT NULL FK */
-  IF NOT EXISTS (SELECT 1 FROM dbo.product_requests WHERE lot_number = 'LEGACY_LOT' AND sku_id = @legacy_sku_id)
-  BEGIN
-    INSERT dbo.product_requests(requested_by, sku_id, lot_number, status, notes)
-    VALUES (@fallback_user_id, @legacy_sku_id, 'LEGACY_LOT', 'Pending', 'Auto-created for legacy harvest import');
-  END
-  DECLARE @legacy_request_id INT = (
-      SELECT TOP 1 id FROM dbo.product_requests
-      WHERE lot_number = 'LEGACY_LOT' AND sku_id = @legacy_sku_id
-      ORDER BY id
-  );
-
-  /* Ensure LEGACY lid & seal rows (NOT NULL FKs) */
-  IF NOT EXISTS (SELECT 1 FROM dbo.lids WHERE serial_number = 'LEGACY-LID')
-  BEGIN
-    INSERT dbo.lids(serial_number, quantity, location_id, received_at, received_by, qc_result)
-    VALUES ('LEGACY-LID', 0, @unassigned_loc_id, SYSUTCDATETIME(), @fallback_user_id, 'PASS');
-  END
-  IF NOT EXISTS (SELECT 1 FROM dbo.seals WHERE serial_number = 'LEGACY-SEAL')
-  BEGIN
-    INSERT dbo.seals(serial_number, quantity, location_id, received_at, received_by, qc_result)
-    VALUES ('LEGACY-SEAL', 0, @unassigned_loc_id, SYSUTCDATETIME(), @fallback_user_id, 'PASS');
+    INSERT INTO dbo.storage_locations (location_name, location_type, description, is_active)
+    VALUES (N'Unassigned', N'Virtual', N'Auto-created for missing legacy storage', 1);
+    SET @unassigned_loc_id = SCOPE_IDENTITY();
   END
 
-  DECLARE @legacy_lid_id  INT = (SELECT id FROM dbo.lids  WHERE serial_number = 'LEGACY-LID');
-  DECLARE @legacy_seal_id INT = (SELECT id FROM dbo.seals WHERE serial_number = 'LEGACY-SEAL');
-
-  /* Legacy operator mapping table is optional; create if missing */
-  IF OBJECT_ID('dbo.legacy_name_to_user','U') IS NULL
+  /* Ensure legacy LID/SEAL rows exist (used as placeholders) */
+  DECLARE @legacy_lid_id INT, @legacy_seal_id INT;
+  SELECT @legacy_lid_id = id FROM dbo.lids WHERE serial_number = N'LEGACY_LID';
+  IF @legacy_lid_id IS NULL
   BEGIN
-    CREATE TABLE dbo.legacy_name_to_user(
-      legacy_name NVARCHAR(200) PRIMARY KEY,
-      user_id     INT NOT NULL CONSTRAINT fk_legacy_map_user_ph REFERENCES dbo.users(id)
+    INSERT INTO dbo.lids (serial_number, quantity, location_id, received_by, qc_result)
+    VALUES (N'LEGACY_LID', 0, @unassigned_loc_id, @fallback_user_id, N'PASS');
+    SET @legacy_lid_id = SCOPE_IDENTITY();
+  END
+
+  SELECT @legacy_seal_id = id FROM dbo.seals WHERE serial_number = N'LEGACY_SEAL';
+  IF @legacy_seal_id IS NULL
+  BEGIN
+    INSERT INTO dbo.seals (serial_number, quantity, location_id, received_by, qc_result)
+    VALUES (N'LEGACY_SEAL', 0, @unassigned_loc_id, @fallback_user_id, N'PASS');
+    SET @legacy_seal_id = SCOPE_IDENTITY();
+  END
+
+  /* Ensure product_types exist for 10K/6K and capture ids */
+  DECLARE @pt_10k INT, @pt_6k INT;
+  SELECT @pt_10k = id FROM dbo.product_types WHERE name = N'10K';
+  SELECT @pt_6k  = id FROM dbo.product_types WHERE name = N'6K';
+
+  /* Build or re-use a single legacy request per product type (FULFILLED & neutral lot) */
+  DECLARE @legacy_req_10k INT, @legacy_req_6k INT;
+
+  IF @pt_10k IS NOT NULL
+  BEGIN
+    /* Pick a default sku for this product type (lowest id) */
+    DECLARE @sku_10k INT = (
+      SELECT MIN(id) FROM dbo.product_skus WHERE product_type_id = @pt_10k
     );
+    IF @sku_10k IS NULL
+      SET @sku_10k = 1; /* last-resort fallback */
+
+    SELECT @legacy_req_10k = id
+    FROM dbo.product_requests
+    WHERE notes = N'LEGACY_REQUEST_10K' AND sku_id = @sku_10k;
+
+    IF @legacy_req_10k IS NULL
+    BEGIN
+      INSERT INTO dbo.product_requests (requested_by, sku_id, lot_number, status, notes)
+      VALUES (@fallback_user_id, @sku_10k, N'LEGACY_LOT', N'Fulfilled', N'LEGACY_REQUEST_10K');
+      SET @legacy_req_10k = SCOPE_IDENTITY();
+    END
   END
 
-  /* =======================
-     1) Source rows (>= 2025-07-17)
-     ======================= */
+  IF @pt_6k IS NOT NULL
+  BEGIN
+    DECLARE @sku_6k INT = (
+      SELECT MIN(id) FROM dbo.product_skus WHERE product_type_id = @pt_6k
+    );
+    IF @sku_6k IS NULL
+      SET @sku_6k = 2; /* last-resort fallback */
 
-  IF OBJECT_ID('tempdb..#harvest_src','U') IS NOT NULL DROP TABLE #harvest_src;
-  CREATE TABLE #harvest_src(
-    product_rownum     BIGINT IDENTITY(1,1) PRIMARY KEY, -- just for debugging
-    product_id_ext     NVARCHAR(100) NULL,               -- stg.product_id (external)
-    filament_serial    NVARCHAR(200) NOT NULL,
-    print_date         DATETIME2     NOT NULL,
-    operator_legacy    NVARCHAR(200) NULL
-  );
+    SELECT @legacy_req_6k = id
+    FROM dbo.product_requests
+    WHERE notes = N'LEGACY_REQUEST_6K' AND sku_id = @sku_6k;
 
-  ;WITH raw AS (
+    IF @legacy_req_6k IS NULL
+    BEGIN
+      INSERT INTO dbo.product_requests (requested_by, sku_id, lot_number, status, notes)
+      VALUES (@fallback_user_id, @sku_6k, N'LEGACY_LOT', N'Fulfilled', N'LEGACY_REQUEST_6K');
+      SET @legacy_req_6k = SCOPE_IDENTITY();
+    END
+  END
+
+  /* -------- 1) Prep: insert any missing storage locations referenced by staging -------- */
+  ;WITH ValidStage AS (
     SELECT
-      /* External id (if present) for traceability; not stored in target table */
-      NULLIF(LTRIM(RTRIM(CAST(s.product_id AS NVARCHAR(100)))),'') AS product_id_ext,
-      NULLIF(LTRIM(RTRIM(CAST(s.filament_id AS NVARCHAR(200)))),'') AS filament_serial,
-      /* robust parse of date_harvest */
-      COALESCE(
-        TRY_CONVERT(datetime2, s.date_harvest, 101),
-        TRY_CONVERT(datetime2, s.date_harvest, 103),
-        TRY_CONVERT(datetime2, s.date_harvest, 104),
-        TRY_CONVERT(datetime2, s.date_harvest, 105),
-        CASE WHEN TRY_CONVERT(float, s.date_harvest) IS NOT NULL
-             THEN DATEADD(day, CAST(TRY_CONVERT(float, s.date_harvest) AS int) - 2, '1899-12-30') END,
-        TRY_CONVERT(datetime2, s.date_harvest)
-      ) AS print_date,
-      NULLIF(LTRIM(RTRIM(CAST(s.operator_harvest AS NVARCHAR(200)))),'') AS operator_legacy
-    FROM dbo.stg_excel_data s
+      sed.*,
+      TRY_CAST(sed.product_id  AS BIGINT) AS product_id_bigint,
+      TRY_CAST(sed.filament_id AS BIGINT) AS filament_id_bigint
+    FROM dbo.stg_excel_data sed
+    WHERE
+      sed.product IN (N'10K', N'6K')
+      AND sed.status_quality_check IS NOT NULL
+      AND sed.product      IS NOT NULL
+      AND sed.printer      IS NOT NULL
+      AND sed.date_harvest IS NOT NULL
+      AND TRY_CAST(sed.product_id  AS BIGINT) IS NOT NULL
+      AND TRY_CAST(sed.filament_id AS BIGINT) IS NOT NULL
   )
-  INSERT INTO #harvest_src(product_id_ext, filament_serial, print_date, operator_legacy)
-  SELECT
-    r.product_id_ext,
-    r.filament_serial,
-    r.print_date,
-    r.operator_legacy
-  FROM raw r
-  WHERE r.filament_serial IS NOT NULL
-    AND r.print_date  IS NOT NULL
-    AND r.print_date >= '2025-07-17T00:00:00'  -- filter scope
-  ;
+  INSERT INTO dbo.storage_locations (location_name, location_type, description, is_active)
+  SELECT DISTINCT
+      v.storage, NULL, N'Auto-imported from legacy staging', 1
+  FROM ValidStage v
+  LEFT JOIN dbo.storage_locations sl
+    ON sl.location_name = v.storage
+  WHERE v.storage IS NOT NULL
+    AND sl.id IS NULL;
 
-  /* =======================
-     2) Resolve all foreign keys
-     ======================= */
-
-  IF OBJECT_ID('tempdb..#harvest_resolved','U') IS NOT NULL DROP TABLE #harvest_resolved;
-  CREATE TABLE #harvest_resolved(
-    filament_mounting_id INT NOT NULL,
-    request_id           INT NOT NULL,
-    lid_id               INT NOT NULL,
-    seal_id              INT NOT NULL,
-    printed_by           INT NOT NULL,
-    print_date           DATETIME2 NOT NULL,
-
-    /* optional debug columns (not inserted into target) */
-    product_id_ext       NVARCHAR(100) NULL
+  /* -------- 2) Build source rows with all resolved FKs we need -------- */
+  IF OBJECT_ID('tempdb..#src_harvest') IS NOT NULL DROP TABLE #src_harvest;
+  CREATE TABLE #src_harvest(
+      product_id_bigint BIGINT NOT NULL,
+      filament_mounting_id INT NOT NULL,
+      printed_by INT NOT NULL,
+      print_date DATETIME2 NOT NULL,
+      req_id INT NOT NULL,
+      lid_id INT NOT NULL,
+      seal_id INT NOT NULL
   );
 
-  ;WITH src AS (
-    SELECT hs.product_id_ext,
-           hs.filament_serial,
-           hs.print_date,
-           hs.operator_legacy
-    FROM #harvest_src hs
-  ),
-  f_join AS (
+  ;WITH ValidStage AS (
     SELECT
-      s.product_id_ext,
-      s.print_date,
-      s.operator_legacy,
-      f.id AS filament_id
-    FROM src s
-    JOIN dbo.filaments f
-      ON f.serial_number = s.filament_serial
-  ),
-  fm_join AS (
-    SELECT
-      fj.product_id_ext,
-      fj.print_date,
-      fj.operator_legacy,
-      fm.id AS filament_mounting_id
-    FROM f_join fj
-    JOIN dbo.filament_mounting fm
-      ON fm.filament_id = fj.filament_id
-  ),
-  user_join AS (
-    SELECT
-      fmj.product_id_ext,
-      fmj.print_date,
-      fmj.filament_mounting_id,
-      COALESCE(map.user_id,
-               u.id,
-               @fallback_user_id) AS printed_by
-    FROM fm_join fmj
-    LEFT JOIN dbo.legacy_name_to_user map
-      ON map.legacy_name = fmj.operator_legacy
-    LEFT JOIN dbo.users u
-      ON u.display_name COLLATE Latin1_General_CI_AI
-       = fmj.operator_legacy COLLATE Latin1_General_CI_AI
+      sed.*,
+      TRY_CAST(sed.product_id  AS BIGINT) AS product_id_bigint,
+      TRY_CAST(sed.filament_id AS BIGINT) AS filament_id_bigint,
+      TRY_CONVERT(DATETIME2, sed.date_harvest) AS print_date_dt
+    FROM dbo.stg_excel_data sed
+    WHERE
+      sed.product IN (N'10K', N'6K')
+      AND sed.status_quality_check IS NOT NULL
+      AND sed.product      IS NOT NULL
+      AND sed.printer      IS NOT NULL
+      AND sed.date_harvest IS NOT NULL
+      AND TRY_CAST(sed.product_id  AS BIGINT) IS NOT NULL
+      AND TRY_CAST(sed.filament_id AS BIGINT) IS NOT NULL
   )
-  INSERT INTO #harvest_resolved(filament_mounting_id, request_id, lid_id, seal_id, printed_by, print_date, product_id_ext)
+  INSERT INTO #src_harvest (product_id_bigint, filament_mounting_id, printed_by, print_date, req_id, lid_id, seal_id)
   SELECT
-    uj.filament_mounting_id,
-    @legacy_request_id      AS request_id,
-    @legacy_lid_id          AS lid_id,
-    @legacy_seal_id         AS seal_id,
-    uj.printed_by,
-    uj.print_date,
-    uj.product_id_ext
-  FROM user_join uj;
+      v.product_id_bigint,
+      fm.id AS filament_mounting_id,
+      COALESCE(u.id, @fallback_user_id) AS printed_by,
+      v.print_date_dt,
+      CASE WHEN v.product = N'10K' THEN ISNULL(@legacy_req_10k, ISNULL(@legacy_req_6k, 1))
+           WHEN v.product = N'6K'  THEN ISNULL(@legacy_req_6k,  ISNULL(@legacy_req_10k, 1))
+           ELSE ISNULL(@legacy_req_10k, 1) END AS req_id,
+      @legacy_lid_id,
+      @legacy_seal_id
+  FROM ValidStage v
+  /* resolve filament row by external filament_id */
+  INNER JOIN dbo.filaments f
+    ON f.filament_id = v.filament_id_bigint
+  /* resolve printer by name */
+  INNER JOIN dbo.printers p
+    ON p.name = v.printer
+  /* resolve mounted spool on that printer */
+  INNER JOIN dbo.filament_mounting fm
+    ON fm.filament_tracking_id = f.id
+   AND fm.printer_id = p.id
+  /* operator -> user (fallback later) */
+  LEFT JOIN dbo.users u
+    ON u.display_name = v.operator_harvest;
 
-  /* =======================
-     3) MERGE into dbo.product_harvest
-        - Idempotent on (filament_mounting_id, print_date)
-     ======================= */
-
-  MERGE dbo.product_harvest AS tgt
-  USING (
-    SELECT DISTINCT
-      filament_mounting_id,
-      request_id,
-      lid_id,
-      seal_id,
-      printed_by,
-      print_date
-    FROM #harvest_resolved
-  ) AS src
-  ON  tgt.filament_mounting_id = src.filament_mounting_id
-  AND tgt.print_date           = src.print_date
-  WHEN MATCHED THEN
-    UPDATE SET
-      tgt.request_id           = src.request_id,
-      tgt.lid_id               = src.lid_id,
-      tgt.seal_id              = src.seal_id,
-      tgt.printed_by           = src.printed_by
-  WHEN NOT MATCHED THEN
-    INSERT (request_id, lid_id, seal_id, filament_mounting_id, printed_by, print_date)
-    VALUES (src.request_id, src.lid_id, src.seal_id, src.filament_mounting_id, src.printed_by, src.print_date);
-
-  /* =======================
-     4) Optional sanity checks (print counts)
-     ======================= */
-  DECLARE @imported INT = (
-    SELECT COUNT(*) FROM dbo.product_harvest
-    WHERE print_date >= '2025-07-17T00:00:00'
+  /* -------- 3) Insert product_harvest idempotently using a natural key -------- */
+  /* Natural key: (filament_mounting_id, printed_by, print_date) */
+  /* Avoid duplicates on reruns. */
+  INSERT INTO dbo.product_harvest (request_id, lid_id, seal_id, filament_mounting_id, printed_by, print_date)
+  SELECT s.req_id, s.lid_id, s.seal_id, s.filament_mounting_id, s.printed_by, s.print_date
+  FROM #src_harvest s
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM dbo.product_harvest h
+    WHERE h.filament_mounting_id = s.filament_mounting_id
+      AND h.printed_by          = s.printed_by
+      AND h.print_date          = s.print_date
   );
-  PRINT CONCAT('[product_harvest] rows >= 2025-07-17 now: ', @imported);
 
   COMMIT TRAN;
+  PRINT '[TRANSFORMED] product_harvest';
 END TRY
 BEGIN CATCH
-  IF @@TRANCOUNT > 0 ROLLBACK TRAN;
-  THROW;
+  IF XACT_STATE() <> 0 ROLLBACK TRAN;
+
+  DECLARE @msg NVARCHAR(4000) = ERROR_MESSAGE();
+  DECLARE @num INT = ERROR_NUMBER();
+  DECLARE @state INT = ERROR_STATE();
+  DECLARE @sev INT = ERROR_SEVERITY();
+  RAISERROR('[transform_product_harvest] %s (num=%d, state=%d, sev=%d)', @sev, 1, @msg, @num, @state, @sev);
 END CATCH;

@@ -4,7 +4,7 @@ from typing import Optional
 
 
 class QuarantinedProductBase(BaseModel):
-    product_id: int
+    product_tracking_id: int
     from_stage_id: int
     source: str
     location_id: Optional[int] = None

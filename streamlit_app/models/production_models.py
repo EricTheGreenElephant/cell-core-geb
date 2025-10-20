@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Numeric
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Numeric, BigInteger
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from db.base import Base
@@ -76,7 +76,7 @@ class ProductTracking(Base):
     harvest_id = Column(Integer, ForeignKey('product_harvest.id'), unique=True, nullable=False)
     sku_id = Column(Integer, ForeignKey('product_skus.id'), nullable=False)
     product_type_id = Column(Integer, ForeignKey('product_skus.id'), nullable=True)
-    tracking_id = Column(String(50), unique=True, nullable=False)
+    product_id = Column(BigInteger, unique=True, nullable=False)
     current_status_id = Column(Integer, ForeignKey("product_statuses.id"), nullable=True)
     previous_stage_id = Column(Integer, ForeignKey('lifecycle_stages.id'), nullable=True)
     current_stage_id = Column(Integer, ForeignKey('lifecycle_stages.id'), nullable=False)
@@ -101,7 +101,7 @@ class ProductStatusHistory(Base):
     __tablename__ = "product_status_history"
 
     id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, ForeignKey("product_tracking.id"), nullable=False)
+    product_tracking_id = Column(Integer, ForeignKey("product_tracking.id"), nullable=False)
     from_stage_id = Column(Integer, ForeignKey("lifecycle_stages.id"), nullable=True)
     to_stage_id = Column(Integer, ForeignKey("lifecycle_stages.id"), nullable=False)
     reason = Column(String(255), nullable=True)

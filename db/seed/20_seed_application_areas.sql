@@ -4,7 +4,8 @@ USING (VALUES
     ('Production', 1),
     ('Filament Inventory', 1),
     ('Sales', 1),
-    ('Logistics', 1)
+    ('Logistics', 1),
+    ('Admin', 1)
 ) AS src(area_name, is_active)
 ON tgt.area_name = src.area_name
 WHEN NOT MATCHED BY TARGET THEN

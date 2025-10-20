@@ -21,7 +21,7 @@ class TreatmentBatchProduct(Base):
 
     id = Column(Integer, primary_key=True)
     batch_id = Column(Integer, ForeignKey('treatment_batches.id'))
-    product_id = Column(Integer, ForeignKey('product_tracking.id'), unique=True)
+    product_tracking_id = Column(Integer, ForeignKey('product_tracking.id'), unique=True)
     surface_treat = Column(Boolean, nullable=False)
     sterilize = Column(Boolean, nullable=False)
 
