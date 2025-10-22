@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Computed, BigInteger
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Computed, BigInteger, text
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from db.base import Base
@@ -7,7 +7,7 @@ from db.base import Base
 class Filament(Base):
     __tablename__ = 'filaments'
     id = Column(Integer, primary_key=True)
-    filament_id = Column(BigInteger, unique=True, nullable=False)
+    filament_id = Column(BigInteger, unique=True, nullable=False, index=True, server_default=text("NEXT VALUE FOR dbo.filament_id_seq"))
     lot_number = Column(String, nullable=False)
     serial_number = Column(String, nullable=False)
     weight_grams = Column(Float, nullable=False)

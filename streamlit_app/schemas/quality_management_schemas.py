@@ -5,6 +5,7 @@ from typing import Optional
 
 class ProductQMReview(BaseModel):
     product_tracking_id: int
+    product_id: int
     current_stage_name: str
     last_updated_at: datetime
     lot_number: str
@@ -23,6 +24,7 @@ class ProductQMReview(BaseModel):
 
 class PostTreatmentApprovalCandidate(BaseModel):
     product_tracking_id: int
+    product_id: int
     sku: str
     sku_name: str
     inspection_result: Optional[str]

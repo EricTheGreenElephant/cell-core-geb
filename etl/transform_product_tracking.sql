@@ -1,148 +1,87 @@
-/* ===========================================================
-   Transform staging → dbo.product_tracking
-   KISS Edition (No etl_harvest_map)
-   =========================================================== */
+-- /* ===========================================================
+--    etl/transform_product_tracking.sql
+
+--    Backbone (your working chain):
+--      stg_excel_data (ValidProducts)
+
+--    Writes:
+--      dbo.product_tracking  (MERGE by product_id)
+--    =========================================================== */
+
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
 
 BEGIN TRY
   BEGIN TRAN;
 
-  /* -------- 0) Preconditions -------- */
-  DECLARE @unassigned_loc_id INT = (
-      SELECT TOP 1 id FROM dbo.storage_locations WHERE location_name = N'Unassigned'
-  );
+  DECLARE @unassigned_loc_id INT = (SELECT TOP 1 id FROM dbo.storage_locations WHERE location_name = N'Unassigned');
   IF @unassigned_loc_id IS NULL
   BEGIN
-      INSERT INTO dbo.storage_locations (location_name, location_type, description, is_active)
-      VALUES (N'Unassigned', N'Virtual', N'Auto-created fallback', 1);
-      SET @unassigned_loc_id = SCOPE_IDENTITY();
-  END;
+    INSERT dbo.storage_locations(location_name, location_type, description, is_active)
+    VALUES (N'Unassigned', N'Virtual', N'Fallback for product tracking', 1);
+    SET @unassigned_loc_id = SCOPE_IDENTITY();
+  END
 
-  /* -------- 1) Stage valid products (your working logic) -------- */
-  IF OBJECT_ID('tempdb..#src_tracking','U') IS NOT NULL DROP TABLE #src_tracking;
-  CREATE TABLE #src_tracking (
-      product_id BIGINT,
-      harvest_id INT,
-      product_type_id INT,
-      sku_id INT,
-      current_status_id INT NULL,
-      previous_stage_id INT NULL,
-      current_stage_id INT,
-      location_id INT,
-      last_updated_at DATETIME2
+  IF OBJECT_ID('tempdb..#src','U') IS NOT NULL DROP TABLE #src;
+  CREATE TABLE #src(
+    product_id_bigint  BIGINT NOT NULL PRIMARY KEY,
+    harvest_id         INT    NOT NULL,
+    product_type_id    INT    NOT NULL,
+    sku_id             INT    NOT NULL,
+    current_status_id  INT    NULL,
+    previous_stage_id  INT    NULL,
+    current_stage_id   INT    NOT NULL,
+    location_id        INT    NULL,
+    last_updated_at    DATETIME2 NOT NULL
   );
 
-  ;WITH ValidProducts AS (
-      SELECT DISTINCT
-          TRY_CAST(sed.product_id AS BIGINT) AS product_id_bigint
-      FROM dbo.stg_excel_data sed
-      WHERE sed.product_id IS NOT NULL
-        AND TRY_CAST(sed.product_id AS BIGINT) IS NOT NULL
-        AND sed.filament_id IS NOT NULL
-        AND TRY_CAST(sed.filament_id AS BIGINT) IS NOT NULL
-        AND sed.status_quality_check IS NOT NULL
-        AND LTRIM(RTRIM(sed.product)) IN (N'10K', N'6K')
-  ),
-  ProductDetails AS (
-      SELECT
-          TRY_CAST(sed.product_id  AS BIGINT)      AS product_id_bigint,
-          TRY_CAST(sed.filament_id AS BIGINT)      AS filament_id_bigint,
-          pt.id                                   AS product_type_id,
-          (SELECT MIN(ps.id)
-           FROM dbo.product_skus ps
-           WHERE ps.product_type_id = pt.id)      AS sku_id,
-          CASE
-              WHEN UPPER(LTRIM(RTRIM(sed.status_quality_check))) = 'FAIL'
-                  THEN (SELECT id FROM dbo.product_statuses WHERE status_name = N'Waste')
-              WHEN UPPER(LTRIM(RTRIM(sed.status_quality_check))) = 'PASS'
-                   AND UPPER(LTRIM(RTRIM(ISNULL(sed.second_rate_goods, '')))) = 'YES'
-                  THEN (SELECT id FROM dbo.product_statuses WHERE status_name = N'B-Ware')
-              WHEN UPPER(LTRIM(RTRIM(sed.status_quality_check))) = 'PASS'
-                   AND UPPER(LTRIM(RTRIM(ISNULL(sed.second_rate_goods, '')))) = 'NO'
-                  THEN (SELECT id FROM dbo.product_statuses WHERE status_name = N'A-Ware')
-              ELSE NULL
-          END                                     AS current_status_id,
-          NULL                                    AS previous_stage_id,
-          CASE UPPER(LTRIM(RTRIM(ISNULL(sed.prozess_step, ''))))
-              WHEN 'SOLD'             THEN 12
-              WHEN 'SALES'            THEN 8
-              WHEN 'NOT USABLE'       THEN 10
-              WHEN 'INTERNAL'         THEN 13
-              WHEN 'IN TREATMENT'     THEN 5
-              WHEN 'INTERIM STORAGE'  THEN 4
-              ELSE 1
-          END                                     AS current_stage_id,
-          COALESCE(sl.id, @unassigned_loc_id)     AS location_id,
-          SYSUTCDATETIME()                        AS last_updated_at,
-          LTRIM(RTRIM(sed.printer))               AS printer,
-          TRY_CONVERT(DATETIME2, sed.date_harvest) AS date_harvest_dt,
-          LTRIM(RTRIM(sed.operator_harvest))      AS operator_harvest
-      FROM dbo.stg_excel_data sed
-      JOIN dbo.product_types pt
-        ON pt.name = LTRIM(RTRIM(sed.product))
-      LEFT JOIN dbo.storage_locations sl
-        ON sl.location_name = LTRIM(RTRIM(sed.storage))
-      WHERE sed.product_id IS NOT NULL
-        AND TRY_CAST(sed.product_id AS BIGINT) IS NOT NULL
-        AND sed.filament_id IS NOT NULL
-        AND TRY_CAST(sed.filament_id AS BIGINT) IS NOT NULL
-        AND sed.status_quality_check IS NOT NULL
-        AND LTRIM(RTRIM(sed.product)) IN (N'10K', N'6K')
-  )
-  INSERT INTO #src_tracking (product_id, harvest_id, product_type_id, sku_id,
-                             current_status_id, previous_stage_id, current_stage_id,
-                             location_id, last_updated_at)
+  INSERT INTO #src(product_id_bigint, harvest_id, product_type_id, sku_id,
+                   current_status_id, previous_stage_id, current_stage_id,
+                   location_id, last_updated_at)
   SELECT
-      pd.product_id_bigint,
-      h.id AS harvest_id,
-      pd.product_type_id,
-      pd.sku_id,
-      pd.current_status_id,
-      pd.previous_stage_id,
-      pd.current_stage_id,
-      pd.location_id,
-      pd.last_updated_at
-  FROM ProductDetails pd
-  /* Match each product_id to its harvest using natural keys */
-  INNER JOIN dbo.filaments f
-    ON f.filament_id = pd.filament_id_bigint
-  INNER JOIN dbo.printers p
-    ON p.name = pd.printer
-  INNER JOIN dbo.filament_mounting fm
-    ON fm.filament_tracking_id = f.id
-   AND fm.printer_id = p.id
-  LEFT JOIN dbo.users u
-    ON u.display_name = pd.operator_harvest
-  INNER JOIN dbo.product_harvest h
-    ON h.filament_mounting_id = fm.id
-   AND h.printed_by = COALESCE(u.id, (SELECT TOP 1 id FROM dbo.users ORDER BY id))
-   AND h.print_date = pd.date_harvest_dt;
+      v.product_id_bigint,
+      m.harvest_id,
+      v.product_type_id,
+      v.sku_id,
+      v.current_status_id,
+      NULL,
+      v.current_stage_id,
+      COALESCE(sl.id, @unassigned_loc_id),
+      SYSUTCDATETIME()
+  FROM dbo.vw_unified_legacy_prints v
+  JOIN dbo.etl_harvest_map m
+    ON m.product_id_bigint = v.product_id_bigint
+  LEFT JOIN dbo.storage_locations sl
+    ON sl.location_name = v.storage_name;
 
-  /* -------- 2) Insert idempotently into product_tracking -------- */
-  INSERT INTO dbo.product_tracking
-      (harvest_id, product_id, product_type_id, sku_id,
-       current_status_id, previous_stage_id, current_stage_id,
-       location_id, last_updated_at)
-  SELECT
-      s.harvest_id, s.product_id, s.product_type_id, s.sku_id,
-      s.current_status_id, s.previous_stage_id, s.current_stage_id,
-      s.location_id, s.last_updated_at
-  FROM #src_tracking s
-  WHERE NOT EXISTS (
-      SELECT 1
-      FROM dbo.product_tracking t
-      WHERE t.product_id = s.product_id
-         OR t.harvest_id = s.harvest_id
-  );
+  IF OBJECT_ID('tempdb..#out','U') IS NOT NULL DROP TABLE #out;
+  CREATE TABLE #out(action NVARCHAR(10));
+
+  MERGE dbo.product_tracking AS tgt
+  USING #src AS src
+     ON tgt.product_id = src.product_id_bigint
+  WHEN MATCHED THEN
+    UPDATE SET
+      tgt.harvest_id        = src.harvest_id,
+      tgt.product_type_id   = src.product_type_id,
+      tgt.sku_id            = src.sku_id,
+      tgt.current_status_id = src.current_status_id,
+      tgt.current_stage_id  = src.current_stage_id,
+      tgt.location_id       = src.location_id,
+      tgt.last_updated_at   = src.last_updated_at
+  WHEN NOT MATCHED BY TARGET THEN
+    INSERT (harvest_id, product_id, product_type_id, sku_id, current_status_id,
+            previous_stage_id, current_stage_id, location_id, last_updated_at)
+    VALUES (src.harvest_id, src.product_id_bigint, src.product_type_id, src.sku_id,
+            src.current_status_id, src.previous_stage_id, src.current_stage_id,
+            src.location_id, src.last_updated_at)
+  OUTPUT $action INTO #out(action);
 
   COMMIT TRAN;
-  PRINT '[TRANSFORMED] product_tracking';
+  PRINT '[product_tracking_from_unified] done.';
 END TRY
 BEGIN CATCH
   IF XACT_STATE() <> 0 ROLLBACK TRAN;
   DECLARE @msg NVARCHAR(4000) = ERROR_MESSAGE();
-  DECLARE @num INT = ERROR_NUMBER();
-  DECLARE @state INT = ERROR_STATE();
-  DECLARE @sev INT = ERROR_SEVERITY();
-  RAISERROR('[transform_product_tracking] %s (num=%d, state=%d, sev=%d)',
-            @sev, 1, @msg, @num, @state, @sev);
+  RAISERROR('[product_tracking_from_unified] %s', 16, 1, @msg);
 END CATCH;

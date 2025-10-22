@@ -98,7 +98,7 @@ def render_qc_form():
                 try:
                     user_id = st.session_state.get("user_id")
                     payload = ProductQCInput(
-                        product_id=selected["product_id"],
+                        product_tracking_id=selected["id"],
                         inspected_by=user_id,
                         weight_grams=weight,
                         pressure_drop=pressure,

@@ -14,7 +14,8 @@ from constants.product_status_constants import STATUS_MAP_QC_TO_BUSINESS
 def get_printed_products(db: Session) -> list[dict]:
     sql = """
         SELECT
-            pt.id AS product_id,
+            pt.id,
+            pt.product_id,
             pt.harvest_id,
             pr.id AS request_id,
             ps.sku AS sku,
@@ -30,6 +31,7 @@ def get_printed_products(db: Session) -> list[dict]:
         LEFT JOIN product_print_specs sps ON sps.sku_id = ps.id
         LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
         WHERE lc.stage_order = 1
+        AND lot_number <> 'LEGACY_LOT'
         ORDER BY ph.print_date
     """
     result = db.execute(text(sql))
@@ -43,14 +45,14 @@ def insert_product_qc(db: Session, data: ProductQCInput):
     qc_id = db.execute(
         text("""
             INSERT INTO product_quality_control (
-                product_id, inspected_by, weight_grams, pressure_drop,
+                product_tracking_id, inspected_by, weight_grams, pressure_drop,
                 visual_pass, inspection_result, notes
             )
             OUTPUT INSERTED.id
             VALUES (:pid, :inspector, :weight, :pressure, :visual, :result, :notes)
         """),
         {
-            "pid": data.product_id,
+            "pid": data.product_tracking_id,
             "inspector": data.inspected_by,
             "weight": data.weight_grams,
             "pressure": data.pressure_drop,
@@ -77,7 +79,7 @@ def insert_product_qc(db: Session, data: ProductQCInput):
         SELECT harvest_id
         FROM product_tracking
         WHERE id = :pid
-    """), {"pid": data.product_id}).fetchone()
+    """), {"pid": data.product_tracking_id}).fetchone()
 
     if not result:
         raise ValueError(f"No harvest found for product ID {data.product_id}")
@@ -88,7 +90,7 @@ def insert_product_qc(db: Session, data: ProductQCInput):
     record_filament_usage_post_qc(
         db=db,
         harvest_id=harvest_id,
-        product_id=data.product_id,
+        product_id=data.product_tracking_id,
         weight_grams=data.weight_grams,
         user_id=data.inspected_by
     )
@@ -101,7 +103,7 @@ def insert_product_qc(db: Session, data: ProductQCInput):
     )
     update_product_stage(
         db=db,
-        product_id=data.product_id,
+        product_id=data.product_tracking_id,
         new_stage_id=new_stage_id,
         reason="Harvest QC Complete",
         user_id=data.inspected_by
@@ -111,7 +113,7 @@ def insert_product_qc(db: Session, data: ProductQCInput):
     if data.inspection_result == "Quarantine":
         create_quarantine_record(
             db=db,
-            product_id=data.product_id,
+            product_id=data.product_tracking_id,
             source="Harvest QC",
             quarantined_by=data.inspected_by,
             reason=data.notes
@@ -119,7 +121,7 @@ def insert_product_qc(db: Session, data: ProductQCInput):
 
     # === Update the Current Product Status ===
     status_name = STATUS_MAP_QC_TO_BUSINESS.get(data.inspection_result, "Pending")
-    update_product_status(db, data.product_id, status_name)
+    update_product_status(db, data.product_tracking_id, status_name)
     
     # === Update the Remaining Filament Weight ===
     db.execute(
@@ -131,7 +133,7 @@ def insert_product_qc(db: Session, data: ProductQCInput):
             JOIN product_tracking pt ON ph.id = pt.harvest_id
             WHERE pt.id = :pid
         """),
-        {"weight": data.weight_grams, "pid": data.product_id}
+        {"weight": data.weight_grams, "pid": data.product_tracking_id}
     )
     db.commit()
 
@@ -140,7 +142,8 @@ def get_completed_qc_products(db: Session) -> list[dict]:
     sql = """
         SELECT 
             qc.id AS qc_id,
-            pt.id AS product_id,
+            pt.id,
+            pt.product_id,
             ph.id AS harvest_id,
             ps.sku,
             ps.name AS sku_name,
@@ -152,7 +155,7 @@ def get_completed_qc_products(db: Session) -> list[dict]:
             qc.notes,
             ph.print_date
         FROM product_quality_control qc
-        JOIN product_tracking pt ON qc.product_id = pt.id
+        JOIN product_tracking pt ON qc.product_tracking_id = pt.id
         JOIN product_harvest ph ON pt.harvest_id = ph.id
         JOIN product_requests pr ON ph.request_id = pr.id
         JOIN product_skus ps ON pr.sku_id = ps.id
@@ -223,7 +226,7 @@ def get_completed_post_treatment_qc(db: Session) -> list[dict]:
     sql = """
         SELECT
             pti.id AS inspection_id,
-            pti.product_id,
+            pti.product_tracking_id,
             pt.name AS product_type,
             pti.surface_treated,
             pti.sterilized,
@@ -232,7 +235,7 @@ def get_completed_post_treatment_qc(db: Session) -> list[dict]:
             pti.inspected_by,
             pti.inspected_at
         FROM post_treatment_inspections pti
-        JOIN product_tracking t ON pti.product_id = t.id
+        JOIN product_tracking t ON pti.product_tracking_id = t.id
         JOIN product_harvest ph ON t.harvest_id = ph.id
         JOIN product_requests pr on ph.request_id = pr.id
         JOIN product_types pt ON pr.product_id = pt.id

@@ -55,7 +55,7 @@ def render_qc_edit_form():
                 update_qc_fields(
                     db=db,
                     qc_id=selected["qc_id"],
-                    product_id=selected["product_id"],
+                    product_id=selected["id"],
                     updates=updates,
                     reason=reason,
                     user_id=st.session_state["user_id"]

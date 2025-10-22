@@ -303,5 +303,6 @@ def main():
     with engine.begin() as conn:
         apply_dir(conn, DB_DIR / "postseed", "seed", reapply_on_change=True)
 
+
 if __name__ == "__main__":
     main()

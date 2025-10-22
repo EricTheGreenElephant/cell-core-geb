@@ -26,6 +26,7 @@ class TreatmentBatchOut(BaseModel):
 
 
 class TreatmentBatchProductCandidate(BaseModel):
+    id: int
     product_id: int
     current_stage_name: str
     current_status: str
