@@ -110,6 +110,7 @@ def main():
         run_transform(Path("etl/transform_product_harvest.sql"), "product_harvest", only_set)
         run_transform(Path("etl/transform_product_tracking.sql"), "product_tracking", only_set)
         run_transform(Path("etl/transform_product_quality_control.sql"), "product_quality_control", only_set)
+        run_transform(Path("etl/transform_treatment_batches.sql"), "treatment_batch", only_set)
 
 if __name__ == "__main__":
     main()
