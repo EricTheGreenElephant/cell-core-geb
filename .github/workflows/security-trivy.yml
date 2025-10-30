@@ -2,9 +2,9 @@ name: Security – Trivy container scan
 
 on:
   push:
-    branches: [ dev ]
+    branches: [ dev, infra/azure-deploy ]
   pull_request:
-    branches: [ dev ]
+    branches: [ dev, infra/azure-deploy ]
   schedule:
     - cron: "0 6 * * 1"   # weekly, Mondays 06:00 UTC
   workflow_dispatch: {}
