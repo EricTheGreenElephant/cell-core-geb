@@ -1,0 +1,74 @@
+name: Security – Trivy container scan
+
+on:
+  push:
+    branches: [ dev ]
+  pull_request:
+    branches: [ dev ]
+  schedule:
+    - cron: "0 6 * * 1"   # weekly, Mondays 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write   # to upload SARIF results
+
+env:
+  IMAGE_NAME: ccp-streamlit                # repo name inside your registry (keep consistent)
+  LOCAL_TAG: localtest-${{ github.sha }}   # local tag for scanning (no push)
+
+jobs:
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build the image locally (no push)
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: ${{ env.IMAGE_NAME }}:${{ env.LOCAL_TAG }}
+          provenance: false
+          sbom: false
+
+      # Scan the built image for vulnerabilities
+      - name: Trivy scan (image)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_NAME }}:${{ env.LOCAL_TAG }}
+          format: sarif
+          output: trivy-image.sarif
+          vuln-type: 'os,library'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'  # fail only on serious issues
+          exit-code: '0'             # don't fail the build yet; flip to '1' when ready to enforce
+
+      # (Optional) scan the repo filesystem too (IaC, secrets, etc.)
+      - name: Trivy scan (filesystem)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: fs
+          format: sarif
+          output: trivy-fs.sarif
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+      # Upload both reports to GitHub Code Scanning
+      - name: Upload SARIF (image)
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
+
+      - name: Upload SARIF (filesystem)
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
