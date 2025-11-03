@@ -6,6 +6,7 @@ FROM (VALUES
     ('admin@yourcompany.com', 'Filament Inventory', 'Admin'),
     ('admin@yourcompany.com', 'Sales', 'Admin'),
     ('admin@yourcompany.com', 'Logistics', 'Admin'),
+    ('admin@yourcompany.com', 'Admin', 'Admin'),
 
     ('steve@yourcompany.com', 'Quality Management', 'Read'),
     ('steve@yourcompany.com', 'Production', 'Write'),

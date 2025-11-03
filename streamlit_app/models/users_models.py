@@ -25,3 +25,4 @@ class User(Base):
     quarantines_created = relationship("QuarantinedProducts", foreign_keys="[QuarantinedProducts.quarantined_by]", back_populates="quarantined_user")
     quarantines_resolved = relationship("QuarantinedProducts", foreign_keys="[QuarantinedProducts.resolved_by]", back_populates="resolved_user")
     material_usages = relationship("MaterialUsage", back_populates="user")
+    access_user = relationship("AccessRight", back_populates="access_right_user")

@@ -1,0 +1,105 @@
+name: Build & Push Docker image to ACR (mock-ready)
+
+on: 
+    push: 
+        branches: [ dev, infra/azure-deploy ] # < can be changed to main branch later >
+        tags: [ 'v*' ] # prod pipeline: push on version tags like v1.2.3
+    workflow_dispatch: {} # allows manual runs from the Actions tab
+
+permissions:
+    contents: read
+    id-token: write
+
+env: 
+    # ====
+    # Placeholder to replace
+    # ====
+    ACR_NAME: myacrname    # <REPLACE when ACR created, e.g. "cellcoreacr">
+    IMAGE_NAME: ccp-streamlit   # <adjust if different repo name prefered>
+    # This derives from ACR_NAME; don't change until ACR exists:
+    ACR_LOGIN_SERVER: myacrname.azurecr.io # replace with acr name later
+
+    # Toggle this to true ONLY after Azure resources + OIDC are configured. 
+    PUSH_ENABLED: "false"   # "false" = dry-run build only (safe before Azure exists)
+
+jobs:
+    build-and-push:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v3
+
+            # ---- AUTH OPTION: OIDC / Federated Login ----
+            # Use AFTER these have been created: 
+            #   1) Entra App Registration for GitHub OIDC
+            #   2) A Federated Credential bound to this repo/workflow
+            #   3) Role assignment: AcrPush on ACR to that app
+            # Then add repo secrets:
+            #   - AZURE_CLIENT_ID
+            #   - AZURE_TENANT_ID
+            #   - AZURE_SUBSCRIPTION_ID
+            - name: Azure Login (OIDC)
+              if: env.PUSH_ENABLED == 'true'
+              uses: azure/login@v2
+              with:
+                client-id: ${{ secrets.AZURE_CLIENT_ID }} # < set later >
+                tenant-id: ${{ secrets.AZURE_TENANT_ID }} # < set later >
+                subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }} # < set later >
+            
+            # Log in to ACR using the Azure CLI context from the previous step
+            - name: Azure CLI login to ACR
+              if: env.PUSH_ENABLED == 'true'
+              run: az acr login --name $ACR_NAME
+
+
+
+            # --------- AUTH OPTION B (Fallback): ACR Admin User / Password ----------
+            # If you don’t want OIDC yet, you can enable the ACR "admin user" and use:
+            #   - ACR_USERNAME (repo secret)
+            #   - ACR_PASSWORD (repo secret)
+            # Then uncomment the step below and remove Option A steps above.
+            #
+            # - name: Docker login to ACR (admin user)
+            #   if: env.PUSH_ENABLED == 'true'
+            #   uses: docker/login-action@v3
+            #   with:
+            #     registry: ${{ env.ACR_LOGIN_SERVER }}
+            #     username: ${{ secrets.ACR_USERNAME }}   # <set later if you choose admin user>
+            #     password: ${{ secrets.ACR_PASSWORD }}   # <set later if you choose admin user>
+
+            # Optional: generate labels and versioned tags (keeps metadata tidy)
+            - name: Docker metadata
+              id: meta
+              uses: docker/metadata-action@v5
+              with:
+                images: ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}
+                tags: |
+                    type=raw,value=${{ github.sha }}
+                    type=ref,event=branch
+                    type=raw,value=dev-latest,enable=${{ startsWith(github.ref, 'refs/heads/dev') }}
+                labels: |
+                    org.opencontainers.image.source=${{ github.repository }}
+                    org.opencontainers.image.revision=${{ github.sha }}
+
+            # Build (always) and Push (only when PUSH_ENABLED=="true")
+            - name: Build (and conditionally push) image
+              uses: docker/build-push-action@v6
+              with:
+                context: .
+                file: ./Dockerfile
+                push: ${{ env.PUSH_ENABLED }}            # "false" until ACR exists & auth is set
+                tags: ${{ steps.meta.outputs.tags }}
+                labels: ${{ steps.meta.outputs.labels }}
+                # sbom/provenance disabled to speed up + avoid warnings
+                provenance: false
+                sbom: false
+
+            - name: Show resulting tags (debug)
+              run: |
+                echo "Built tags:"
+                echo "${{ steps.meta.outputs.tags }}"
+                echo "PUSH_ENABLED=${{ env.PUSH_ENABLED }}"

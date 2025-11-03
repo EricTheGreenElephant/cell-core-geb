@@ -30,7 +30,8 @@ StagePrev = aliased(LifecycleStages)
 def get_qm_review_products(db: Session) -> list[ProductQMReview]:
     stmt = (
         select(
-            ProductTracking.id.label("product_id"),
+            ProductTracking.id.label("product_tracking_id"),
+            ProductTracking.product_id,
             LifecycleStages.stage_name.label("current_stage_name"),
             ProductTracking.last_updated_at,
             ProductRequest.lot_number,
@@ -48,7 +49,7 @@ def get_qm_review_products(db: Session) -> list[ProductQMReview]:
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
         .join(ProductSKU, ProductSKU.id == ProductTracking.sku_id)
-        .join(ProductQualityControl, ProductQualityControl.product_id == ProductTracking.id)
+        .join(ProductQualityControl, ProductQualityControl.product_tracking_id == ProductTracking.id)
         .join(User, ProductQualityControl.inspected_by == User.id)
         .outerjoin(StorageLocation, ProductTracking.location_id == StorageLocation.id)
         .where(LifecycleStages.stage_code == "InInterimStorage")
@@ -59,6 +60,7 @@ def get_qm_review_products(db: Session) -> list[ProductQMReview]:
 
     products = [
         ProductQMReview(
+            product_tracking_id=row.product_tracking_id,
             product_id=row.product_id,
             current_stage_name=row.current_stage_name,
             last_updated_at=row.last_updated_at,
@@ -82,7 +84,8 @@ def get_qm_review_products(db: Session) -> list[ProductQMReview]:
 def get_post_treatment_qm_candidates(db: Session) -> list[PostTreatmentApprovalCandidate]:
     stmt = (
         select(
-            ProductTracking.id.label("product_id"),
+            ProductTracking.id.label("product_tracking_id"),
+            ProductTracking.product_id,
             LifecycleStages.stage_name.label("current_stage_name"),
             ProductTracking.last_updated_at,
             ProductSKU.sku,
@@ -98,7 +101,7 @@ def get_post_treatment_qm_candidates(db: Session) -> list[PostTreatmentApprovalC
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
         .join(ProductSKU, ProductSKU.id == ProductTracking.sku_id)
         .join(LifecycleStages, ProductTracking.current_stage_id == LifecycleStages.id)
-        .outerjoin(PostTreatmentInspection, PostTreatmentInspection.product_id == ProductTracking.id)
+        .outerjoin(PostTreatmentInspection, PostTreatmentInspection.product_tracking_id == ProductTracking.id)
         .outerjoin(User, PostTreatmentInspection.inspected_by == User.id)
         .outerjoin(StorageLocation, ProductTracking.location_id == StorageLocation.id)
         .where(LifecycleStages.stage_code == "PostTreatmentStorage")

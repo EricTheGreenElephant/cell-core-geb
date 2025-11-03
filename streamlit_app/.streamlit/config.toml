@@ -11,3 +11,10 @@ primaryColor = "#C23E54"
 backgroundColor = "#62C8AC"
 secondaryBackgroundColor = "#C3F4E4"
 textColor = "#000000"
+
+[server]
+enableCORS = false
+enableXsrfProtection = true
+headless = true 
+address = "0.0.0.0"
+port = 8501

@@ -88,7 +88,7 @@ def render_sales_order_form(mode: str = "new"):
     col1, col2 = st.columns(2)
     user_id = st.session_state.get("user_id")
 
-    if col1.button("Update Order" if mode == "update" else "Create Order", use_container_width=True):
+    if col1.button("Update Order" if mode == "update" else "Create Order", width='stretch'):
         data = SalesOrderInput(
             customer_id=customer_options[customer_label],
             created_by=user_id,
@@ -112,7 +112,7 @@ def render_sales_order_form(mode: str = "new"):
 
     # === Cancel Option ===
     if mode == "update":
-        if col2.button("Cancel Sales Order", use_container_width=True):
+        if col2.button("Cancel Sales Order", width='stretch'):
             if not notes:
                 st.warning("Cancellation requires a note.")
                 return

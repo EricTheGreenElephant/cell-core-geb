@@ -68,9 +68,9 @@ def render_harvest_form():
                 # col_spacer is a column added only for width spacing
                 col1, col2, col_spacer = st.columns([0.5, 0.5, 1])
                 with col1:
-                    submitted = st.form_submit_button("✅ Harvest Product", use_container_width=True)
+                    submitted = st.form_submit_button("✅ Harvest Product", width='stretch')
                 with col2:
-                    cancel = st.form_submit_button("❌ Cancel Product", use_container_width=True)
+                    cancel = st.form_submit_button("❌ Cancel Product", width='stretch')
 
                 if submitted:
                     if not seal_id:

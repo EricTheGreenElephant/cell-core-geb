@@ -26,7 +26,7 @@ def get_unmounted_mounts(db: Session) -> list[dict]:
             fm.status,
             fm.unmounted_by
         FROM filament_mounting fm
-        JOIN filaments f ON fm.filament_id = f.id
+        JOIN filaments f ON fm.filament_tracking_id = f.id
         JOIN printers p ON fm.printer_id = p.id
         WHERE fm.unmounted_at IS NOT NULL
         ORDER BY fm.unmounted_at DESC

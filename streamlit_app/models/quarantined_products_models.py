@@ -8,7 +8,7 @@ class QuarantinedProducts(Base):
     __tablename__ = "quarantined_products"
 
     id = Column(Integer, primary_key=True, index=True)
-    product_id = Column(Integer, ForeignKey("product_tracking.id"), nullable=False)
+    product_tracking_id = Column(Integer, ForeignKey("product_tracking.id"), nullable=False)
     from_stage_id = Column(Integer, ForeignKey("lifecycle_stages.id"), nullable=False)
     source = Column(String(50), nullable=False)
     location_id = Column(Integer, ForeignKey("storage_locations.id"), nullable=True)

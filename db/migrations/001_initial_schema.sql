@@ -117,7 +117,8 @@ IF OBJECT_ID('filaments', 'U') IS NULL
 BEGIN
     CREATE TABLE filaments (
         id INT PRIMARY KEY IDENTITY(1,1),
-        serial_number NVARCHAR(100) NOT NULL UNIQUE,
+        filament_id BIGINT NOT NULL UNIQUE,
+        serial_number NVARCHAR(100) NOT NULL,
         lot_number NVARCHAR(100) NOT NULL,
         location_id INT NOT NULL,
         weight_grams DECIMAL(10,2) NOT NULL,
@@ -135,13 +136,13 @@ IF OBJECT_ID('filament_acclimatization', 'U') IS NULL
 BEGIN
     CREATE TABLE filament_acclimatization(
         id INT PRIMARY KEY IDENTITY(1,1),
-        filament_id INT NOT NULL UNIQUE,
+        filament_tracking_id INT NOT NULL UNIQUE,
         moved_by INT NOT NULL,
         moved_at DATETIME2 NOT NULL DEFAULT GETDATE(),
         ready_at AS DATEADD(DAY, 2, moved_at) PERSISTED,
         status NVARCHAR(50) NOT NULL CHECK (status IN ('Acclimatizing', 'Complete')),
 
-        CONSTRAINT fk_accl_fila FOREIGN KEY (filament_id) REFERENCES filaments(id),
+        CONSTRAINT fk_accl_fila FOREIGN KEY (filament_tracking_id) REFERENCES filaments(id),
         CONSTRAINT fk_accl_user FOREIGN KEY (moved_by) REFERENCES users(id)
     );
 END;
@@ -150,7 +151,7 @@ IF OBJECT_ID('filament_mounting', 'U') IS NULL
 BEGIN
     CREATE TABLE filament_mounting(
         id INT PRIMARY KEY IDENTITY(1,1),
-        filament_id INT NOT NULL UNIQUE,
+        filament_tracking_id INT NOT NULL,
         printer_id INT NOT NULL,
         mounted_by INT NOT NULL,
         mounted_at DATETIME2 DEFAULT GETDATE(),
@@ -160,7 +161,7 @@ BEGIN
         status NVARCHAR(50) NOT NULL DEFAULT 'In Use',
 
         CONSTRAINT chk_status CHECK (status IN ('In Use', 'Unmounted')),
-        CONSTRAINT fk_mount_filament FOREIGN KEY (filament_id) REFERENCES filaments(id),
+        CONSTRAINT fk_mount_filament FOREIGN KEY (filament_tracking_id) REFERENCES filaments(id),
         CONSTRAINT fk_mount_printer FOREIGN KEY (printer_id) REFERENCES printers(id),
         CONSTRAINT fk_mount_user FOREIGN KEY (mounted_by) REFERENCES users(id),
         CONSTRAINT fk_mounting_unmounted_by FOREIGN KEY (unmounted_by) REFERENCES users(id)
@@ -268,7 +269,7 @@ BEGIN
     CREATE TABLE product_tracking (
         id INT PRIMARY KEY IDENTITY(1,1),
         harvest_id INT NOT NULL UNIQUE,
-        tracking_id NVARCHAR(50) NOT NULL UNIQUE,
+        product_id BIGINT NOT NULL UNIQUE,
         product_type_id INT NOT NULL,
         sku_id INT NOT NULL,
         current_status_id INT NULL,
@@ -291,7 +292,7 @@ IF OBJECT_ID('product_quality_control', 'U') IS NULL
 BEGIN
     CREATE TABLE product_quality_control (
         id INT PRIMARY KEY IDENTITY(1,1),
-        product_id INT NOT NULL,
+        product_tracking_id INT NOT NULL,
         inspected_by INT NOT NULL,
         inspected_at DATETIME2 DEFAULT GETDATE() NOT NULL,
         weight_grams DECIMAL(6,2) NOT NULL,
@@ -300,7 +301,7 @@ BEGIN
         inspection_result NVARCHAR(20) NOT NULL CHECK (inspection_result IN ('Passed', 'B-Ware', 'Waste', 'Quarantine')),
         notes NVARCHAR(255),
 
-        CONSTRAINT fk_qc_print_job FOREIGN KEY (product_id) REFERENCES product_tracking(id),
+        CONSTRAINT fk_qc_print_job FOREIGN KEY (product_tracking_id) REFERENCES product_tracking(id),
         CONSTRAINT fk_qc_user_product FOREIGN KEY (inspected_by) REFERENCES users(id)
     );
 END;
@@ -309,14 +310,14 @@ IF OBJECT_ID('product_status_history', 'U') IS NULL
 BEGIN
     CREATE TABLE product_status_history (
         id INT PRIMARY KEY IDENTITY(1,1),
-        product_id INT NOT NULL,
+        product_tracking_id INT NOT NULL,
         from_stage_id INT NULL,
         to_stage_id INT NOT NULL,
         reason NVARCHAR(255),
         changed_by INT NOT NULL,
         changed_at DATETIME2 NOT NULL DEFAULT GETDATE(),
 
-        CONSTRAINT fk_status_product FOREIGN KEY (product_id) REFERENCES product_tracking(id),
+        CONSTRAINT fk_status_product FOREIGN KEY (product_tracking_id) REFERENCES product_tracking(id),
         CONSTRAINT fk_status_from_stage FOREIGN KEY (from_stage_id) REFERENCES lifecycle_stages(id),
         CONSTRAINT fk_status_to_stage FOREIGN KEY (to_stage_id) REFERENCES lifecycle_stages(id),
         CONSTRAINT fk_status_user FOREIGN KEY (changed_by) REFERENCES users(id)
@@ -328,7 +329,7 @@ IF OBJECT_ID('material_usage', 'U') IS NULL
 BEGIN
     CREATE TABLE material_usage (
         id INT IDENTITY PRIMARY KEY,
-        product_id INT NOT NULL,
+        product_tracking_id INT NOT NULL,
         harvest_id INT NULL,
         material_type NVARCHAR(50) NOT NULL CHECK (material_type IN ('Filament', 'Lid', 'Seal')),
         lot_number NVARCHAR(100) NOT NULL,
@@ -337,7 +338,7 @@ BEGIN
         used_by INT NOT NULL,
         reason NVARCHAR(255),
 
-        CONSTRAINT fk_usage_product FOREIGN KEY (product_id) REFERENCES product_tracking(id),
+        CONSTRAINT fk_usage_product FOREIGN KEY (product_tracking_id) REFERENCES product_tracking(id),
         CONSTRAINT fk_usage_harvest FOREIGN KEY (harvest_id) REFERENCES product_harvest(id),
         CONSTRAINT fk_usage_user FOREIGN KEY (used_by) REFERENCES users(id)
     );
@@ -348,7 +349,7 @@ IF OBJECT_ID('quarantined_products', 'U') IS NULL
 BEGIN
     CREATE TABLE quarantined_products(
         id INT IDENTITY PRIMARY KEY,
-        product_id INT NOT NULL,
+        product_tracking_id INT NOT NULL,
         from_stage_id INT NOT NULL,
         source NVARCHAR(50) NOT NULL CHECK (source IN ('Harvest QC', 'Post-Treatment QC', 'Ad-Hoc')),
         location_id INT NULL,
@@ -360,7 +361,7 @@ BEGIN
         resolved_at DATETIME2 NULL,
         resolved_by INT NULL,
 
-        CONSTRAINT fk_quarantine_product FOREIGN KEY (product_id) REFERENCES product_tracking(id),
+        CONSTRAINT fk_quarantine_product FOREIGN KEY (product_tracking_id) REFERENCES product_tracking(id),
         CONSTRAINT fk_quarantine_stage FOREIGN KEY (from_stage_id) REFERENCES lifecycle_stages(id),
         CONSTRAINT fk_quarantine_user FOREIGN KEY (quarantined_by) REFERENCES users(id),
         CONSTRAINT fk_quarantine_resolved_user FOREIGN KEY (resolved_by) REFERENCES users(id),
@@ -372,7 +373,7 @@ IF OBJECT_ID('product_investigations', 'U') IS NULL
 BEGIN
     CREATE TABLE product_investigations(
         id INT IDENTITY PRIMARY KEY,
-        product_id INT NOT NULL,
+        product_tracking_id INT NOT NULL,
         status VARCHAR(50) NOT NULL CHECK (status IN ('Under Investigation', 'Cleared A-Ware', 'Cleared B-Ware', 'Disposed')),
         deviation_number VARCHAR(50),
         comment NVARCHAR(255),
@@ -381,7 +382,7 @@ BEGIN
         resolved_at DATETIME2 NULL,
         resolved_by INT NULL,
 
-        CONSTRAINT fk_investigation_product FOREIGN KEY (product_id) REFERENCES product_tracking(id),
+        CONSTRAINT fk_investigation_product FOREIGN KEY (product_tracking_id) REFERENCES product_tracking(id),
         CONSTRAINT fk_investigation_user FOREIGN KEY (created_by) REFERENCES users(id),
         CONSTRAINT fk_investigation_resolved_user FOREIGN KEY (resolved_by) REFERENCES users(id)
     );
@@ -407,12 +408,12 @@ BEGIN
     CREATE TABLE treatment_batch_products (
         id INT PRIMARY KEY IDENTITY(1,1),
         batch_id INT NOT NULL,
-        product_id INT NOT NULL UNIQUE,
+        product_tracking_id INT NOT NULL UNIQUE,
         surface_treat BIT NOT NULL,
         sterilize BIT NOT NULL,
 
         CONSTRAINT fk_treatment_batch FOREIGN KEY (batch_id) REFERENCES treatment_batches(id),
-        CONSTRAINT fk_treatment_product FOREIGN KEY (product_id) REFERENCES product_tracking(id)
+        CONSTRAINT fk_treatment_product FOREIGN KEY (product_tracking_id) REFERENCES product_tracking(id)
     );
 END;
 
@@ -420,7 +421,7 @@ IF OBJECT_ID('post_treatment_inspections', 'U') IS NULL
 BEGIN
     CREATE TABLE post_treatment_inspections (
         id INT PRIMARY KEY IDENTITY(1,1),
-        product_id INT NOT NULL,
+        product_tracking_id INT NOT NULL,
         inspected_by INT NOT NULL,
         inspected_at DATETIME2 DEFAULT GETDATE(),
         visual_pass BIT NOT NULL,
@@ -429,7 +430,7 @@ BEGIN
         qc_result NVARCHAR(20) NOT NULL CHECK (qc_result IN ('Passed', 'B-Ware', 'Quarantine', 'Waste')),
         notes NVARCHAR(255),
 
-        CONSTRAINT fk_post_qc_product FOREIGN KEY (product_id) REFERENCES product_tracking(id),
+        CONSTRAINT fk_post_qc_product FOREIGN KEY (product_tracking_id) REFERENCES product_tracking(id),
         CONSTRAINT fk_post_qc_user FOREIGN KEY (inspected_by) REFERENCES users(id)
     );
 END;
@@ -591,10 +592,10 @@ BEGIN
     CREATE TABLE shipment_unit_items(
         id INT PRIMARY KEY IDENTITY(1, 1),
         shipment_id INT NOT NULL,
-        product_id INT NOT NULL UNIQUE,
+        product_tracking_id INT NOT NULL UNIQUE,
 
         CONSTRAINT fk_shipunit_shipment FOREIGN KEY (shipment_id) REFERENCES shipments(id),
-        CONSTRAINT fk_shipunit_product FOREIGN KEY (product_id) REFERENCES product_tracking(id)
+        CONSTRAINT fk_shipunit_product FOREIGN KEY (product_tracking_id) REFERENCES product_tracking(id)
     );
 END;
 
@@ -703,3 +704,24 @@ BEGIN
         CONSTRAINT uc_qpr UNIQUE (quarantine_id, reason_id)
     );
 END;
+
+-- ======= HELPER TABLES
+IF OBJECT_ID('etl_harvest_map','U') IS NULL
+BEGIN
+  CREATE TABLE etl_harvest_map(
+    product_id_bigint BIGINT NOT NULL PRIMARY KEY,   -- 1 product -> 1 harvest
+    harvest_id        INT    NOT NULL UNIQUE,        -- and each harvest used once
+    CONSTRAINT fk_map_harvest
+      FOREIGN KEY (harvest_id) REFERENCES dbo.product_harvest(id)
+  );
+END;
+
+IF OBJECT_ID('etl_treatment_map','U') IS NULL
+BEGIN
+CREATE TABLE etl_treatment_map(
+    treatment_id BIGINT NOT NULL PRIMARY KEY,
+    batch_id     INT    NOT NULL UNIQUE,
+    CONSTRAINT fk_etl_treatment_batch
+    FOREIGN KEY (batch_id) REFERENCES dbo.treatment_batches(id)
+);
+END

@@ -47,12 +47,12 @@ def render_product_qm_review():
         return
     
     data_rows = [p.model_dump() for p in products]
-    st.dataframe(data_rows, use_container_width=True)
+    st.dataframe(data_rows, width='stretch')
 
     eligible_products = [
         p for p in products if p.current_stage_name == stage_label
     ]
-    eligible_product_ids = [{"pid": p.product_id, "result": p.inspection_result} for p in eligible_products]
+    eligible_product_ids = [{"pid": p.product_tracking_id, "result": p.inspection_result} for p in eligible_products]
 
     if eligible_product_ids:
         st.write(f"Eligible for Approval: {len(eligible_product_ids)} product(s).")
@@ -100,7 +100,7 @@ def render_product_qm_review():
                             with get_session() as db:
                                 target_stage_func(
                                     db=db,
-                                    products=[{"pid": p.product_id, "result": p.inspection_result, "reason": reason}], 
+                                    products=[{"pid": p.product_tracking_id, "result": p.inspection_result, "reason": reason}], 
                                     user_id=user_id
                                 )
                             st.success(f"Product {p.product_id} approved.")
@@ -120,7 +120,7 @@ def render_product_qm_review():
                             with get_session() as db:
                                 decline_products_for_disposal(
                                     db=db, 
-                                    products=[{"pid": p.product_id, "result": "Waste"}],
+                                    products=[{"pid": p.product_tracking_id, "result": "Waste"}],
                                     comment=reason,
                                     user_id=user_id
                                 )

@@ -66,7 +66,10 @@ def main():
     load_dotenv()
 
     parser = argparse.ArgumentParser(description="One-shot ETL")
-    parser.add_argument("--excel", default=os.getenv("EXCEL_PATH", "etl/data/2025825_Backup-ExcelTool_ErSi_Copy.xlsm"))
+    # Uncomment for previous data
+    # parser.add_argument("--excel", default=os.getenv("EXCEL_PATH", "etl/data/2025825_Backup-ExcelTool_ErSi_Copy.xlsm"))
+    # Uncomment for latest data
+    parser.add_argument("--excel", default=os.getenv("EXCEL_PATH", "etl/data/20241210_Excel-Tool_4-1_ErSi_Copy2.xlsm"))
     parser.add_argument("--no-truncate", action="store_true", help="Do not truncate staging tables before loading.")
     parser.add_argument("--no-stage", action="store_true", help="Skip all staging loads.")
     parser.add_argument("--no-transform", action="store_true", help="Skip all transforms.")
@@ -97,12 +100,17 @@ def main():
             rows = conn.execute(text("SELECT COUNT(*) FROM dbo.stg_filament_excel_data")).scalar()
             print(f"[INFO] Rows in dbo.stg_filament_excel_data: {rows}")
 
+    view_path = Path(__file__).resolve().parents[1] / "db" / "postview" / "07_v_unified_legacy_prints.sql"
+    run_transform(view_path, "vw_unified_legacy_prints", only_set)
+
     if not args.no_transform:
         run_transform(Path("etl/transform_filaments.sql"), "filaments", only_set)
         run_transform(Path("etl/transform_filament_mounting.sql"), "filament_mounting", only_set)
+        run_transform(Path("etl/transform_filament_acclimatizing.sql"), "filament_acclimatization", only_set)
         run_transform(Path("etl/transform_product_harvest.sql"), "product_harvest", only_set)
         run_transform(Path("etl/transform_product_tracking.sql"), "product_tracking", only_set)
         run_transform(Path("etl/transform_product_quality_control.sql"), "product_quality_control", only_set)
+        run_transform(Path("etl/transform_treatment_batches.sql"), "treatment_batch", only_set)
 
 if __name__ == "__main__":
     main()

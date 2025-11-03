@@ -1,185 +1,177 @@
+/* ===========================================================
+   transform_filament_mounting.sql
+
+   Upsert filament_mounting using:
+     - stg_excel_data (pairs actually used in prints)
+     - stg_filament_excel_data (inventory; include filaments with no prints)
+
+   Base selection is your working query (UsedPairs / InvPairs / Pairs).
+
+   Rules:
+     - Include only inventory rows where usage <> 'NO' (NULL allowed).
+     - Status:
+         'In Use'     when printer_fi present (non-empty)
+         'Unmounted'  otherwise
+     - remaining_weight from weight_fl (coalesced to 0.00 to satisfy NOT NULL)
+     - mounted_by:
+         prefer users.display_name = 'Unassigned'
+         else fallback to first users.id
+     - mounted_at: SYSUTCDATETIME()
+     - If status = 'Unmounted', set BOTH unmounted_at and unmounted_by:
+         - On INSERT: set immediately
+         - On UPDATE: set when first transitioning to Unmounted (only if NULL)
+
+   This file does not create tables.
+   =========================================================== */
+
 BEGIN TRY
   BEGIN TRAN;
 
-  /* -------- 0) Preconditions / fallbacks -------- */
-  DECLARE @fallback_user_id INT = (SELECT TOP 1 id FROM dbo.users ORDER BY id);
-  IF @fallback_user_id IS NULL
-    THROW 50020, 'No users present; seed users before loading filament_mounting.', 1;
+  /* ---------- Resolve mounted_by (Unassigned → fallback) ---------- */
+  DECLARE @mounted_by INT =
+    (SELECT TOP (1) id FROM dbo.users WHERE display_name = N'Unassigned' ORDER BY id);
 
-  IF NOT EXISTS (SELECT 1 FROM dbo.storage_locations WHERE location_name = 'Unassigned')
+  IF @mounted_by IS NULL
   BEGIN
-    INSERT dbo.storage_locations(location_name, location_type, description, is_active)
-    VALUES ('Unassigned', 'Virtual', 'Fallback for missing shelf', 1);
+    SET @mounted_by = (SELECT TOP (1) id FROM dbo.users WITH (READPAST) ORDER BY id);
+    IF @mounted_by IS NULL
+      THROW 58100, 'No users present; seed dbo.users before mounting.', 1;
   END
-  DECLARE @unassigned_loc_id INT = (SELECT TOP 1 id FROM dbo.storage_locations WHERE location_name = 'Unassigned');
 
-  IF NOT EXISTS (SELECT 1 FROM dbo.printers WHERE name = 'UNASSIGNED')
-  BEGIN
-    INSERT dbo.printers(name, location_id, status, is_active)
-    VALUES ('UNASSIGNED', @unassigned_loc_id, 'Inactive', 1);
-  END
-  DECLARE @unassigned_printer_id INT = (SELECT TOP 1 id FROM dbo.printers WHERE name = 'UNASSIGNED');
-
-  /* -------- 1) Temp tables -------- */
-  IF OBJECT_ID('tempdb..#all_staged_filaments','U') IS NOT NULL DROP TABLE #all_staged_filaments;
-  IF OBJECT_ID('tempdb..#fm_resolved','U') IS NOT NULL DROP TABLE #fm_resolved;
-  IF OBJECT_ID('tempdb..#fallback_printer','U') IS NOT NULL DROP TABLE #fallback_printer;
-
-  CREATE TABLE #all_staged_filaments (filament_id INT PRIMARY KEY);
-
-  CREATE TABLE #fm_resolved (
-    filament_id       INT           NOT NULL PRIMARY KEY,
-    printer_id        INT           NOT NULL,
-    mounted_by        INT           NOT NULL,
-    mounted_at        DATETIME2     NOT NULL,
-    unmounted_at      DATETIME2     NULL,
-    unmounted_by      INT           NULL,
-    remaining_weight  DECIMAL(10,2) NOT NULL,
-    status            NVARCHAR(50)  NOT NULL
+  /* ---------- Stage source rows (based on your working query) ---------- */
+  DROP TABLE IF EXISTS #src;
+  CREATE TABLE #src(
+    filament_tracking_id INT NOT NULL,
+    printer_id           INT NOT NULL,
+    remaining_weight     DECIMAL(10,2) NOT NULL,
+    status               NVARCHAR(50)  NOT NULL
   );
 
-  /* -------- 2) Fallback printer per filament from stg_excel_data -------- */
-  ;WITH se_base AS (
-    SELECT
-      NULLIF(LTRIM(RTRIM(CAST(s.filament_id AS NVARCHAR(200)))),'') AS filament_serial,
-      NULLIF(LTRIM(RTRIM(CAST(s.printer     AS NVARCHAR(200)))),'') AS printer_name,
-      COALESCE(
-        TRY_CONVERT(datetime2, s.date_harvest, 101),
-        TRY_CONVERT(datetime2, s.date_harvest, 103),
-        TRY_CONVERT(datetime2, s.date_harvest, 104),
-        TRY_CONVERT(datetime2, s.date_harvest, 105),
-        CASE WHEN TRY_CONVERT(float, s.date_harvest) IS NOT NULL
-             THEN DATEADD(day, CAST(TRY_CONVERT(float, s.date_harvest) AS int) - 2, '1899-12-30') END,
-        TRY_CONVERT(datetime2, s.date_harvest)
-      ) AS harvest_dt
-    FROM dbo.stg_excel_data s
+  ;WITH UsedPairs AS (
+      SELECT DISTINCT
+          TRY_CAST(sed.filament_id AS BIGINT) AS filament_id_bigint,
+          LTRIM(RTRIM(sed.printer))           AS printer_name
+      FROM dbo.stg_excel_data sed
+      WHERE sed.filament_id IS NOT NULL
+        AND TRY_CAST(sed.filament_id AS BIGINT) IS NOT NULL
+        AND sed.printer IS NOT NULL
+        AND LTRIM(RTRIM(sed.printer)) <> N''
   ),
-  se_ranked AS (
-    SELECT
-      fb.filament_serial,
-      fb.printer_name,
-      fb.harvest_dt,
-      ROW_NUMBER() OVER (PARTITION BY fb.filament_serial ORDER BY fb.harvest_dt DESC) AS rn
-    FROM se_base fb
-    WHERE fb.filament_serial IS NOT NULL
-      AND fb.printer_name IS NOT NULL
-      AND fb.printer_name <> ''
+  InvPairs AS (
+      SELECT DISTINCT
+          TRY_CAST(fe.filament_id AS BIGINT)  AS filament_id_bigint,
+          LTRIM(RTRIM(fe.printer_fi))         AS printer_name,
+          fe.usage,
+          fe.weight_fl,
+          fe.printer_fi
+      FROM dbo.stg_filament_excel_data fe
+      WHERE fe.filament_id IS NOT NULL
+        AND TRY_CAST(fe.filament_id AS BIGINT) IS NOT NULL
+        AND (fe.usage IS NULL OR UPPER(LTRIM(RTRIM(fe.usage))) <> N'NO')
+        AND fe.printer_fi IS NOT NULL
+        AND LTRIM(RTRIM(fe.printer_fi)) <> N''
+  ),
+  Pairs AS (
+      SELECT up.filament_id_bigint, up.printer_name
+      FROM UsedPairs up
+      UNION
+      SELECT ip.filament_id_bigint, ip.printer_name
+      FROM InvPairs ip
+  ),
+  Base AS (
+      SELECT
+          pr.filament_id_bigint                   AS filament_id_bigint,
+          f.id                                    AS filament_tracking_id,
+          pr.printer_name,
+          p.id                                    AS printer_id,
+          -- pull usage/weight/status from inventory table when available
+          ip.usage,
+          TRY_CAST(ip.weight_fl AS DECIMAL(10,2)) AS remaining_weight_raw,
+          CASE
+              WHEN ip.printer_fi IS NOT NULL AND LTRIM(RTRIM(ip.printer_fi)) <> N''
+                  THEN N'In Use'
+              ELSE N'Unmounted'
+          END                                     AS status_calc
+      FROM Pairs pr
+      JOIN dbo.filaments f
+        ON f.filament_id = pr.filament_id_bigint
+      JOIN dbo.printers p
+        ON p.name = pr.printer_name
+      LEFT JOIN InvPairs ip
+        ON ip.filament_id_bigint = pr.filament_id_bigint
+       AND ip.printer_name       = pr.printer_name
   )
+  INSERT INTO #src(filament_tracking_id, printer_id, remaining_weight, status)
   SELECT
-    r.filament_serial,
-    r.printer_name AS fallback_printer_name
-  INTO #fallback_printer
-  FROM se_ranked r
-  WHERE r.rn = 1;
+    b.filament_tracking_id,
+    b.printer_id,
+    COALESCE(b.remaining_weight_raw, CONVERT(DECIMAL(10,2), 0.00)) AS remaining_weight,
+    b.status_calc
+  FROM Base b;
 
-  /* -------- 3) Resolve rows from stg_filament_excel_data -------- */
-  ;WITH fe_base AS (
-    SELECT
-      NULLIF(LTRIM(RTRIM(CAST(s.filament_id AS NVARCHAR(200)))),'') AS filament_serial,
-      NULLIF(LTRIM(RTRIM(CAST(s.printer_fi AS NVARCHAR(200)))),'')  AS printer_name_fe,
-      NULLIF(LTRIM(RTRIM(CAST(s.[usage] AS NVARCHAR(50)))),'')      AS usage_flag,
-      TRY_CONVERT(decimal(10,2), REPLACE(CAST(s.weight_fl AS NVARCHAR(100)), ',', '.')) AS weight_grams,
-      COALESCE(TRY_CONVERT(datetime2, s.use_date, 104), TRY_CONVERT(datetime2, s.use_date)) AS use_dt
-    FROM dbo.stg_filament_excel_data s
-  ),
-  fe_ranked AS (
-    SELECT
-      b.*,
-      ROW_NUMBER() OVER (PARTITION BY b.filament_serial ORDER BY b.use_dt DESC) AS rn_latest
-    FROM fe_base b
-    WHERE b.filament_serial IS NOT NULL
-      AND NOT (
-        (b.printer_name_fe IS NULL OR b.printer_name_fe = '')
-        AND (b.usage_flag IS NULL OR b.usage_flag = '' OR UPPER(b.usage_flag) = N'NO')
-      )
-  ),
-  fe_latest AS (
-    SELECT
-      r.filament_serial,
-      r.printer_name_fe,
-      r.usage_flag,
-      r.weight_grams,
-      r.use_dt
-    FROM fe_ranked r
-    WHERE r.rn_latest = 1
-  ),
-  joined AS (
-    SELECT
-      f.id AS filament_id,
+  /* ---------- Upsert into dbo.filament_mounting ---------- */
+  DROP TABLE IF EXISTS #merge_outcome;
+  CREATE TABLE #merge_outcome(action NVARCHAR(10) NOT NULL);
 
-      /* Printer hierarchy:
-         1) printer_fi (filament sheet)
-         2) fallback printer from stg_excel_data
-         3) UNASSIGNED
-      */
-      COALESCE(p_fe_norm.id, p_fb_norm.id, @unassigned_printer_id) AS printer_id,
-
-      @fallback_user_id AS mounted_by,
-      COALESCE(fl.use_dt, SYSUTCDATETIME()) AS mounted_at,
-      CAST(NULL AS DATETIME2) AS unmounted_at,
-      CAST(NULL AS INT)       AS unmounted_by,
-      COALESCE(fl.weight_grams, 0.00) AS remaining_weight,
-
-      /* Status (from filament sheet only):
-         - In Use: printer_fi not empty
-         - Unmounted: printer_fi empty AND usage <> 'NO'
-         - Else: In Use
-      */
-      CASE
-        WHEN (fl.printer_name_fe IS NOT NULL AND fl.printer_name_fe <> '')
-          THEN N'In Use'
-        WHEN ((fl.printer_name_fe IS NULL OR fl.printer_name_fe = '')
-              AND UPPER(COALESCE(fl.usage_flag,'')) <> N'NO')
-          THEN N'Unmounted'
-        ELSE N'In Use'
-      END AS status
-    FROM fe_latest fl
-    JOIN dbo.filaments f
-      ON f.serial_number = fl.filament_serial
-    LEFT JOIN #fallback_printer fp
-      ON fp.filament_serial = fl.filament_serial
-    LEFT JOIN dbo.printers p_fe_norm
-      ON UPPER(REPLACE(p_fe_norm.name, ' ', '')) COLLATE Latin1_General_CI_AI
-       = UPPER(REPLACE(fl.printer_name_fe, ' ', '')) COLLATE Latin1_General_CI_AI
-    LEFT JOIN dbo.printers p_fb_norm
-      ON UPPER(REPLACE(p_fb_norm.name, ' ', '')) COLLATE Latin1_General_CI_AI
-       = UPPER(REPLACE(fp.fallback_printer_name, ' ', '')) COLLATE Latin1_General_CI_AI
-  )
-  INSERT INTO #fm_resolved(filament_id, printer_id, mounted_by, mounted_at, unmounted_at, unmounted_by, remaining_weight, status)
-  SELECT DISTINCT filament_id, printer_id, mounted_by, mounted_at, unmounted_at, unmounted_by, remaining_weight, status
-  FROM joined;
-
-  /* Track ALL staged filaments (for delete logic) */
-  INSERT INTO #all_staged_filaments(filament_id)
-  SELECT DISTINCT f.id
-  FROM dbo.stg_filament_excel_data s
-  JOIN dbo.filaments f
-    ON f.serial_number = LTRIM(RTRIM(CAST(s.filament_id AS NVARCHAR(200))))
-  WHERE s.filament_id IS NOT NULL;
-
-  /* -------- 4) MERGE into dbo.filament_mounting -------- */
   MERGE dbo.filament_mounting AS tgt
-  USING #fm_resolved AS src
-    ON tgt.filament_id = src.filament_id
+  USING #src AS src
+     ON tgt.filament_tracking_id = src.filament_tracking_id
+    AND tgt.printer_id           = src.printer_id
   WHEN MATCHED THEN
     UPDATE SET
-      tgt.printer_id       = src.printer_id,
-      tgt.mounted_by       = src.mounted_by,
-      tgt.mounted_at       = COALESCE(src.mounted_at, tgt.mounted_at),
-      tgt.unmounted_at     = src.unmounted_at,
-      tgt.unmounted_by     = src.unmounted_by,
       tgt.remaining_weight = src.remaining_weight,
-      tgt.status           = src.status
-  WHEN NOT MATCHED THEN
-    INSERT (filament_id, printer_id, mounted_by, mounted_at, unmounted_at, unmounted_by, remaining_weight, status)
-    VALUES (src.filament_id, src.printer_id, src.mounted_by, src.mounted_at, src.unmounted_at, src.unmounted_by, src.remaining_weight, src.status)
-  WHEN NOT MATCHED BY SOURCE
-       AND tgt.filament_id IN (SELECT filament_id FROM #all_staged_filaments)
-    THEN DELETE;
+      tgt.status           = src.status,
+      tgt.unmounted_at     = CASE
+                               WHEN src.status = N'Unmounted'
+                                    AND tgt.unmounted_at IS NULL
+                                 THEN SYSUTCDATETIME()
+                               ELSE tgt.unmounted_at
+                             END,
+      tgt.unmounted_by     = CASE
+                               WHEN src.status = N'Unmounted'
+                                    AND tgt.unmounted_by IS NULL
+                                 THEN @mounted_by
+                               ELSE tgt.unmounted_by
+                             END
+  WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+      filament_tracking_id,
+      printer_id,
+      mounted_by,
+      mounted_at,
+      unmounted_at,
+      unmounted_by,
+      remaining_weight,
+      status
+    )
+    VALUES (
+      src.filament_tracking_id,
+      src.printer_id,
+      @mounted_by,
+      SYSUTCDATETIME(),
+      CASE WHEN src.status = N'Unmounted' THEN SYSUTCDATETIME() ELSE NULL END,
+      CASE WHEN src.status = N'Unmounted' THEN @mounted_by       ELSE NULL END,
+      src.remaining_weight,
+      src.status
+    )
+  OUTPUT $action INTO #merge_outcome(action);
+
+  /* ---------- Summary ---------- */
+  DECLARE @ins INT = (SELECT COUNT(*) FROM #merge_outcome WHERE action = 'INSERT');
+  DECLARE @upd INT = (SELECT COUNT(*) FROM #merge_outcome WHERE action = 'UPDATE');
 
   COMMIT TRAN;
+
+  PRINT CONCAT('[filament_mounting] Upsert complete. Inserted=', @ins, ', Updated=', @upd);
 END TRY
 BEGIN CATCH
-  IF @@TRANCOUNT > 0 ROLLBACK TRAN;
-  THROW;
+  IF XACT_STATE() <> 0 ROLLBACK TRAN;
+
+  DECLARE @msg NVARCHAR(4000) = ERROR_MESSAGE();
+  DECLARE @num INT = ERROR_NUMBER();
+  DECLARE @state INT = ERROR_STATE();
+  DECLARE @sev INT = ERROR_SEVERITY();
+
+  RAISERROR('[transform_filament_mounting] %s (num=%d, state=%d, sev=%d)',
+            @sev, 1, @msg, @num, @state, @sev);
 END CATCH;

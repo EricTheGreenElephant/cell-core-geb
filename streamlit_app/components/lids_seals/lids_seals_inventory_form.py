@@ -24,7 +24,7 @@ def render_lids_seals_inventory(mode):
                 inventory = get_seal_inventory(db)
         
         if inventory:
-            st.dataframe(inventory, use_container_width=True)
+            st.dataframe(inventory, width='stretch')
         else:
             st.info("No inventory available.")
 

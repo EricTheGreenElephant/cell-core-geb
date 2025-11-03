@@ -30,7 +30,7 @@ class ShipmentUnitItems(Base):
     
     id = Column(Integer, primary_key=True)
     shipment_id = Column(Integer, ForeignKey("shipments.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("product_tracking.id"), nullable=False)
+    product_tracking_id = Column(Integer, ForeignKey("product_tracking.id"), nullable=False)
 
     shipments = relationship("Shipment", back_populates="unit_items")
     product = relationship("ProductTracking")

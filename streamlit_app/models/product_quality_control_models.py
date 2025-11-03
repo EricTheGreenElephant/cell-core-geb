@@ -8,7 +8,7 @@ class ProductQualityControl(Base):
     __tablename__ = 'product_quality_control'
 
     id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, ForeignKey('product_tracking.id'), nullable=False)
+    product_tracking_id = Column(Integer, ForeignKey('product_tracking.id'), nullable=False)
     inspected_by = Column(Integer, ForeignKey('users.id'), nullable=False)
     inspected_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     weight_grams = Column(DECIMAL(6, 2), nullable=False)
@@ -25,7 +25,7 @@ class PostTreatmentInspection(Base):
     __tablename__ = "post_treatment_inspections"
 
     id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, ForeignKey("product_tracking.id"), nullable=False)
+    product_tracking_id = Column(Integer, ForeignKey("product_tracking.id"), nullable=False)
     inspected_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     inspected_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     visual_pass = Column(Boolean, nullable=False)

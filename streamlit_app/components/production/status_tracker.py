@@ -19,7 +19,7 @@ def render_status_tracker():
         # with get_session() as db:
             # status_data = get_all_product_status(db)
         status_data = load_product_status_data()
-        st.dataframe(status_data, use_container_width=True)
+        st.dataframe(status_data, width='stretch')
     except Exception as e:
         st.error("Could not load product status.")
         st.exception(e)

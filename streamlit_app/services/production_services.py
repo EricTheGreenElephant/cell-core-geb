@@ -66,6 +66,7 @@ def get_pending_requests(db: Session) -> list[dict]:
         LEFT JOIN product_print_specs sps ON sps.sku_id = ps.id
         JOIN users u ON u.id = pr.requested_by
         WHERE pr.status = 'Pending'
+        AND lot_number <> 'LEGACY_LOT'
         ORDER BY pr.requested_at ASC
     """
     result = db.execute(text(sql))
@@ -86,7 +87,7 @@ def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int,
     db.flush()
 
     # === Creates a Unique Tracking ID === 
-    tracking_id = generate_tracking_id(db)
+    # tracking_id = generate_tracking_id(db)
 
     # === Gets the Status ID ===
     pending_status_id = db.scalar(
@@ -100,7 +101,6 @@ def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int,
     # === Insert Product Tracking Record ===
     tracking = ProductTracking(
         harvest_id=harvest.id,
-        tracking_id=tracking_id,
         sku_id=sku_id,
         product_type_id=product_type_id,
         current_stage_id=1,
@@ -148,7 +148,7 @@ def get_harvested_products(db: Session) -> list[dict]:
         JOIN product_requests pr ON ph.request_id = pr.id
         JOIN product_skus ps ON pr.sku_id = ps.id
         JOIN filament_mounting fm ON ph.filament_mounting_id = fm.id
-        JOIN filaments f ON fm.filament_id = f.id
+        JOIN filaments f ON fm.filament_tracking_id = f.id
         JOIN printers p ON fm.printer_id = p.id
         JOIN lids l ON ph.lid_id = l.id
         JOIN users u ON ph.printed_by = u.id

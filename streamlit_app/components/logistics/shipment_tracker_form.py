@@ -41,16 +41,16 @@ def render_shipment_tracker():
 
             st.markdown("#### Order Request")
             order_df = pd.DataFrame(order_request["items"])
-            st.dataframe(order_df, hide_index=True, use_container_width=True)
+            st.dataframe(order_df, hide_index=True, width='stretch')
 
             st.divider()
 
             st.markdown("#### Chosen Products")
             df = pd.DataFrame(products)
-            st.dataframe(df, hide_index=True, use_container_width=True)
+            st.dataframe(df, hide_index=True, width='stretch')
 
             df2 = pd.DataFrame(supplements)
-            st.dataframe(df2, hide_index=True, use_container_width=True)
+            st.dataframe(df2, hide_index=True, width='stretch')
 
             if shipment["status"] == "Pending":
                 carrier = st.text_input("Carrier", key=f"carrier_{shipment['shipment_id']}").strip()

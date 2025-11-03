@@ -80,6 +80,8 @@ def render_qc_form():
     st.markdown(f"<p><strong>Final QC Result:</strong> <span style='color:{color}'>{result}</span></p>", unsafe_allow_html=True)
     if result == "B-Ware":
         st.info("Please don't forget to indicate B-Ware on the label!")
+    elif result == "Waste":
+        st.info("Please don't forget to indicate Waste on the label!")
     
     with st.form("qc_form"):       
         notes = st.text_area("Notes (optional)", value=notes_placholder, max_chars=255, key=f"hqc_notes_{selected['product_id']}").strip()
@@ -96,7 +98,7 @@ def render_qc_form():
                 try:
                     user_id = st.session_state.get("user_id")
                     payload = ProductQCInput(
-                        product_id=selected["product_id"],
+                        product_tracking_id=selected["id"],
                         inspected_by=user_id,
                         weight_grams=weight,
                         pressure_drop=pressure,

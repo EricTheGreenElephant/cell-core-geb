@@ -23,13 +23,13 @@ def render_expiration_review():
     
     if soon:
         st.markdown("### Expiring Soon (Within 7 Days)")
-        st.dataframe(soon, use_container_width=True)
+        st.dataframe(soon, width='stretch')
 
     if expired:
         st.markdown("### Already Expired (Over 1 Year Old)")
-        st.dataframe(expired, use_container_width=True)
+        st.dataframe(expired, width='stretch')
 
-        if st.button("Updated Expired Products", use_container_width=True, type="primary"):
+        if st.button("Updated Expired Products", width='stretch', type="primary"):
             with get_session() as db:
                 user_id = st.session_state.get("user_id")
                 if not user_id:

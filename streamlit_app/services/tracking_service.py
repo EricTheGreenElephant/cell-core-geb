@@ -7,27 +7,45 @@ from utils.db_transaction import transactional
 
 
 def generate_tracking_id(db: Session, date=None) -> str:
-    if not date:
-        date = datetime.today()
+    """
+    Generate the next tracking_id based on the highest existing one in the product_tracking table.
+    Returns an integer (or string if you prefer).
+    """
+    result = db.execute(text(
+        """
+            SELECT MAX(CAST(tracking_id AS BIGINT)) 
+            FROM product_tracking
+        """
+    )).scalar()
     
-    prefix = date.strftime("PRD-%Y%d%m")
+    if result is None:
+        # If the table is empty, start with an initial value
+        next_id = 1000000
+    else:
+        next_id = result + 1
 
-    count = db.query(ProductTracking).filter(
-        ProductTracking.tracking_id.like(f"{prefix}-%")
-    ).count()
+    return str(next_id)
+    # if not date:
+    #     date = datetime.today()
+    
+    # prefix = date.strftime("PRD-%Y%d%m")
 
-    return f"{prefix}-{count + 1:05d}"
+    # count = db.query(ProductTracking).filter(
+    #     ProductTracking.tracking_id.like(f"{prefix}-%")
+    # ).count()
+
+    # return f"{prefix}-{count + 1:05d}"
 
 def log_product_status_change(db: Session, product_id: int, from_stage_id: int, to_stage_id: int, reason: str, user_id: int):
     db.execute(
         text("""
             INSERT INTO product_status_history
-                (product_id, from_stage_id, to_stage_id, reason, changed_by, changed_at)
+                (product_tracking_id, from_stage_id, to_stage_id, reason, changed_by, changed_at)
             VALUES
-                (:product_id, :from_stage_id, :to_stage_id, :reason, :user_id, GETDATE())
+                (:product_tracking_id, :from_stage_id, :to_stage_id, :reason, :user_id, GETDATE())
         """),
         {
-            "product_id": product_id,
+            "product_tracking_id": product_id,
             "from_stage_id": from_stage_id,
             "to_stage_id": to_stage_id,
             "reason": reason, 
@@ -141,11 +159,11 @@ def record_materials_post_harvest(db: Session, product_id: int, harvest_id: int,
     for material in materials:
         db.execute(text("""
             INSERT INTO material_usage (
-                product_id, harvest_id, material_type, lot_number, used_quantity, used_at, used_by
+                product_tracking_id, harvest_id, material_type, lot_number, used_quantity, used_at, used_by
             )
-            VALUES (:product_id, :harvest_id, :material_type, :lot_number, 1, :timestamp,  :user_id)
+            VALUES (:product_tracking_id, :harvest_id, :material_type, :lot_number, 1, :timestamp,  :user_id)
         """), {
-            "product_id": product_id,
+            "product_tracking_id": product_id,
             "harvest_id": harvest_id,
             "material_type": material["type"],
             "lot_number": material["lot"],
@@ -161,21 +179,21 @@ def record_filament_usage_post_qc(db: Session, product_id: int, harvest_id: int,
     """
     row = db.execute(text("""
         SELECT
-            fm.filament_id,
+            fm.filament_tracking_id,
             f.lot_number
         FROM product_harvest ph
         JOIN filament_mounting fm ON ph.filament_mounting_id = fm.id
-        JOIN filaments f ON fm.filament_id = f.id
+        JOIN filaments f ON fm.filament_tracking_id = f.id
         WHERE ph.id = :harvest_id
     """), {"harvest_id": harvest_id}).fetchone()
 
     db.execute(text("""
         INSERT INTO material_usage (
-            product_id, harvest_id, material_type, lot_number, used_quantity, used_at, used_by
+            product_tracking_id, harvest_id, material_type, lot_number, used_quantity, used_at, used_by
         )
-        VALUES (:product_id, :harvest_id, 'Filament', :lot_number, :qty, :timestamp, :user_id)
+        VALUES (:product_tracking_id, :harvest_id, 'Filament', :lot_number, :qty, :timestamp, :user_id)
     """), {
-        "product_id": product_id,
+        "product_tracking_id": product_id,
         "harvest_id": harvest_id,
         "lot_number": row.lot_number,
         "qty": weight_grams,
@@ -215,7 +233,7 @@ def validate_materials_available(db: Session, sku_id: int, quantity: int):
         """
             SELECT f.lot_number, SUM(fm.remaining_weight) AS available_grams
             FROM filament_mounting fm
-            JOIN filaments f ON fm.filament_id = f.id
+            JOIN filaments f ON fm.filament_tracking_id = f.id
             WHERE fm.status = 'In Use' AND f.qc_result = 'PASS'
             GROUP BY f.lot_number
         """

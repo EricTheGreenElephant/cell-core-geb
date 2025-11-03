@@ -27,7 +27,8 @@ from utils.db_transaction import transactional
 def get_qc_passed_products(db: Session) -> list[TreatmentBatchProductCandidate]:
     stmt = (
         select(
-            ProductTracking.id.label("product_id"),
+            ProductTracking.id,
+            ProductTracking.product_id,
             LifecycleStages.stage_name.label("current_stage"),
             ProductStatuses.status_name.label("current_status"),
             ProductTracking.last_updated_at,
@@ -41,7 +42,7 @@ def get_qc_passed_products(db: Session) -> list[TreatmentBatchProductCandidate]:
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
         .join(ProductSKU, ProductSKU.id == ProductTracking.sku_id)
-        .join(ProductQualityControl, ProductQualityControl.product_id == ProductTracking.id)
+        .join(ProductQualityControl, ProductQualityControl.product_tracking_id == ProductTracking.id)
         .join(ProductStatuses, ProductStatuses.id == ProductTracking.current_status_id)
         .outerjoin(StorageLocation, ProductTracking.location_id == StorageLocation.id)
         .where(LifecycleStages.stage_code == "QMTreatmentApproval")
@@ -50,6 +51,7 @@ def get_qc_passed_products(db: Session) -> list[TreatmentBatchProductCandidate]:
     results = db.execute(stmt).all()
     products = [
         TreatmentBatchProductCandidate(
+            id=row.id,
             product_id=row.product_id,
             current_stage_name=row.current_stage,
             current_status=row.current_status,
@@ -85,7 +87,7 @@ def create_treatment_batch(db: Session, data: TreatmentBatchCreate):
     for item in data.tracking_data:
         product = TreatmentBatchProduct(
             batch_id=batch.id,
-            product_id=item.product_id,
+            product_tracking_id=item.product_id,
             surface_treat=bool(item.surface_treat),
             sterilize=bool(item.sterilize)
         )
@@ -122,9 +124,9 @@ def get_qc_products_needing_storage(db: Session) -> list[PostHarvestStorageCandi
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
         .join(ProductSKU, ProductSKU.id == ProductTracking.sku_id)
-        .join(ProductQualityControl, ProductQualityControl.product_id == ProductTracking.id)
+        .join(ProductQualityControl, ProductQualityControl.product_tracking_id == ProductTracking.id)
         .join(FilamentMounting, ProductHarvest.filament_mounting_id == FilamentMounting.id)
-        .join(Filament, FilamentMounting.filament_id == Filament.id)
+        .join(Filament, FilamentMounting.filament_tracking_id == Filament.id)
         .outerjoin(User, ProductHarvest.printed_by == User.id)
         .where(LifecycleStages.stage_code == "HarvestQCComplete")
         .where(ProductTracking.location_id.is_(None))
@@ -147,7 +149,7 @@ def get_post_treatment_products_needing_storage(db: Session) -> list[PostTreatme
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
         .join(ProductSKU, ProductSKU.id == ProductTracking.sku_id)
-        .join(PostTreatmentInspection, ProductTracking.id == PostTreatmentInspection.product_id)
+        .join(PostTreatmentInspection, ProductTracking.id == PostTreatmentInspection.product_tracking_id)
         .join(LifecycleStages, ProductTracking.current_stage_id == LifecycleStages.id)
         .where(LifecycleStages.stage_code == "PostTreatmentQC")
     )
@@ -169,7 +171,7 @@ def get_adhoc_products_needing_storage(db: Session) -> list[AdHocQuarantineStora
             QuarantinedProducts.quarantine_date            
         )
         .join(LifecycleStages, ProductTracking.current_stage_id == LifecycleStages.id)
-        .join(QuarantinedProducts, ProductTracking.id == QuarantinedProducts.product_id)
+        .join(QuarantinedProducts, ProductTracking.id == QuarantinedProducts.product_tracking_id)
         .join(ProductHarvest, ProductTracking.harvest_id == ProductHarvest.id)
         .join(ProductRequest, ProductHarvest.request_id == ProductRequest.id)
         .join(ProductSKU, ProductSKU.id == ProductTracking.sku_id)
@@ -194,7 +196,7 @@ def assign_storage_to_products(db: Session, assignments: list[tuple[str, int, st
                 text("""
                     UPDATE quarantined_products
                     SET location_id = :loc
-                    WHERE product_id = :pid AND quarantine_status = 'Active'
+                    WHERE product_tradking_id = :pid AND quarantine_status = 'Active'
                 """),
                 {"loc": location_id, "pid": product_id}
             )
@@ -234,7 +236,8 @@ def get_products_by_batch_id(db: Session, batch_id: int) -> list[dict]:
     sql = """
         SELECT
             tbp.id,
-            pt.id AS product_id,
+            pt.id, 
+            pt.product_id,
             pst.status_name AS current_status,
             lc.stage_name AS current_stage,
             pt.location_id,
@@ -245,11 +248,11 @@ def get_products_by_batch_id(db: Session, batch_id: int) -> list[dict]:
             tbp.sterilize,
             NULL AS visual_pass
         FROM treatment_batch_products tbp
-        JOIN product_tracking pt ON tbp.product_id = pt.id
+        JOIN product_tracking pt ON tbp.product_tracking_id = pt.id
         JOIN product_harvest ph ON ph.id = pt.harvest_id
         JOIN product_requests pr ON pr.id = ph.request_id
         JOIN product_skus ps ON pt.sku_id = ps.id
-        LEFT JOIN product_quality_control pqc ON pt.id = pqc.product_id
+        LEFT JOIN product_quality_control pqc ON pt.id = pqc.product_tracking_id
         LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
         LEFT JOIN product_statuses pst ON pt.current_status_id = pst.id
         WHERE tbp.batch_id = :batch_id
@@ -273,7 +276,7 @@ def update_post_treatment_qc(db: Session, product_qc: list[dict], inspected_by: 
         inspection_id = db.execute(
             text("""
                 INSERT INTO post_treatment_inspections (
-                    product_id, surface_treated, sterilized, visual_pass, qc_result, inspected_by, notes
+                    product_tracking_id, surface_treated, sterilized, visual_pass, qc_result, inspected_by, notes
                 )
                 OUTPUT INSERTED.id
                 VALUES (:pid, :treated, :sterilized, :visual, :qc_result, :inspector, :notes)

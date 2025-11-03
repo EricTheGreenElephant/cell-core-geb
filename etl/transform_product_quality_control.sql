@@ -1,183 +1,164 @@
+/* ===========================================================
+   etl/transform_product_quality_control.sql
+
+   Source: dbo.stg_excel_data
+   Target: dbo.product_quality_control
+
+   Rules (from you):
+     - inspected_by:   map stg.operator_quality_check → users.display_name; fallback to user id 1
+     - inspected_at:   stg.date_of_quality_check
+     - weight_grams:   stg.weight_check_g
+     - pressure_drop:  stg.pressure_drop_check_mbar
+     - visual_pass:    stg.visual_check → 'FAIL' => 0; else 1
+     - inspection_result:
+         if status_quality_check IS NULL or 'FAIL':
+             if second_rate_goods='NO'  => 'Waste'
+             if second_rate_goods='YES' => 'B-Ware'
+         if status_quality_check='PASS':
+             if second_rate_goods='YES' => 'B-Ware'
+             else                       => 'Passed'
+     - notes:          stg.comment
+
+   Matching key (idempotence):
+     MERGE on (product_tracking_id, inspected_at)
+
+   Preconditions:
+     - product_tracking already populated (joins by product_id BIGINT)
+     - users table has at least one row (fallback)
+   =========================================================== */
+
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
+
 BEGIN TRY
   BEGIN TRAN;
 
-  /* 0) Preconditions / helpers */
-  DECLARE @fallback_user_id INT = (SELECT TOP 1 id FROM dbo.users ORDER BY id);
+  /* ---------- 0) Fallback user ---------- */
+  DECLARE @fallback_user_id INT =
+    (SELECT TOP (1) id FROM dbo.users WITH (READPAST) ORDER BY id);
   IF @fallback_user_id IS NULL
-    RAISERROR('No users present; seed users before loading product_quality_control.', 16, 1);
+    RAISERROR('No users present; seed dbo.users before product_quality_control.', 16, 1);
 
-  /* 1) Build source from staging, normalize, and resolve product_id via product_tracking */
-  IF OBJECT_ID('tempdb..#qc_src','U') IS NOT NULL DROP TABLE #qc_src;
-  CREATE TABLE #qc_src(
-    product_tracking_id INT         NOT NULL,  -- product_tracking.id
-    print_date          DATETIME2   NOT NULL,  -- ph.print_date (for scoping/debug)
-    inspected_at        DATETIME2   NOT NULL,
-    inspected_by_id     INT         NOT NULL,
-    weight_grams        DECIMAL(6,2)    NULL,
-    pressure_drop       DECIMAL(6,3)    NULL,
-    visual_pass_bit     BIT         NOT NULL,
-    inspection_result   NVARCHAR(20) NOT NULL,  -- CHECK (Passed, B-Ware, Waste, Quarantine)
-    notes               NVARCHAR(255)  NULL
+  /* ---------- 1) Stage normalized rows ---------- */
+  IF OBJECT_ID('tempdb..#src_qc','U') IS NOT NULL DROP TABLE #src_qc;
+  CREATE TABLE #src_qc(
+    product_tracking_id INT        NOT NULL,
+    inspected_by        INT        NOT NULL,
+    inspected_at        DATETIME2  NOT NULL,
+    weight_grams        DECIMAL(6,2)  NOT NULL,
+    pressure_drop       DECIMAL(6,3)  NOT NULL,
+    visual_pass         BIT        NOT NULL,
+    inspection_result   NVARCHAR(20) NOT NULL,
+    notes               NVARCHAR(255) NULL,
+    PRIMARY KEY(product_tracking_id, inspected_at)
   );
 
-  ;WITH sx AS (
+  ;WITH Raw AS (
     SELECT
-      /* Normalize tracking id to text (avoid scientific notation) */
+      TRY_CAST(sed.product_id AS BIGINT)                        AS product_id_bigint,
+      LTRIM(RTRIM(CAST(sed.operater_quality_check AS NVARCHAR(200)))) AS operator_name,
+      /* robust-ish date parse; try a few formats + Excel serial */
       COALESCE(
-        CONVERT(nvarchar(50), TRY_CONVERT(decimal(38,0), s.product_id)),
-        NULLIF(LTRIM(RTRIM(CAST(s.product_id AS nvarchar(50)))),'')
-      ) AS tracking_id_clean,
-
-      /* Robust parse for dates */
-      COALESCE(
-        TRY_CONVERT(datetime2, s.date_harvest, 101),
-        TRY_CONVERT(datetime2, s.date_harvest, 103),
-        TRY_CONVERT(datetime2, s.date_harvest, 104),
-        TRY_CONVERT(datetime2, s.date_harvest, 105),
-        CASE WHEN TRY_CONVERT(float, s.date_harvest) IS NOT NULL
-             THEN DATEADD(day, CAST(TRY_CONVERT(float, s.date_harvest) AS int) - 2, '1899-12-30') END,
-        TRY_CONVERT(datetime2, s.date_harvest)
-      ) AS print_dt,
-
-      COALESCE(
-        TRY_CONVERT(datetime2, s.date_of_quality_check, 101),
-        TRY_CONVERT(datetime2, s.date_of_quality_check, 103),
-        TRY_CONVERT(datetime2, s.date_of_quality_check, 104),
-        TRY_CONVERT(datetime2, s.date_of_quality_check, 105),
-        CASE WHEN TRY_CONVERT(float, s.date_of_quality_check) IS NOT NULL
-             THEN DATEADD(day, CAST(TRY_CONVERT(float, s.date_of_quality_check) AS int) - 2, '1899-12-30') END,
-        TRY_CONVERT(datetime2, s.date_of_quality_check)
-      ) AS inspected_at,
-
-      NULLIF(LTRIM(RTRIM(CAST(s.operater_quality_check AS nvarchar(200)))),'') AS inspector_legacy,
-
-      /* Numbers that may contain commas */
-      TRY_CONVERT(decimal(6,2), REPLACE(CAST(s.weight_check_g AS nvarchar(100)), ',', '.')) AS weight_grams,
-      TRY_CONVERT(decimal(6,3), REPLACE(CAST(s.pressure_drop_check_mbar AS nvarchar(100)), ',', '.')) AS pressure_drop,
-
-      UPPER(LTRIM(RTRIM(CAST(s.visual_check AS nvarchar(50))))) AS visual_check_norm,
-      UPPER(LTRIM(RTRIM(CAST(s.status_quality_check AS nvarchar(50))))) AS status_qc_norm,
-      UPPER(LTRIM(RTRIM(CAST(s.second_rate_goods AS nvarchar(50)))))     AS second_rate_norm,
-
-      NULLIF(LTRIM(RTRIM(CAST(s.comment AS nvarchar(255)))),'') AS notes
-    FROM dbo.stg_excel_data s
+        TRY_CONVERT(DATETIME2, sed.date_of_quality_check, 104),  -- dd.mm.yyyy
+        TRY_CONVERT(DATETIME2, sed.date_of_quality_check, 105),  -- dd-mm-yyyy
+        TRY_CONVERT(DATETIME2, sed.date_of_quality_check, 101),  -- mm/dd/yyyy
+        TRY_CONVERT(DATETIME2, sed.date_of_quality_check, 103),  -- dd/mm/yyyy
+        CASE WHEN TRY_CONVERT(float, sed.date_of_quality_check) IS NOT NULL
+             THEN DATEADD(day, CAST(TRY_CONVERT(float, sed.date_of_quality_check) AS int) - 2, '1899-12-30')
+        END,
+        TRY_CONVERT(DATETIME2, sed.date_of_quality_check)
+      )                                                          AS inspected_at_dt,
+      /* decimals may come with comma → dot */
+      TRY_CONVERT(DECIMAL(6,2), REPLACE(CAST(sed.weight_check_g AS NVARCHAR(50)), ',', '.'))       AS weight_grams_dec,
+      TRY_CONVERT(DECIMAL(6,3), REPLACE(CAST(sed.pressure_drop_check_mbar AS NVARCHAR(50)), ',', '.')) AS pressure_drop_dec,
+      UPPER(LTRIM(RTRIM(CAST(sed.visual_check AS NVARCHAR(50)))))          AS visual_chk,
+      UPPER(LTRIM(RTRIM(CAST(sed.status_quality_check AS NVARCHAR(50)))))  AS status_qc,
+      UPPER(LTRIM(RTRIM(CAST(ISNULL(sed.second_rate_goods,'') AS NVARCHAR(50))))) AS second_rate,
+      CAST(sed.comment AS NVARCHAR(255))                                   AS notes
+    FROM dbo.stg_excel_data sed
+    WHERE sed.product_id IS NOT NULL
+      AND TRY_CAST(sed.product_id AS BIGINT) IS NOT NULL
+      AND sed.date_of_quality_check IS NOT NULL
+      AND sed.weight_check_g IS NOT NULL
+      AND sed.pressure_drop_check_mbar IS NOT NULL
+      AND LTRIM(RTRIM(sed.product)) IN (N'10K', N'6K')  -- keep same scope
   ),
-  scoped AS (
-    /* Only rows where we can identify a product (tracking id) and in date window */
-    SELECT *
-    FROM sx
-    WHERE tracking_id_clean IS NOT NULL
-      AND print_dt >= '2025-07-17T00:00:00'
-  ),
-  j_track AS (
-    /* Resolve to product_tracking via tracking_id */
+  Mapped AS (
     SELECT
-      pt.id     AS product_tracking_id,
-      ph.print_date,
-      sc.inspected_at,
-      sc.inspector_legacy,
-      sc.weight_grams,
-      sc.pressure_drop,
-      sc.visual_check_norm,
-      sc.status_qc_norm,
-      sc.second_rate_norm,
-      sc.notes
-    FROM scoped sc
-    JOIN dbo.product_tracking pt
-      ON pt.tracking_id = sc.tracking_id_clean
-    JOIN dbo.product_harvest ph
-      ON ph.id = pt.harvest_id
-  ),
-  j_user AS (
-    /* Map legacy inspector name to users.id; fallback to @fallback_user_id */
-    SELECT
-      jt.product_tracking_id,
-      jt.print_date,
-      jt.inspected_at,
-      COALESCE(u.id, @fallback_user_id) AS inspected_by_id,
-      jt.weight_grams,
-      jt.pressure_drop,
-
-      /* visual_check -> BIT */
+      t.id AS product_tracking_id,
+      COALESCE(u.id, @fallback_user_id)                    AS inspected_by,
+      r.inspected_at_dt                                    AS inspected_at,
+      COALESCE(r.weight_grams_dec, 0.00)                   AS weight_grams,
+      COALESCE(r.pressure_drop_dec, 0.000)                 AS pressure_drop,
+      CASE WHEN r.visual_chk = 'FAIL' THEN CAST(0 AS BIT) ELSE CAST(1 AS BIT) END AS visual_pass,
       CASE
-        WHEN jt.visual_check_norm IN (N'PASS', N'OK', N'PASSED', N'YES', N'Y', N'TRUE', N'1')
-          THEN CAST(1 AS bit)
-        WHEN jt.visual_check_norm IN (N'FAIL', N'FAILED', N'NO', N'N', N'FALSE', N'0', N'REJECT')
-          THEN CAST(0 AS bit)
-        ELSE CAST(0 AS bit) -- default to 0 to satisfy NOT NULL
-      END AS visual_pass_bit,
-
-      /* inspection_result per rule:
-         FAIL -> Waste
-         PASS + YES -> B-Ware
-         PASS + NO  -> Passed
-      */
-      CASE
-        WHEN jt.status_qc_norm = N'FAIL' THEN N'Waste'
-        WHEN jt.status_qc_norm = N'PASS'
-             AND jt.second_rate_norm = N'YES' THEN N'B-Ware'
-        WHEN jt.status_qc_norm = N'PASS'
-             AND jt.second_rate_norm = N'NO' THEN N'Passed'
-        ELSE N'Passed'  -- conservative default to meet CHECK constraint
+        WHEN r.status_qc IS NULL OR r.status_qc = 'FAIL' THEN
+          CASE
+            WHEN r.second_rate = 'NO'  THEN N'Waste'
+            WHEN r.second_rate = 'YES' THEN N'B-Ware'
+            ELSE N'Waste'  -- conservative default if FAIL but second_rate unknown
+          END
+        WHEN r.status_qc = 'PASS' THEN
+          CASE
+            WHEN r.second_rate = 'YES' THEN N'B-Ware'
+            ELSE N'Passed'
+          END
+        ELSE N'Passed'
       END AS inspection_result,
-      jt.notes
-    FROM j_track jt
+      r.notes
+    FROM Raw r
+    /* product_tracking link via legacy product_id */
+    INNER JOIN dbo.product_tracking t
+      ON t.product_id = r.product_id_bigint
     LEFT JOIN dbo.users u
-      ON u.display_name COLLATE Latin1_General_CI_AI
-       = jt.inspector_legacy COLLATE Latin1_General_CI_AI
+      ON u.display_name = r.operator_name
+    WHERE r.inspected_at_dt IS NOT NULL
+      AND r.weight_grams_dec  IS NOT NULL
+      AND r.pressure_drop_dec IS NOT NULL
   )
-  INSERT INTO #qc_src
-    (product_tracking_id, print_date, inspected_at, inspected_by_id,
-     weight_grams, pressure_drop, visual_pass_bit, inspection_result, notes)
+  INSERT INTO #src_qc(product_tracking_id, inspected_by, inspected_at, weight_grams, pressure_drop, visual_pass, inspection_result, notes)
   SELECT
-    j.product_tracking_id, j.print_date, COALESCE(j.inspected_at, j.print_date), j.inspected_by_id,
-    j.weight_grams, j.pressure_drop, j.visual_pass_bit, j.inspection_result, j.notes
-  FROM j_user j;
+    m.product_tracking_id,
+    m.inspected_by,
+    m.inspected_at,
+    m.weight_grams,
+    m.pressure_drop,
+    m.visual_pass,
+    m.inspection_result,
+    m.notes
+  FROM Mapped m;
 
-  DECLARE @staged INT;
-  SELECT @staged = COUNT(*) FROM #qc_src;
-  PRINT CONCAT('[pqc] staged rows: ', @staged);
+  /* ---------- 2) Upsert into dbo.product_quality_control ---------- */
+  IF OBJECT_ID('tempdb..#merge_outcome','U') IS NOT NULL DROP TABLE #merge_outcome;
+  CREATE TABLE #merge_outcome(action NVARCHAR(10) NOT NULL);
 
-  /* 2) Idempotency: delete any existing QC rows for the scoped products */
-  DELETE pqc
-  FROM dbo.product_quality_control pqc
-  JOIN #qc_src s ON s.product_tracking_id = pqc.product_id;
+  MERGE dbo.product_quality_control AS tgt
+  USING #src_qc AS src
+     ON tgt.product_tracking_id = src.product_tracking_id
+    AND tgt.inspected_at        = src.inspected_at
+  WHEN MATCHED THEN
+    UPDATE SET
+      tgt.inspected_by      = src.inspected_by,
+      tgt.weight_grams      = src.weight_grams,
+      tgt.pressure_drop     = src.pressure_drop,
+      tgt.visual_pass       = src.visual_pass,
+      tgt.inspection_result = src.inspection_result,
+      tgt.notes             = src.notes
+  WHEN NOT MATCHED BY TARGET THEN
+    INSERT (product_tracking_id, inspected_by, inspected_at, weight_grams, pressure_drop, visual_pass, inspection_result, notes)
+    VALUES (src.product_tracking_id, src.inspected_by, src.inspected_at, src.weight_grams, src.pressure_drop, src.visual_pass, src.inspection_result, src.notes)
+  OUTPUT $action INTO #merge_outcome(action);
 
-  DECLARE @deleted INT = @@ROWCOUNT;
-  PRINT CONCAT('[pqc] deleted existing rows for scope: ', @deleted);
-
-  /* 3) Insert into target */
-  INSERT INTO dbo.product_quality_control
-    (product_id, inspected_by, inspected_at, weight_grams, pressure_drop, visual_pass, inspection_result, notes)
-  SELECT
-    s.product_tracking_id,
-    s.inspected_by_id,
-    s.inspected_at,
-    s.weight_grams,
-    s.pressure_drop,
-    s.visual_pass_bit,
-    s.inspection_result,
-    s.notes
-  FROM #qc_src s;
-
-  DECLARE @inserted INT = @@ROWCOUNT;
-  PRINT CONCAT('[pqc] inserted rows: ', @inserted);
-
-  /* 4) Sanity for the window */
-  DECLARE @cnt INT = (
-    SELECT COUNT(*)
-    FROM dbo.product_quality_control pqc
-    JOIN dbo.product_tracking pt ON pt.id = pqc.product_id
-    JOIN dbo.product_harvest ph ON ph.id = pt.harvest_id
-    WHERE CAST(ph.print_date AS date) >= '2025-07-17'
-  );
-  PRINT CONCAT('[pqc] total rows on/after 2025-07-17: ', @cnt);
+  DECLARE @ins INT = (SELECT COUNT(*) FROM #merge_outcome WHERE action = 'INSERT');
+  DECLARE @upd INT = (SELECT COUNT(*) FROM #merge_outcome WHERE action = 'UPDATE');
 
   COMMIT TRAN;
+
+  PRINT CONCAT('[product_quality_control] Upsert complete. Inserted=', @ins, ', Updated=', @upd);
+
 END TRY
 BEGIN CATCH
-  IF @@TRANCOUNT > 0 ROLLBACK TRAN;
-
-  DECLARE @msg nvarchar(4000) = ERROR_MESSAGE();
-  RAISERROR('product_quality_control load failed: %s', 16, 1, @msg);
+  IF XACT_STATE() <> 0 ROLLBACK TRAN;
+  DECLARE @msg NVARCHAR(4000) = ERROR_MESSAGE();
+  RAISERROR('[transform_product_quality_control] %s', 16, 1, @msg);
 END CATCH;

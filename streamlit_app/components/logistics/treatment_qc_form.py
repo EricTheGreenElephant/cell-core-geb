@@ -228,7 +228,7 @@ def render_treatment_qc_form():
             st.markdown(f"**Suggested QC Result:** <span style='color:{color}; font-weight:bold'>{qc_result}</span>", unsafe_allow_html=True)
 
             full_qc.append({
-                "product_id": p["product_id"],
+                "product_id": p["id"],
                 "surface_treat": surface,
                 "sterilize": sterilized,
                 "visual_pass": True if quarantine else (visual if visual is not None else True),
