@@ -1,8 +1,15 @@
 # syntax=docker/dockerfile:1
 FROM python:3.11-slim-bookworm
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+   PYTHONUNBUFFERED=1 \
+   PIP_NO_CACHE_DIR=1 \
+   PORT=8000 \
+   STREAMLIT_SERVER_HEADLESS=true \
+   STREAMLIT_BROWSER_GATHER_USAGE_STATS=false 
+
 # System deps for pyodbc + ODBC 18 (modern, no apt-key)
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl gnupg ca-certificates apt-transport-https build-essential unixodbc-dev \
  && install -d /usr/share/keyrings \
  && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
@@ -15,12 +22,16 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --upgrade pip \
+   && pip install --no-cache-dir -r requirements.txt
+
 COPY . .
 
-ENV STREAMLIT_SERVER_PORT=8000 \
-    STREAMLIT_SERVER_HEADLESS=true \
-    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+# Non-root for security
+RUN useradd -ms /bin/bash appuser \
+   && mkdir -p /home/appuser/.streamlit \
+   && chown -R appuser:appuser /home/appuser /app 
+USER appuser 
 
 EXPOSE 8000
-CMD ["streamlit", "run", "streamlit_app/Main.py", "--server.port=8000", "--server.address=0.0.0.0"]
+CMD ["streamlit", "run", "streamlit_app/Main.py", "--server.address=0.0.0.0", "--server.port=${PORT}"]

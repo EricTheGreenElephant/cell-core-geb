@@ -13,6 +13,13 @@ ROOT_DIR = DB_DIR.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+# Prefer the SQLALCHEMY_URL from config file
+try:
+    from streamlit_app.config import SQLALCHEMY_URL as CONFIG_URL
+except Exception:
+    CONFIG_URL = None 
+
+
 def build_database_url() -> str:
     """
     Prefer DATABASE_URL if set (for Azure/CI).
@@ -23,12 +30,15 @@ def build_database_url() -> str:
     if url:
         return url
 
-    try:
-        from streamlit_app.config import CONNECTION_STRING
-        return f"mssql+pyodbc:///?odbc_connect={quote_plus(CONNECTION_STRING)}"
+    if CONFIG_URL:
+        return CONFIG_URL
     
-    except Exception:
-        pass
+    # try:
+    #     from streamlit_app.config import CONNECTION_STRING
+    #     return f"mssql+pyodbc:///?odbc_connect={quote_plus(CONNECTION_STRING)}"
+    
+    # except Exception:
+    #     pass
 
     try:
         from dotenv import load_dotenv
@@ -42,9 +52,9 @@ def build_database_url() -> str:
     DB_SERVER = os.getenv("DB_SERVER")
     DB_NAME = os.getenv("DB_NAME")
     DB_AUTH_METHOD = (os.getenv("DB_AUTH_METHOD") or "sql").lower()
-    DB_DRIVER=os.getenv("DB_DRIVER")
-    DB_ENCRYPT=os.getenv("DB_ENCRYPT")
-    DB_TRUST_CERT=os.getenv("DB_TRUST_CERT")
+    DB_DRIVER=os.getenv("DB_DRIVER", "ODBC Driver 18 for SQL Server")
+    DB_ENCRYPT=os.getenv("DB_ENCRYPT", "yes")
+    DB_TRUST_CERT=os.getenv("DB_TRUST_CERT", "no")
 
     if DB_AUTH_METHOD == "windows":
         odbc = (
@@ -54,6 +64,15 @@ def build_database_url() -> str:
             f"Encrypt={DB_ENCRYPT};"
             f"Trusted_Connection=yes;"
             f"TrustServerCertificate={DB_TRUST_CERT};"
+        )
+    elif DB_AUTH_METHOD == "msi":
+        odbc = (
+            f"Driver={DB_DRIVER};"
+            f"Server={DB_SERVER};"
+            f"Database={DB_NAME};"
+            f"Encrypt={DB_ENCRYPT};"
+            f"TrustServerCertificate={DB_TRUST_CERT};"
+            f"Authentication=ActiveDirectoryMsi;"
         )
     else:
         DB_USER = os.getenv("DB_USER")
@@ -86,9 +105,9 @@ def build_master_url_from_env() -> str:
     load_dotenv(dotenv_path=env_path)
 
     DB_SERVER = os.getenv("DB_SERVER")
-    DB_DRIVER = os.getenv("DB_DRIVER")
-    DB_ENCRYPT = os.getenv("DB_ENCRYPT")
-    DB_TRUST_CERT = os.getenv("DB_TRUST_CERT")
+    DB_DRIVER = os.getenv("DB_DRIVER", "ODBC Driver 18 for SQL Server")
+    DB_ENCRYPT = os.getenv("DB_ENCRYPT", "yes")
+    DB_TRUST_CERT = os.getenv("DB_TRUST_CERT", "no")
     DB_AUTH_METHOD = (os.getenv("DB_AUTH_METHOD") or "sql").lower()
 
     if DB_AUTH_METHOD == "windows":
@@ -100,17 +119,26 @@ def build_master_url_from_env() -> str:
             f"TrustServerCertificate={DB_TRUST_CERT};"
             f"Trusted_Connection=yes;"
         )
+    elif DB_AUTH_METHOD == "msi":
+        odbc = (
+            f"Driver={DB_DRIVER};"
+            f"Server={DB_SERVER};"
+            f"Database=master;"
+            f"Encrypt={DB_ENCRYPT};"
+            f"TrustServerCertificate={DB_TRUST_CERT};"
+            f"Authentication=ActiveDirectoryMsi;"
+        )
     else:
         DB_USER = os.getenv("DB_USER")
         DB_PASSWORD = os.getenv("DB_PASSWORD")
         odbc = (
             f"Driver={DB_DRIVER};"
             f"Server={DB_SERVER};"
+            f"Database=master;"
             f"UID={DB_USER};"
             f"PWD={DB_PASSWORD};"
             f"Encrypt={DB_ENCRYPT};"
             f"TrustServerCertificate={DB_TRUST_CERT};"
-            f"Trusted_Connection=yes"
         )
     return f"mssql+pyodbc:///?odbc_connect={quote_plus(odbc)}"
 
@@ -126,7 +154,7 @@ def get_target_db_name() -> str:
     return os.getenv("DB_NAME")
 
 # --------- Engine -----------
-DATABASE_URL = build_database_url()
+DATABASE_URL = CONFIG_URL = build_database_url()
 engine = create_engine(DATABASE_URL, fast_executemany=True, future=True)
 
 # --------- Utils -----------
@@ -178,7 +206,8 @@ def apply_dir(conn, dir_path: Path, kind: str, *, reapply_on_change: bool = Fals
     files = sorted(glob.glob(os.path.join(dir_path, "*.sql")))
     for path in files:
         fname = os.path.basename(path)
-        sql = open(path, "r", encoding="utf-8").read()
+        with open(path, "r", encoding="utf-8") as fh:
+            sql = fh.read()
         checksum = sha256_file(path)
 
         if always_reapply:
@@ -209,6 +238,7 @@ def apply_dir(conn, dir_path: Path, kind: str, *, reapply_on_change: bool = Fals
             ),
             {"fn": fname, "k": kind, "cs": checksum}
         ).fetchone()
+        
         if exists_same:
             continue
 

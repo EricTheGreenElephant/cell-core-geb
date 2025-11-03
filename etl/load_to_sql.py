@@ -1,36 +1,44 @@
 import os 
 import pandas as pd
 from sqlalchemy import create_engine, text 
+from streamlit_app.config import SQLALCHEMY_URL
 
 def make_mssql_engine():
-    server = os.getenv("DB_SERVER", "localhost")
-    database = os.getenv("DB_NAME", "master")
-    auth = os.getenv("DB_AUTH_METHOD", "windows").lower()
+    return create_engine(
+        SQLALCHEMY_URL, 
+        fast_executemany=True,
+        pool_pre_ping=True,
+        future=True,      
+    )
 
-    if auth == "sql":
-        username = os.getenv("DB_USERNAME")
-        password = os.getenv("DB_PASSWORD")
-        if not username or not password:
-            raise ValueError("DB_USERNAME and DB_PASSWORD must be set for SQL auth.")
+    # server = os.getenv("DB_SERVER", "localhost")
+    # database = os.getenv("DB_NAME", "master")
+    # auth = os.getenv("DB_AUTH_METHOD", "windows").lower()
 
-        conn_str = (
-            f"mssql+pyodbc://{username}:{password}@{server}/{database}"
-            "?driver=ODBC+Driver+18+for+SQL+Server"
-            "&Encrypt=yes&TrustServerCertificate=yes"
-        )
+    # if auth == "sql":
+    #     username = os.getenv("DB_USERNAME")
+    #     password = os.getenv("DB_PASSWORD")
+    #     if not username or not password:
+    #         raise ValueError("DB_USERNAME and DB_PASSWORD must be set for SQL auth.")
 
-    elif auth == "windows":
-        conn_str = (
-            f"mssql+pyodbc://@{server}/{database}"
-            "?driver=ODBC+Driver+18+for+SQL+Server"
-            "&Trusted_Connection=yes"
-            "&Encrypt=yes&TrustServerCertificate=yes"
-        )
+    #     conn_str = (
+    #         f"mssql+pyodbc://{username}:{password}@{server}/{database}"
+    #         "?driver=ODBC+Driver+18+for+SQL+Server"
+    #         "&Encrypt=yes&TrustServerCertificate=yes"
+    #     )
+
+    # elif auth == "windows":
+    #     conn_str = (
+    #         f"mssql+pyodbc://@{server}/{database}"
+    #         "?driver=ODBC+Driver+18+for+SQL+Server"
+    #         "&Trusted_Connection=yes"
+    #         "&Encrypt=yes&TrustServerCertificate=yes"
+    #     )
     
-    else:
-        raise ValueError(f"Unsupported DB_AUTH_METHOD: {auth}")
+    # else:
+    #     raise ValueError(f"Unsupported DB_AUTH_METHOD: {auth}")
     
-    return create_engine(conn_str, fast_executemany=True, pool_pre_ping=True)
+    # return create_engine(conn_str, fast_executemany=True, pool_pre_ping=True)
 
 def load_staging(
         df: pd.DataFrame,
@@ -55,5 +63,6 @@ def load_staging(
             schema=schema,
             if_exists="append",
             index=False,
-            chunksize=chunksize
+            chunksize=chunksize,
+            method=None,
         )

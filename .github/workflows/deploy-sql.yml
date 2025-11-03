@@ -7,37 +7,124 @@ on:
     tags:
       - 'v*' # Prod only on version tags like v1.0.0
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    env:
+      MIGRATIONS_DIR: db/migrations
+      SEED_DIR: db/seed
+      VIEWS_DIR: db/views
+      POSTVIEW_DIR: db/postview
+      POSTSEED_DIR: db/postseed
+
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Install SQLCMD
+      - name: Install sqlcmd (mssql-tools18)
         run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get-install -y curl gnupg apt-transport-https software-properties-common
+          curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
+          sudo add-apt-repository "$(curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list)"
           sudo apt-get update
           sudo ACCEPT_EULA=Y apt-get install -y mssql-tools unixodbc-dev
-          echo 'export PATH="$PATH:/opt/mssql-tools/bin:$PATH"' >> $GITHUB_ENV
-
-      - name: Deploy schema
-        env:
-          DB_SERVER: ${{ secrets.AZURE_SQL_SERVER }}
-          DB_NAME: ${{ secrets.AZURE_SQL_DATABASE }}
-          DB_USER: ${{ secrets.AZURE_SQL_USERNAME }}
-          DB_PASS: ${{ secrets.AZURE_SQL_PASSWORD }}
+          echo 'export PATH="$PATH:/opt/mssql-tools18/bin:$PATH"' >> $GITHUB_ENV
+      
+      - name: Set environment (DEV vs PROD)
+        shell: bash
         run: |
-          sqlcmd -S $DB_SERVER -d $DB_NAME -U $DB_USER -P $DB_PASS -i db/migrations/001_initial_schema.sql
+            set -e
+            if [[ "${GITHUB_REF##*/}" == "dev"]]; then
+              echo "Deploying to DEV ..."
+              echo "DB_SERVER=${{ secrets.AZURE_SQL_SERVER_DEV }}" >> $GITHUB_ENV
+              echo "DB_NAME=${{ secrets.AZURE_SQL_DATABASE_DEV }}" >> $GITHUB_ENV
+              echo "DB_USER=${{ secrets.AZURE_SQL_USERNAME_DEV }}" >> $GITHUB_ENV
+              echo "DB_PASS=${{ secrets.AZURE_SQL_PASSWORD_DEV }}" >> $GITHUB_ENV
+              echo "IS_DEV=true" >> $GITHUB_ENV
+            else
+              echo "Deploying to PROD ..."
+              echo "DB_SERVER=${{ secrets.AZURE_SQL_SERVER_PROD }}" >> $GITHUB_ENV
+              echo "DB_NAME=${{ secrets.AZURE_SQL_DATABASE_PROD }}" >> $GITHUB_ENV
+              echo "DB_USER=${{ secrets.AZURE_SQL_USERNAME_PROD }}" >> $GITHUB_ENV
+              echo "DB_PASS=${{ secrets.AZURE_SQL_PASSWORD_PROD }}" >> $GITHUB_ENV
+              echo "IS_DEV=false" >> $GITHUB_ENV
+            fi
 
-      - name: Seed dev data (only in dev)
-        if: github.ref == 'refs/heads/dev'
-        env:
-          DB_SERVER: ${{ secrets.AZURE_SQL_SERVER }}
-          DB_NAME: ${{ secrets.AZURE_SQL_DATABASE }}
-          DB_USER: ${{ secrets.AZURE_SQL_USERNAME }}
-          DB_PASS: ${{ secrets.AZURE_SQL_PASSWORD }}
+      - name: Smoke test connection
+        shell: bash
         run: |
-          for file in db/seed/*.sql; do
-            sqlcmd -S $DB_SERVER -d $DB_NAME -U $DB_USER -P $DB_PASS -i "$file"
-          done
+            source $GITHUB_ENV
+            /opt/mssql-tools18/bin/sqlcmd -S "$DB_SERVER" -d "$DB_NAME" -U "$DB_USER" -P "$DB_PASS" -l 30 -b -Q "SELECT @@VERSION;"
+      
+      - name: Define run_folder function
+        shell: bash
+        run: |
+            cat <<'EOF' > /tmp/run_folder.sh
+            #!/usr/bin/env bash
+            set -euo pipefail
+
+            FOLDER="$1"
+            if [[ ! -d "$FOLDER" ]]; then
+              echo "[INFO] $FOLDER does not exist; skipping."
+              exit 0
+            fi
+
+            shopt -s nullglob
+            files=( "$FOLDER"/*.sql )
+            if (( ${#files[@]} == 0)); then
+              echo "[INFO] No .sql files in $FOLDER; skipping."
+              exit 0
+            fi
+
+            IFS=$'\n' files=($(printf '%s\n' "${files[@]}" | sort))
+            for f in "${files[@]}"; do
+              echo "==> Applying: $f"
+              /opt/mssql-tools18/bin/sqlcmd \
+                -S "$DB_SERVER" \
+                -d "$DB_NAME" \
+                -U "$DB_USER" \
+                -P "$DB_PASS" \
+                -l 60 \
+                -b \
+                -I \
+                -i "$f"
+            done
+            EOF
+            chmod +x /tmp/run_folder.sh
+
+      - name: Apply migrations
+        shell: bash
+        run: |
+            source $GITHUB_ENV
+            /tmp/run_folder.sh "$MIGRATIONS_DIR"
+
+      - name: Apply seeds (DEV only)
+        if: env.IS_DEV == 'true'
+        shell: bash
+        run: |
+            source $GITHUB_ENV
+            /tmp/run_folder.sh "$SEED_DIR"
+
+      - name: Apply views (CREATE OR ALTER)
+        shell: bash
+        run: |
+            source $GITHUB_ENV
+            /tmp/run_folder.sh "$VIEWS_DIR"
+
+      - name: Apply postview (optional)
+        shell: bash
+        run: |
+            source $GITHUB_ENV
+            /tmp/run_folder.sh "$POSTVIEW_DIR"
+
+      - name: Apply postseed (idempotent)
+        shell: bash
+        run: |
+            source $GITHUB_ENV
+            /tmp/run_folder.sh "$POSTSEED_DIR"
