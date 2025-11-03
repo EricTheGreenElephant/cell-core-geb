@@ -58,9 +58,7 @@ jobs:
             # Log in to ACR using the Azure CLI context from the previous step
             - name: Azure login
               if: ${{ github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/v') }}
-              run: |
-                REG_NAME="{ACR_LOGIN_SERVER%%.*}" 
-                az acr login --name "$REG_NAME"
+              run: az acr login --name "${{ env.ACR_NAME}}"
 
             # Build (always) and Push (only when PUSH_ENABLED=="true")
             - name: Build (and conditionally push) image
