@@ -17,7 +17,7 @@ env:
     ACR_NAME: cellcoreacr    # <REPLACE when ACR created, e.g. "cellcoreacr">
     IMAGE_NAME: ccp-streamlit   # <adjust if different repo name prefered>
     # This derives from ACR_NAME; don't change until ACR exists:
-    ACR_LOGIN_SERVER: cellcoreacr.azurecr.io # replace with acr name later
+    ACR_LOGIN_SERVER: cellcoreacr-c5e2d2hrbyexcsdf.azurecr.io # replace with acr name later
 
     # Toggle this to true ONLY after Azure resources + OIDC are configured. 
     PUSH_ENABLED: "false"   # "false" = dry-run build only (safe before Azure exists)
