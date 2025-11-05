@@ -34,4 +34,4 @@ RUN useradd -ms /bin/bash appuser \
 USER appuser 
 
 EXPOSE 8000
-CMD ["streamlit", "run", "streamlit_app/Main.py", "--server.address=0.0.0.0", "--server.port=${PORT}"]
+CMD sh -c 'streamlit run streamlit_app/Main.py --server.address=0.0.0.0 --server.port="${PORT}"'
