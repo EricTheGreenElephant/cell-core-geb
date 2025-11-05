@@ -1,80 +1,43 @@
-name: Build & Push Docker image to ACR (mock-ready)
+name: Build image in ACR (cloud)
 
-on: 
-    push: 
-        branches: [ dev ] # < can be changed to main branch later >
-        tags: [ 'v*' ] # prod pipeline: push on version tags like v1.2.3
-    workflow_dispatch: {} # allows manual runs from the Actions tab
+on:
+  push:
+    branches: [ dev ]          # build on dev
+    tags: [ 'v*' ]             # and on version tags
+  workflow_dispatch: {}        # manual runs
 
 permissions:
-    contents: read
-    id-token: write
+  id-token: write              # OIDC to Azure
+  contents: read               # checkout
 
-env: 
-    # ====
-    # Placeholder to replace
-    # ====
-    ACR_NAME: cellcoreacr    # <REPLACE when ACR created, e.g. "cellcoreacr">
-    IMAGE_NAME: ccp-streamlit   # <adjust if different repo name prefered>
-    # This derives from ACR_NAME; don't change until ACR exists:
-    ACR_LOGIN_SERVER: cellcoreacr.azurecr.io # replace with acr name later
-
-    # Toggle this to true ONLY after Azure resources + OIDC are configured. 
-    PUSH_ENABLED: "false"   # "false" = dry-run build only (safe before Azure exists)
+env:
+  ACR_NAME: cellcoreacr        # your ACR resource name
+  IMAGE_NAME: ccp-streamlit    # the repo name inside ACR (image name)
 
 jobs:
-    build-and-push:
-        runs-on: ubuntu-latest
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v4
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-            # Optional: generate labels and versioned tags (keeps metadata tidy)
-            - name: Docker metadata
-              id: meta
-              uses: docker/metadata-action@v5
-              with:
-                images: ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}
-                tags: |
-                    type=sha
-                    type=ref,event=branch
-                    type=raw,value=dev-latest,enable=${{ github.ref == 'refs/heads/dev' }}
-                labels: |
-                    org.opencontainers.image.source=${{ github.repository }}
-                    org.opencontainers.image.revision=${{ github.sha }}
+      - name: Resolve ACR login server (don’t hard-code host)
+        run: echo "LOGIN_SERVER=$(az acr show -n '${{ env.ACR_NAME }}' --query loginServer -o tsv)" >> $GITHUB_ENV
 
-            - name: Set up Docker Buildx
-              uses: docker/setup-buildx-action@v3
+      # Build IN Azure (ACR Tasks). Add a second -t line if you want SHA tags too.
+      - name: Build image in ACR (cloud build)
+        run: |
+          az acr build \
+            -r "${{ env.ACR_NAME }}" \
+            -t "${{ env.IMAGE_NAME }}:dev-latest" \
+            -f Dockerfile .
 
-            - name: Azure Login (OIDC)
-              if: ${{ github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/v') }}
-              uses: azure/login@v2
-              with:
-                client-id: ${{ secrets.AZURE_CLIENT_ID }} # < set later >
-                tenant-id: ${{ secrets.AZURE_TENANT_ID }} # < set later >
-                subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }} # < set later >
-            
-            # Log in to ACR using the Azure CLI context from the previous step
-            - name: Azure login
-              if: ${{ github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/v') }}
-              run: az acr login --name "${{ env.ACR_NAME}}"
-
-            # Build (always) and Push (only when PUSH_ENABLED=="true")
-            - name: Build (and conditionally push) image
-              uses: docker/build-push-action@v6
-              with:
-                context: .
-                file: ./Dockerfile
-                push: ${{ github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/v') }}
-                tags: ${{ steps.meta.outputs.tags }}
-                labels: ${{ steps.meta.outputs.labels }}
-                # sbom/provenance disabled to speed up + avoid warnings
-                provenance: false
-                sbom: false
-
-            - name: Show resulting tags (debug)
-              run: |
-                echo "Built tags:"
-                echo "${{ steps.meta.outputs.tags }}"
-                echo "Ref=${GITHUB_REF}"
+      - name: Show tags (debug)
+        run: az acr repository show-tags -n "${{ env.ACR_NAME }}" --repository "${{ env.IMAGE_NAME }}" -o table

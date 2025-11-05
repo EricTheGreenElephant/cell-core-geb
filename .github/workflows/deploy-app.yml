@@ -1,142 +1,115 @@
-name: Build & Deploy Streamlit (Container) to Azure App Service
+name: Deploy Streamlit container to App Service
 
-on: 
-    push:
-        branches: [ dev, infra/azure-deploy ]
-        tags: [ 'v*' ]
-    workflow_dispatch:
+on:
+  push:
+    branches: [ dev ]
+    tags: [ 'v*' ]
+  workflow_dispatch: {}
 
 permissions:
-    id-token: write
-    contents: read
+  id-token: write
+  contents: read
 
-# I need to replace this with Azure resource information later
 env:
-  # ====
-  # Placeholders to replace later
-  # ====
-  ACR_LOGIN_SERVER: youracrname.azurecr.io
-  IMAGE_NAME: ccp-streamlit
-  RG_DEV: your-rg-dev
-  RG_PROD: your-rg-prod
-  APP_DEV: your-app-dev        # web app name
-  APP_PROD: your-app-prod
+  # Infra names (dev)
+  RG_DEV: rg-cellcore-dev
+  APP_DEV: cellcore-streamlit-web
   SLOT_NAME: staging
   WEBSITES_PORT: "8000"
 
-  # Flip to true ONLY after ACR + Web Apps + OIDC are configured
-  DEPLOY_ENABLED: "false"
+  # Registry & image
+  ACR_NAME: cellcoreacr
+  IMAGE_NAME: ccp-streamlit
+
+  # Feature flag to actually deploy
+  DEPLOY_ENABLED: "true"       # set to "true" now that Azure is ready
 
 jobs:
-    deploy:
-      runs-on: ubuntu-latest
-      steps:
-        - name: Checkout
-          uses: actions/checkout@v4
-        
-        # Compute image tag from the trigger (dev = SHA; prod = tag name)
-        - name: Compute image tag
-          id: tag
-          run: | 
-            if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-              echo "IMAGE_TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV  #e.g. v1.2.3
-            else
-              echo "IMAGE_TAG=${GITHUB_SHA}" >> $GITHUB_ENV # dev: commit SHA
-            fi
-            echo "IMAGE_URI=${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${GITHUB_SHA}" >> $GITHUB_ENV
-            # Also expose tag for dev
-            if [[ "${GITHUB_REF##*/}" == "dev" ]]; then
-              echo "ALIAS_TAG=dev-latest" >> $GITHUB_ENV
-            fi
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
+      - name: Compute image tag (SHA for branches, tag name for releases)
+        id: tag
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "IMAGE_TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+          else
+            echo "IMAGE_TAG=${GITHUB_SHA}" >> $GITHUB_ENV
+          fi
+          # Also expose a friendly alias for dev
+          if [[ "${GITHUB_REF##*/}" == "dev" ]]; then
+            echo "ALIAS_TAG=dev-latest" >> $GITHUB_ENV
+          fi
 
-        - name: Azure Login (OIDC)
-          if: env.DEPLOY_ENABLED == 'true'
-          uses: azure/login@v2
-          with:
-            client-id: ${{ secrets.AZURE_CLIENT_ID }}
-            tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-            subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Azure login (OIDC)
+        if: env.DEPLOY_ENABLED == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-        # Decide which app/rg we're targeting (dev vs prod)
-        - name: Select environment (dev/prod)
-          if: env.DEPLOY_ENABLED == 'true'
-          run: | 
-            if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-              echo "RG=${{ env.RG_PROD }}"   >> $GITHUB_ENV
-              echo "APP=${{ env.APP_PROD }}" >> $GITHUB_ENV
-            else
-              echo "RG=${{ env.RG_DEV }}"    >> $GITHUB_ENV
-              echo "APP=${{ env.APP_DEV }}"  >> $GITHUB_ENV
-            fi 
-        
-        - name: Ensure staging slot exists
-          if: env.DEPLOY_ENABLED == 'true'
-          shell: bash
-          run: | 
-            az webapp deployment slot create \
-              --resource-group "$RG" \
-              --name "$APP" \
-              --slot "${{ env.SLOT_NAME }}" \
-              --configuration-source "$APP" || echo "Slot likely exists; continuing."
+      - name: Resolve ACR login server
+        if: env.DEPLOY_ENABLED == 'true'
+        run: echo "LOGIN_SERVER=$(az acr show -n '${{ env.ACR_NAME }}' --query loginServer -o tsv)" >> $GITHUB_ENV
 
-        # Link container image on the slot
-        # NOTE: App Service needs pull access to ACR. Use ONE of:
-        #  (A) Managed Identity on the Web App with AcrPull on your ACR (best)
-        #  (B) Registry creds (admin user) passed here (fallback)
-        - name: Configure container on staging slot
-          if: env.DEPLOY_ENABLED == 'true'
-          run: |
-            az webapp config container set \
-              --resource-group "$RG" \
-              --name "$APP" \
-              --slot "${{ env.SLOT_NAME }}" \
-              --docker-custom-image-name "${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" \
-              --docker-registry-server-url "https://${{ env.ACR_LOGIN_SERVER }}"
-            # If not using Managed Identity, add:
-            #   --docker-registry-server-user "${{ secrets.ACR_USERNAME }}" \
-            #   --docker-registry-server-password "${{ secrets.ACR_PASSWORD }}"
+      - name: Target environment (dev)
+        if: env.DEPLOY_ENABLED == 'true'
+        run: |
+          echo "RG=${{ env.RG_DEV }}"   >> $GITHUB_ENV
+          echo "APP=${{ env.APP_DEV }}" >> $GITHUB_ENV
 
-        # Set required app settings (port + your app config, DB, etc.)
-        - name: Apply app settings (staging slot)
-          if: env.DEPLOY_ENABLED == 'true'
-          run: |
-            az webapp config appsettings set \
-              --resource-group "$RG" \
-              --name "$APP" \
-              --slot "${{ env.SLOT_NAME }}" \
-              --settings \
-                WEBSITES_PORT=${{ env.WEBSITES_PORT }} \
-                STREAMLIT_SERVER_HEADLESS=true \
-                STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
-                # Supply your DB connection here (dev/prod secrets in GitHub):
-                DATABASE_URL=${{ secrets.DATABASE_URL }} \
-                DB_DRIVER="ODBC Driver 18 for SQL Server" \
-                DB_ENCRYPT=yes \
-                DB_TRUST_CERT=yes
+      - name: Ensure staging slot exists (idempotent)
+        if: env.DEPLOY_ENABLED == 'true'
+        run: |
+          az webapp deployment slot create \
+            --resource-group "$RG" \
+            --name "$APP" \
+            --slot "${{ env.SLOT_NAME }}" \
+            --configuration-source "$APP" || true
 
-        # Restart slot to pick up settings
-        - name: Restart staging slot
-          if: env.DEPLOY_ENABLED == 'true'
-          run: az webapp restart --resource-group "$RG" --name "$APP" --slot "${{ env.SLOT_NAME }}"
+      # Tell App Service to use Managed Identity for ACR pulls (no registry passwords)
+      - name: Use Managed Identity for ACR pulls
+        if: env.DEPLOY_ENABLED == 'true'
+        run: |
+          az webapp config set \
+            -g "$RG" -n "$APP" \
+            --generic-configurations '{"acrUseManagedIdentityCreds": true}'
 
-        # Optional: assign a friendlier tag (dev only)
-        - name: Repoint to dev-latest (dev only)
-          if: env.DEPLOY_ENABLED == 'true' && startsWith(github.ref, 'refs/heads/dev')
-          run: |
-            az webapp config container set \
-              --resource-group "$RG" \
-              --name "$APP" \
-              --slot "${{ env.SLOT_NAME }}" \
-              --docker-custom-image-name "${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ env.ALIAS_TAG }}" \
-              --docker-registry-server-url "https://${{ env.ACR_LOGIN_SERVER }}"
+      # Point the slot at the new image tag (use ALIAS_TAG for dev convenience)
+      - name: Configure container on staging slot
+        if: env.DEPLOY_ENABLED == 'true'
+        run: |
+          IMAGE_TAG="${{ env.ALIAS_TAG || env.IMAGE_TAG }}"
+          az webapp config container set \
+            --resource-group "$RG" \
+            --name "$APP" \
+            --slot "${{ env.SLOT_NAME }}" \
+            --container-image-name "${{ env.LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}" \
+            --container-registry-url "https://${{ env.LOGIN_SERVER }}"
 
-        # For prod tags: swap staging → production slot after container is up
-        - name: Swap slots (prod tags only)
-          if: env.DEPLOY_ENABLED == 'true' && startsWith(github.ref, 'refs/tags/')
-          run: |
-            # Optional: wait a bit or add a health probe here if needed
-            az webapp deployment slot swap \
-              --resource-group "$RG" \
-              --name "$APP" \
-              --slot "${{ env.SLOT_NAME }}"
+      # Required port + Streamlit flags
+      - name: Apply app settings on slot
+        if: env.DEPLOY_ENABLED == 'true'
+        run: |
+          az webapp config appsettings set \
+            --resource-group "$RG" \
+            --name "$APP" \
+            --slot "${{ env.SLOT_NAME }}" \
+            --settings WEBSITES_PORT=${{ env.WEBSITES_PORT }} STREAMLIT_SERVER_HEADLESS=true STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+
+      - name: Restart slot
+        if: env.DEPLOY_ENABLED == 'true'
+        run: az webapp restart --resource-group "$RG" --name "$APP" --slot "${{ env.SLOT_NAME }}"
+
+      # Optional: promote to production on tags (swap slots)
+      - name: Swap staging -> production (on release tags)
+        if: env.DEPLOY_ENABLED == 'true' && startsWith(github.ref, 'refs/tags/')
+        run: |
+          az webapp deployment slot swap \
+            --resource-group "$RG" \
+            --name "$APP" \
+            --slot "${{ env.SLOT_NAME }}"
