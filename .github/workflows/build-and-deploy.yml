@@ -1,0 +1,81 @@
+name: Build in ACR & Deploy App Service (main slot)
+
+on: 
+    push:
+        branches: [ dev ]
+        tags: [ 'v*' ]
+    workflow_dispatch: {}
+
+permissions:
+    id-token: write
+    contents: read
+
+env:
+    RG: rg-cellcore-dev
+    APP: cellcore-streamlit-web
+    ACR_NAME: cellcoreacr
+    IMAGE_NAME: ccp-streamlit
+    WEBSITES_PORT: "8000"
+
+jobs:
+    build-and-deploy:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repo
+              uses: actions/checkout@v4
+
+            - name: Azure login (OIDC)
+              uses: azure/login@v2
+              with: 
+                client-id: ${{ secrets.AZURE_CLIENT_ID }}
+                tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+                subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+            - name: Resolve ACR login server
+              id: acr
+              run: echo "LOGIN_SERVER=$(az acr show -n '${{ env.ACR_NAME }}' --query loginServer -o tsv)" >> $GITHUB_ENV
+
+            - name: Compute image tags
+              id: tags
+              run: |
+                if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+                    echo "PRIMARY_TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+                    echo "EXTRA_TAG=${GITHUB_SHA}" >> $GITHUB_ENV
+                else
+                    echo "PRIMARY_TAG=dev-latest" >> $GITHUB_ENV
+                    echo "EXTRA_TAG=${GITHUB_SHA}" >> $GITHUB_ENV
+                fi
+
+            - name: ACR cloud build
+              run: |
+                az acr build \
+                    -r "${{ env.ACR_NAME }}" \
+                    -t "${{ env.IMAGE_NAME }}:${{ env.PRIMARY_TAG }}" \
+                    -t "${{ env.IMAGE_NAME }}:${{ env.EXTRA_TAG }}" \
+                    -f Dockerfile .
+
+            - name: Use Managed Identity for ACR pulls
+              run: |
+                az webapp config set \
+                    -g "${{ env.RG }}" -n "${{ env.APP }}" \
+                    --generic-configurations '{"acrUseManagedIdentityCreds": true}'
+
+            - name: Configure container (main slot)
+              run: | 
+                az webapp config container set \
+                    -g "${{ env.RG }}" -n "${{ env.APP }}" \
+                    --container-image-name "${{ env.LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ env.PRIMARY_TAG }}" \
+                    --container-registry-url "https://${{ env.LOGIN_SERVER }}"
+
+            - name: Apply app settings (port + streamlit flags)
+              run: |
+                az webapp config appsettings set \
+                    -g "${{ env.RG }}" -n "${{ env.APP }}" \
+                    --settings WEBSITES_PORT=${{ env.WEBSITES_PORT }} STREAMLIT_SERVER_HEADLESS=true STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+
+            - name: Restart Web App
+              run: az webapp restart -g "${{ env.RG }}" -n "${{ env.APP }}"
+
+            - name: Show container config
+              run: az webapp config container show -g "${{ env.RG }}" -n "${{ env.APP }}"
