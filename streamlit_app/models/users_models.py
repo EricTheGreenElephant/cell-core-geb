@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.mssql import UNIQUEIDENTIFIER
 from sqlalchemy.sql import func
 from db.base import Base
 
@@ -26,3 +27,11 @@ class User(Base):
     quarantines_resolved = relationship("QuarantinedProducts", foreign_keys="[QuarantinedProducts.resolved_by]", back_populates="resolved_user")
     material_usages = relationship("MaterialUsage", back_populates="user")
     access_user = relationship("AccessRight", back_populates="access_right_user")
+
+
+class GroupAreaRight(Base):
+    __tablename__ = "group_area_rights"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    group_oid = Column(UNIQUEIDENTIFIER, nullable=False)
+    area_id = Column(Integer, nullable=False)
+    access_level = Column(String(20), nullable=False)

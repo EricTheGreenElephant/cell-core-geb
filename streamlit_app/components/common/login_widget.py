@@ -2,8 +2,51 @@ import os
 import json
 import base64
 import streamlit as st
-from utils.auth import authenticate_user
+from streamlit_js_eval import streamlit_js_eval
+from utils.auth import authenticate_user, authenticate_principal
 
+
+def _fetch_principal_via_auth_me():
+    # Runs in the browser, can fetch /.auth/me (cookie session present)
+    js = """
+    async function fetchPrincipal() {
+        try {
+            const r = await fetch('/.auth/me', { credentials: 'include' });
+            if (!r.ok) return null;
+            const j = await r.json();
+            return btoa(unescape(encodeURIComponent(JSON.stringify(j))));
+        } catch (e) { return null; }
+    }
+    return await fetchPrincipal();
+    """
+    b64 = streamlit_js_eval(js_code=js, key="fetch_auth_me")
+    if not b64: 
+        return None
+    try:
+        j = json.loads(base64.b64decode(b64).decode("utf-8"))
+        return j
+    except Exception:
+        return None
+    
+def _extract_email_from_principal(principal_dict):
+    if not principal_dict:
+        return None
+    
+    # Easy Auth returns an array of identities. Takes the first.
+    ident = (principal_dict or [{}])[0]
+    claims = {c.get("typ"): c.get("val") for c in ident.get("user_claims", [])}
+
+    # Try common claim types in order:
+    for k in (
+        "preferred_username",
+        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
+        "emails",
+        "upn",
+        "name"
+    ):
+        if claims.get(k):
+            return claims[k].strip().lower()
+    return None
 
 def _easy_auth_principal():
     """
@@ -24,26 +67,44 @@ def _easy_auth_principal():
 def login_widget():
     """Reusable login form that only display if user is not logged in."""
 
-    if "user_id" not in st.session_state:
-        principal = _easy_auth_principal()
-        if principal:
-            email = None
-            for claim in principal.get("claims", []):
-                if claim.get("typ") in ("https://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
-                                        "emails",
-                                        "name"):
-                    email = claim.get("val")
-                    break
-            email = email or os.environ.get("X_MS_CLIENT_PRINCIPAL_NAME")
-            if email:
-                success, message = authenticate_user(email)
-                if success:
-                    st.session_state["_auth_source"] = "entra"
-                    st.toast(f"Signed in as {email}")
-                    return 
-                
     if "user_id" in st.session_state:
-        return 
+        return
+    
+    principal = _fetch_principal_via_auth_me()
+    if principal:
+        ok, msg = authenticate_principal(principal, mode="autoprovision")
+        if ok: 
+            st.toast(msg)
+            return
+    # email = _extract_email_from_principal(principal)
+
+    # if email:
+    #     success,  message = authenticate_user(email)
+    #     if success:
+    #         st.session_state["_auth_source"] = "entra"
+    #         st.toast(f"Signed in as {email}")
+    #         return 
+        
+    # if "user_id" not in st.session_state:
+    #     principal = _easy_auth_principal()
+    #     if principal:
+    #         email = None
+    #         for claim in principal.get("claims", []):
+    #             if claim.get("typ") in ("https://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
+    #                                     "emails",
+    #                                     "name"):
+    #                 email = claim.get("val")
+    #                 break
+    #         email = email or os.environ.get("X_MS_CLIENT_PRINCIPAL_NAME")
+    #         if email:
+    #             success, message = authenticate_user(email)
+    #             if success:
+    #                 st.session_state["_auth_source"] = "entra"
+    #                 st.toast(f"Signed in as {email}")
+    #                 return 
+                
+    # if "user_id" in st.session_state:
+    #     return 
     
     with st.form("login_form"):
         st.subheader("🔐 Please log in to continue")

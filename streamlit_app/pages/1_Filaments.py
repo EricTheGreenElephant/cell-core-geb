@@ -42,7 +42,7 @@ show_user_sidebar()
 
 # --- Login check ---
 require_login()
-user_level = require_access("Filament Inventory", minimum_level="Read")
+user_level = require_access("Logistics", minimum_level="Read")
 
 # --- Page structure ---
 tab1, tab2 , tab3, tab4 = st.tabs(["Inventory", "Add Filament", "Mount Filament", "Edit Filament"])

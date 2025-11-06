@@ -2,7 +2,6 @@ MERGE dbo.application_areas AS tgt
 USING (VALUES
     ('Quality Management', 1),
     ('Production', 1),
-    ('Filament Inventory', 1),
     ('Sales', 1),
     ('Logistics', 1),
     ('Admin', 1)
