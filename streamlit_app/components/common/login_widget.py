@@ -9,17 +9,17 @@ from utils.auth import authenticate_user, authenticate_principal, _extract_ident
 def _fetch_principal_via_auth_me():
     # Runs in the browser, can fetch /.auth/me (cookie session present)
     js = """
-    async function fetchPrincipal() {
-        try {
-            const r = await fetch('/.auth/me', { credentials: 'include' });
-            if (!r.ok) return null;
-            const j = await r.json();
-            return btoa(unescape(encodeURIComponent(JSON.stringify(j))));
-        } catch (e) { return null; }
+    async function run() {
+      try {
+        const r = await fetch('/.auth/me', { credentials: 'include' });
+        if (!r.ok) return null;
+        const j = await r.json();
+        return btoa(unescape(encodeURIComponent(JSON.stringify(j))));
+      } catch { return null; }
     }
-    return await fetchPrincipal();
+    return await run();
     """
-    b64 = streamlit_js_eval(js_code=js, key="fetch_auth_me")
+    b64 = streamlit_js_eval(js_code=js, key="auth_me")
     if not b64: 
         return None
     try:
@@ -78,16 +78,17 @@ def login_widget():
                 st.toast(msg)
                 return
         except Exception:
+            pass
             # DB unavailable or not seeded yet -> greet from claims only
-            oid, upn, display_name, _groups = _extract_identity(principal)
-            if display_name:
-                st.session_state["_auth_source"] = "entra"
-                st.session_state["_principal_name"] = display_name
-                st.session_state["_principal_upn"] = upn 
-                st.session_state["_principal_oid"] = oid 
-                st.success(f"Welcome, {display_name}")
-                st.caption("Signed in with Microsoft Entra. App features will appear once the database connection & access are ready")
-                return
+        oid, upn, display_name, _groups = _extract_identity(principal)
+        if display_name:
+            st.session_state["_auth_source"] = "entra"
+            st.session_state["_principal_name"] = display_name
+            st.session_state["_principal_upn"] = upn 
+            st.session_state["_principal_oid"] = oid 
+            st.success(f"Welcome, {display_name}")
+            st.caption("Signed in with Microsoft Entra. App features will appear once the database connection & access are ready")
+            return
         st.info("You're signed in with Microsoft, but we couldn't load access yet.")
         return
     # email = _extract_email_from_principal(principal)

@@ -9,8 +9,14 @@ st.title("CellCore Production Tool")
 login_widget()
 
 name = st.session_state.get("display_name") or st.session_state.get("_principal_name")
-if name:
-    st.success(f"Welcome, {name}")
+email = st.session_state.get("_principal_upn")
+if name or email:
+    who = name or email or "User"
+    if email and name:
+        st.success(f"Welcome, {who} ({email})")
+    else:
+        st.success(f"Welcome, {who}")
+        
     if "access" not in st.session_state:
         st.caption("You're signed in. Waiting for database/access to be available.")
 
