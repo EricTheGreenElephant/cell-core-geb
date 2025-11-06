@@ -3,7 +3,7 @@ import json
 import base64
 import streamlit as st
 from streamlit_js_eval import streamlit_js_eval
-from utils.auth import authenticate_user, authenticate_principal
+from utils.auth import authenticate_user, authenticate_principal, _extract_identity
 
 
 def _fetch_principal_via_auth_me():
@@ -72,10 +72,24 @@ def login_widget():
     
     principal = _fetch_principal_via_auth_me()
     if principal:
-        ok, msg = authenticate_principal(principal, mode="autoprovision")
-        if ok: 
-            st.toast(msg)
-            return
+        try:
+            ok, msg = authenticate_principal(principal, mode="autoprovision")
+            if ok: 
+                st.toast(msg)
+                return
+        except Exception:
+            # DB unavailable or not seeded yet -> greet from claims only
+            oid, upn, display_name, _groups = _extract_identity(principal)
+            if display_name:
+                st.session_state["_auth_source"] = "entra"
+                st.session_state["_principal_name"] = display_name
+                st.session_state["_principal_upn"] = upn 
+                st.session_state["_principal_oid"] = oid 
+                st.success(f"Welcome, {display_name}")
+                st.caption("Signed in with Microsoft Entra. App features will appear once the database connection & access are ready")
+                return
+        st.info("You're signed in with Microsoft, but we couldn't load access yet.")
+        return
     # email = _extract_email_from_principal(principal)
 
     # if email:
