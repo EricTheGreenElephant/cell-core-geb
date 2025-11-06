@@ -10,7 +10,7 @@ try:
     # Lazy import so this file stays independent
     from components.common.login_widget import _fetch_principal_via_auth_me
     from utils.auth import _extract_identity
-    principal = _fetch_principal_via_auth_me()
+    principal = _fetch_principal_via_auth_me(key="auth_me_debug")
     with st.expander("Debug • Raw /.auth/me (remove after testing)"):
         st.code(json.dumps(principal, indent=2) if principal else "No principal")
 

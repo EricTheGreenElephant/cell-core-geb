@@ -6,8 +6,11 @@ from streamlit_js_eval import streamlit_js_eval
 from utils.auth import authenticate_user, authenticate_principal, _extract_identity
 
 
-def _fetch_principal_via_auth_me():
+def _fetch_principal_via_auth_me(key: str = "auth_me_login"):
     # Runs in the browser, can fetch /.auth/me (cookie session present)
+    if "_principal_json" in st.session_state:
+        return st.session_state["_principal_json"]
+    
     js = """
     async function run() {
       try {
@@ -19,12 +22,14 @@ def _fetch_principal_via_auth_me():
     }
     return await run();
     """
-    b64 = streamlit_js_eval(js_code=js, key="auth_me")
+    b64 = streamlit_js_eval(js_code=js, key=key)
     if not b64: 
         return None
     try:
-        j = json.loads(base64.b64decode(b64).decode("utf-8"))
-        return j
+        decoded = base64.b64decode(b64).decode("utf-8")
+        principal = json.loads(decoded)
+        st.session_state["_principal_json"] = principal
+        return principal
     except Exception:
         return None
     
