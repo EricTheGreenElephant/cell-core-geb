@@ -28,41 +28,41 @@ def _fetch_principal_via_auth_me():
     except Exception:
         return None
     
-def _extract_email_from_principal(principal_dict):
-    if not principal_dict:
-        return None
+# def _extract_email_from_principal(principal_dict):
+#     if not principal_dict:
+#         return None
     
-    # Easy Auth returns an array of identities. Takes the first.
-    ident = (principal_dict or [{}])[0]
-    claims = {c.get("typ"): c.get("val") for c in ident.get("user_claims", [])}
+#     # Easy Auth returns an array of identities. Takes the first.
+#     ident = (principal_dict or [{}])[0]
+#     claims = {c.get("typ"): c.get("val") for c in ident.get("user_claims", [])}
 
-    # Try common claim types in order:
-    for k in (
-        "preferred_username",
-        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
-        "emails",
-        "upn",
-        "name"
-    ):
-        if claims.get(k):
-            return claims[k].strip().lower()
-    return None
+#     # Try common claim types in order:
+#     for k in (
+#         "preferred_username",
+#         "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
+#         "emails",
+#         "upn",
+#         "name"
+#     ):
+#         if claims.get(k):
+#             return claims[k].strip().lower()
+#     return None
 
-def _easy_auth_principal():
-    """
-    If running behind Azure App Service Easy Auth, return the principal dict.
-    Otherwise return None. Safe to call locally.
-    """
-    raw = st.session_state.get("_X_MS_CLIENT_PRINCIPAL")
-    if not raw:
-        raw = os.environ.get("X_MS_CLIENT_PRINCIPAL")
-    if not raw:
-        return None
-    try:
-        data = json.loads(base64.b64decode(raw).decode("utf-8"))
-        return data
-    except Exception:
-        return None 
+# def _easy_auth_principal():
+#     """
+#     If running behind Azure App Service Easy Auth, return the principal dict.
+#     Otherwise return None. Safe to call locally.
+#     """
+#     raw = st.session_state.get("_X_MS_CLIENT_PRINCIPAL")
+#     if not raw:
+#         raw = os.environ.get("X_MS_CLIENT_PRINCIPAL")
+#     if not raw:
+#         return None
+#     try:
+#         data = json.loads(base64.b64decode(raw).decode("utf-8"))
+#         return data
+#     except Exception:
+#         return None 
     
 def login_widget():
     """Reusable login form that only display if user is not logged in."""
