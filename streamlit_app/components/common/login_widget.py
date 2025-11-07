@@ -7,49 +7,6 @@ from utils.auth import authenticate_user, authenticate_principal, _extract_ident
 
 
 
-_PRINCIPAL_CACHE_KEY = "_principal_json"
-
-_FETCH_JS = r"""
-async function getPrincipal() {
-  const urls = [
-    "/.auth/me",
-    (window.location.origin || "") + "/.auth/me",
-    "./.auth/me"
-  ];
-  for (const u of urls) {
-    try {
-      const r = await fetch(u, { credentials: "include", cache: "no-store" });
-      if (!r.ok) continue;
-      const text = await r.text();
-      // Return raw text to Python; we'll parse there.
-      return text;
-    } catch (e) { /* try next */ }
-  }
-  return null;
-}
-return await getPrincipal();
-"""
-
-def _fetch_principal_via_auth_me(key: str) -> dict | None:
-    # Runs in the browser, can fetch /.auth/me (cookie session present)
-    if _PRINCIPAL_CACHE_KEY in st.session_state:
-        return st.session_state[_PRINCIPAL_CACHE_KEY]
-    
-    raw = streamlit_js_eval(js_code=_FETCH_JS, key=key)
-    if not raw:
-        return None
-    
-    try:
-        principal = json.loads(raw)
-    except Exception:
-        try:
-            principal = json.loads(str(raw))
-        except Exception:
-            return None
-        
-    st.session_state[_PRINCIPAL_CACHE_KEY] = principal
-    return principal
-    
 # def _extract_email_from_principal(principal_dict):
 #     if not principal_dict:
 #         return None
@@ -85,6 +42,18 @@ def _fetch_principal_via_auth_me(key: str) -> dict | None:
 #         return data
 #     except Exception:
 #         return None 
+
+def  _server_principal(): 
+    """
+    Read Easy Auth principal from server env header
+    """
+    raw = os.environ.get("X_MS_CLIENT_PRINCIPAL")
+    if not raw:
+        return None
+    try:
+        return json.loads(base64.b64decode(raw).decode("utf-8"))
+    except Exception:
+        return None 
     
 def login_widget():
     """Reusable login form that only display if user is not logged in."""
@@ -92,7 +61,8 @@ def login_widget():
     if "user_id" in st.session_state:
         return
     
-    principal = _fetch_principal_via_auth_me(key="auth_me_login_v2")
+    principal = _server_principal()
+    
     if principal:
         try:
             ok, msg = authenticate_principal(principal, mode="autoprovision")
@@ -143,33 +113,7 @@ def login_widget():
     # if "user_id" in st.session_state:
     #     return 
 
-    # --- Manual paste fallback so you can proceed today ---
-    with st.expander("Troubleshoot: Paste /.auth/me JSON (temporary)"):
-        st.caption("Open /.auth/me in a new tab, copy all JSON, paste below, and click Use principal.")
-        pasted = st.text_area("Paste /.auth/me JSON here")
-        if st.button("Use principal"):
-            try:
-                principal = json.loads(pasted)
-                st.session_state[_PRINCIPAL_CACHE_KEY] = principal
-                # Try normal path once more
-                try:
-                    ok, msg = authenticate_principal(principal, mode="autoprovision")
-                    if ok:
-                        st.success(msg); st.rerun()
-                        return
-                except Exception:
-                    pass
-                # Claims-only greeting
-                oid, upn, display_name, _groups = _extract_identity(principal)
-                if display_name or upn:
-                    st.session_state["_auth_source"] = "entra"
-                    st.session_state["_principal_name"] = display_name or (upn.split("@")[0] if upn else None)
-                    st.session_state["_principal_upn"] = upn
-                    st.session_state["_principal_oid"] = oid
-                    st.success(f"Welcome, {display_name or upn}")
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Could not parse pasted JSON: {e}")
+    # ------------- ORIGINAL -------------
     
     # with st.form("login_form"):
     #     st.subheader("🔐 Please log in to continue")

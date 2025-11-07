@@ -4,27 +4,7 @@ from utils.auth import show_user_sidebar
 from components.common.login_widget import login_widget
 
 st.set_page_config(page_title="CellCore Production Dashboard", layout="wide")
-st.title("CellCore Production")
-
-try:
-    # Lazy import so this file stays independent
-    from components.common.login_widget import _fetch_principal_via_auth_me
-    from utils.auth import _extract_identity
-    principal = _fetch_principal_via_auth_me(key="auth_me_debug")
-    with st.expander("Debug • Raw /.auth/me (remove after testing)"):
-        st.code(json.dumps(principal, indent=2) if principal else "No principal")
-
-    if principal:
-        oid, upn, display_name, groups = _extract_identity(principal)
-        st.write("**Parsed from claims:**")
-        st.json({
-            "display_name": display_name,
-            "upn": upn,
-            "oid": oid,
-            "groups_count": len(groups)
-        })
-except Exception as e:
-    st.warning(f"Principal debug failed: {e}")
+st.title("CellCore")
 
 # Show login if not logged in
 login_widget()
