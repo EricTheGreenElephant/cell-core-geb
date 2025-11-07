@@ -48,6 +48,7 @@ def  _server_principal():
     Read Easy Auth principal from server env header
     """
     raw = os.environ.get("X_MS_CLIENT_PRINCIPAL")
+    st.write(raw)
     if not raw:
         return None
     try:
@@ -62,7 +63,7 @@ def login_widget():
         return
     
     principal = _server_principal()
-    
+
     if principal:
         try:
             ok, msg = authenticate_principal(principal, mode="autoprovision")

@@ -12,7 +12,8 @@ login_widget()
 # Prefer DB-authenticated name, fall back to claims-based name
 name = st.session_state.get("display_name") or st.session_state.get("_principal_name")
 email = st.session_state.get("_principal_upn")
-
+st.write(name)
+st.write(email)
 if name or email:
     who = name or email or "User"
     st.success(f"Welcome, {who}" + (f" ({email})" if email and email != who else ""))
