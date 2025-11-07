@@ -83,7 +83,7 @@ def _get_principal_cached() -> dict | None:
         <script>
         (async function() {{
             try {{
-            const r = await fetch("/.auth/me", {{ credentials: "include", cache: "no-store" }});
+            const r = await fetch("{base}/.auth/me", {{ credentials: "include", cache: "no-store" }});
             const t = r.ok ? await r.text() : "";
             const el = document.getElementById("{fetch_id}");
             if (el) {{ el.value = t; el.dispatchEvent(new Event("input", {{ bubbles: true }})); }}
@@ -134,7 +134,6 @@ else:
 st.subheader("Auth check (remove after testing)")
 st.write("If the app is really authenticated, this box should show your JSON *inside* the app:")
 iframe(f"{base}/.auth/me", height=220)
-
 
 with st.expander("Use principal from /.auth/me (temporary)"):
     st.caption("Open the iframe above in a new tab, copy ALL the JSON, paste here, click Apply.")
