@@ -127,39 +127,36 @@
 #                 st.switch_page("Main.py")
 #                 st.rerun()
 
+
 # auth.py
 import base64, json
 import streamlit as st
 
 def _get_request_headers():
     """
-    Reach into Streamlit's session to grab the original HTTP request headers.
-    Works across recent Streamlit versions, falling back gracefully.
+    Get the original HTTP request headers in a Streamlit app
+    (works on Azure App Service with Entra ID / EasyAuth).
     """
-    # Newer Streamlit (1.29+)
     try:
-        from streamlit.web.server.websocket_headers import _get_websocket_headers  # type: ignore
-        return _get_websocket_headers() or {}
+        # Preferred modern API (Streamlit 1.39+)
+        return st.context.headers or {}
     except Exception:
-        pass
-
-    # Older Streamlit (pre-1.29)
-    try:
-        from streamlit.script_run_context import get_script_run_ctx  # type: ignore
-        from streamlit.server.server import Server  # type: ignore
-        ctx = get_script_run_ctx()
-        if not ctx:
+        # Fallback for older Streamlit versions
+        try:
+            from streamlit.script_run_context import get_script_run_ctx  # type: ignore
+            from streamlit.server.server import Server  # type: ignore
+            ctx = get_script_run_ctx()
+            if not ctx:
+                return {}
+            session_info = Server.get_current()._get_session_info(ctx.session_id)
+            return getattr(session_info.ws.request, "headers", {}) or {}
+        except Exception:
             return {}
-        session_info = Server.get_current()._get_session_info(ctx.session_id)  # private API
-        return getattr(session_info.ws.request, "headers", {}) or {}
-    except Exception:
-        return {}
 
 def _parse_client_principal(principal_b64: str):
     data = json.loads(base64.b64decode(principal_b64))
     claims = {c["typ"]: c["val"] for c in data.get("claims", [])}
 
-    # Common claim keys used by Entra ID / EasyAuth
     def first(*keys):
         for k in keys:
             if claims.get(k):
@@ -176,22 +173,24 @@ def _parse_client_principal(principal_b64: str):
             "emails",
             "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
         ),
-        "oid": first(  # Object ID (stable, best for DB auth)
+        "oid": first(
             "oid",
             "http://schemas.microsoft.com/identity/claims/objectidentifier",
         ),
         "tid": first("tid", "http://schemas.microsoft.com/identity/claims/tenantid"),
-        "roles": [c["val"] for c in data.get("claims", []) if c["typ"].endswith("/role") or c["typ"] == "roles"],
+        "roles": [
+            c["val"]
+            for c in data.get("claims", [])
+            if c["typ"].endswith("/role") or c["typ"] == "roles"
+        ],
         "raw": data,
     }
 
 def get_current_user():
     """
-    Returns a dict with name, email, oid, tid, roles, raw; or None if not signed in.
+    Returns dict(name, email, oid, tid, roles, raw) or None if not signed in.
     """
     headers = {k.lower(): v for k, v in _get_request_headers().items()}
-
-    # Primary: single base64 JSON header
     principal_b64 = headers.get("x-ms-client-principal")
     if principal_b64:
         try:
@@ -199,10 +198,10 @@ def get_current_user():
         except Exception:
             pass
 
-    # Fallback: older/simpler headers if principal blob not present
+    # Simpler header fallback
     name = headers.get("x-ms-client-principal-name")
-    oid  = headers.get("x-ms-client-principal-id")
-    tid  = headers.get("x-ms-client-principal-tenant-id")
+    oid = headers.get("x-ms-client-principal-id")
+    tid = headers.get("x-ms-client-principal-tenant-id")
     if name or oid:
         return {"name": name, "email": name, "oid": oid, "tid": tid, "roles": [], "raw": {}}
 
