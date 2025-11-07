@@ -55,39 +55,14 @@
 import urllib.parse
 import streamlit as st
 from utils.auth import get_current_user
+from utils.auth_ui import render_account_box
 
 st.set_page_config(page_title="CellCore Production Dashboard", layout="wide")
 
-# 1️ Define helper functions here (login_url, logout_url, etc.)
-def _current_path_with_query():
-    qs = st.query_params
-    q = urllib.parse.urlencode(qs, doseq=True)
-    return (st.context.request.path or "/") + (f"?{q}" if q else "")
+render_account_box(expanded=True, home_after_logout="/")
 
-def login_url():
-    return "/.auth/login/aad?post_login_redirect_uri=" + urllib.parse.quote(_current_path_with_query(), safe="")
-
-def logout_url(redirect_to: str = "/"):
-    return "/.auth/logout?post_logout_redirect_uri=" + urllib.parse.quote(redirect_to, safe="")
-
-# 2️ Read the current signed-in user (using your auth.py)
 user = get_current_user()
 
-# 3️ Add the login/logout controls in your sidebar
-with st.sidebar.expander("Account", expanded=True):
-    if user:
-        st.write(f"Signed in as **{user['name'] or user['email']}**")
-        cols = st.columns([1, 1])
-        with cols[0]:
-            st.link_button("Log out", logout_url("/"))  # Return to home
-        with cols[1]:
-            st.link_button("Switch account", logout_url(login_url()))
-    else:
-        st.write("You’re not signed in.")
-        st.link_button("Log in", login_url())
-        st.caption("Use your Microsoft Entra account.")
-
-# 4️ Require authentication for the main content
 if not user:
     st.stop()
 
