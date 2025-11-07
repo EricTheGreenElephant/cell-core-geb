@@ -47,17 +47,20 @@
 
 # Main.py
 import streamlit as st
-from streamlit.components.v1 import iframe, html
+from streamlit_js_eval import streamlit_js_eval
 import os
 import json
+import requests
+from streamlit.components.v1 import iframe
 from components.common.login_widget import login_widget, debug_auth_panel
 from utils.auth import authenticate_principal, _extract_identity
 
 st.set_page_config(page_title="CellCore Production Dashboard", layout="wide")
-st.title("CellCore")
+st.title("CellCore Production")
 
 
 host = os.environ.get("WEBSITE_HOSTNAME", "").strip()
+st.caption(host)
 base = f"https://{host}" if host else "https://cellcore-streamlit-web.azurewebsites.net"
 
 st.caption(f"Host: {host or 'cellcore-streamlit-web.azurewebsites.net'}")
@@ -70,79 +73,54 @@ with col_logout:
     st.link_button("🚪 Logout", f"{base}/.auth/logout?post_logout_redirect_uri=/", width="stretch")
 
 
-def get_principal_via_iframe_bridge() -> dict | None:
+def _get_appservice_auth_cookie() -> str | None:
     """
-    Reads /.auth/me by loading it into an iframe (same-origin) and
-    extracting its body text from the iframe's DOM, then passes it back
-    to Streamlit via a hidden <textarea>. No fetch/XHR involved.
+    Reads the App Service auth cookie from the browser and returns its value.
+    Cookie names can vary, so we scan for the one that starts with 'AppServiceAuthSession'.
     """
-    # unique DOM IDs so we don't collide
-    iframe_id = "auth_me_iframe"
-    sink_id = "auth_me_sink"
+    cookie_str = streamlit_js_eval(js_code="return document.cookie;", key="cookie_scan_v1")
+    if not cookie_str:
+        return None
+    # Find the auth cookie (there may be multiple with chunk suffixes)
+    parts = [p.strip() for p in cookie_str.split(";")]
+    auth_cookies = [p for p in parts if p.startswith("AppServiceAuthSession")]
+    if not auth_cookies:
+        return None
+    # Join all chunks if present
+    # Example chunked names: AppServiceAuthSession, AppServiceAuthSession_0, _1, ...
+    # We’ll send all in the Cookie header to be safe.
+    return "; ".join(auth_cookies)
 
-    # Render an iframe + JS that pulls the JSON text into a hidden textarea
-    html(
-        f"""
-        <iframe id="{iframe_id}" src="/.auth/me"
-                style="display:none"
-                sandbox="allow-scripts allow-same-origin"></iframe>
-
-        <script>
-          (function() {{
-            const f = document.getElementById("{iframe_id}");
-            function pull() {{
-              try {{
-                const doc = f.contentWindow.document;
-                // /.auth/me returns JSON; innerText will be the raw JSON string
-                const txt = doc && doc.body ? (doc.body.innerText || doc.body.textContent || "") : "";
-                const sink = document.getElementById("{sink_id}");
-                if (sink && txt) {{
-                  sink.value = txt;
-                  sink.dispatchEvent(new Event("input", {{ bubbles: true }}));
-                }}
-              }} catch (e) {{
-                // cross-origin or not ready yet; try again
-              }}
-            }}
-            f.addEventListener('load', () => {{
-              pull();
-              // a couple retries in case content loads after onload
-              setTimeout(pull, 200);
-              setTimeout(pull, 500);
-            }});
-          }})();
-        </script>
-
-        <textarea id="{sink_id}" style="display:none"></textarea>
-        """,
-        height=0,
-    )
-
-    raw = st.text_area("", key=sink_id, label_visibility="collapsed", height=1)
-    if not raw:
+@st.cache_data(show_spinner=False)
+def _get_principal_via_server(cookie_header: str | None) -> dict | None:
+    """
+    Server-side GET to /.auth/me using the auth cookie captured from the browser.
+    """
+    if not cookie_header:
         return None
     try:
-        return json.loads(raw)
+        resp = requests.get(f"{base}/.auth/me",
+                            headers={"Cookie": cookie_header, "Cache-Control": "no-store"},
+                            timeout=5)
+        if resp.status_code != 200:
+            return None
+        return resp.json()
     except Exception:
         return None
 
-# --- use the bridge to get the principal ---
-principal = get_principal_via_iframe_bridge()
+cookie_header = _get_appservice_auth_cookie()
+principal = _get_principal_via_server(cookie_header)
 
-# TEMP: show what we got (remove later)
-with st.expander("Debug • principal (from iframe bridge)"):
+# Debug (remove later)
+with st.expander("Debug • principal (server fetch with browser cookie)"):
     st.code(json.dumps(principal, indent=2) if principal else "No principal")
 
-
-# If we have a principal, greet; then (optionally) run DB-backed auth
 if principal:
     oid, upn, display_name, groups = _extract_identity(principal)
-
-    # Always show welcome from claims (works even if DB is down)
     name = display_name or (upn.split("@")[0] if upn else "User")
     st.success(f"Welcome, {name}" + (f" ({upn})" if upn else ""))
 
-    # Optional: try DB-backed auth now to populate st.session_state.access
+    # Optional: try DB-backed auth to populate access
     try:
         ok, msg = authenticate_principal(principal, mode="autoprovision")
         if ok:
@@ -150,8 +128,7 @@ if principal:
     except Exception:
         st.caption("Signed in via Microsoft. Database not connected/seeded yet, so access is limited.")
 else:
-    st.info("Please click Login above if you’re not redirected automatically.")
-
+    st.info("If you aren’t redirected automatically, click Login above.")
 
 
 st.subheader("Auth check (remove after testing)")

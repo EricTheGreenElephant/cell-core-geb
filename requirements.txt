@@ -8,3 +8,4 @@ SQLAlchemy
 azure-identity
 pyjwt
 streamlit-js-eval
+requests
