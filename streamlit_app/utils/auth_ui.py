@@ -1,7 +1,7 @@
 import urllib.parse
 import streamlit as st
 from typing import Optional, Dict
-from auth import get_current_user
+from utils.auth import get_current_user
 
 def _headers_lower() -> Dict[str, str]:
     try:

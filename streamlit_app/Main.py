@@ -52,7 +52,7 @@
 # # else:
 # #     st.info("Please sign in to continue.")
 # streamlit_app.py
-import urllib.parse
+
 import streamlit as st
 from utils.auth import get_current_user
 from utils.auth_ui import render_account_box
