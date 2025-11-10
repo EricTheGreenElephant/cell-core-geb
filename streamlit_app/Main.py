@@ -78,6 +78,16 @@ if user["oid"] not in ALLOWED_OIDS:
 
 st.success("You are authorized 🎉")
 
+import pyodbc
+
+st.subheader("ODBC driver check")
+if st.button("Show pyodbc drivers"):
+    try:
+        st.write(pyodbc.drivers())
+    except Exception as e:
+        st.error(f"pyodbc import/driver error: {e}")
+
+        
 from utils.db import run_query
 
 st.header("Database Connection Test")
