@@ -13,6 +13,7 @@ class User(Base):
     user_principal_name = Column(String(255), nullable=True)
     display_name = Column(String(100), nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
 
 
     received_filaments = relationship("models.filament_models.Filament", back_populates="received_user", foreign_keys="Filament.received_by")
