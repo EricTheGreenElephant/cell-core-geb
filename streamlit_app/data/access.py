@@ -16,11 +16,10 @@
 #     except pyodbc.Error as e:
 #         print(f"[ACCESS ERROR] {e}")
 #         return []
-    
+from __future__ import annotations    
 from sqlalchemy import select 
 from db.orm_session import get_session
-from models.lifecycle_stages_models import ApplicationArea, AccessRight
-from models.users_models import GroupAreaRight
+from models.users_models import GroupAreaRight, ApplicationArea, AccessRight
 
 _ACCESS_ORDER = {"Read": 1, "Write": 2, "Admin": 3}
 
@@ -47,11 +46,13 @@ def get_effective_access(user_id: int, group_oids: list[str]) -> dict[str, str]:
             ).all()
 
         merged: dict[str, str] = {}
+        def better(current: str | None, incoming: str) -> str:
+            if not current: return incoming
+            return incoming if _ACCESS_ORDER[incoming] > _ACCESS_ORDER[current] else current
+        
         for area, level in user_rows + group_rows:
-            if area not in merged:
-                merged[area] = level 
-            else:
-                merged[area] = max(merged[area], level, key=_ACCESS_ORDER.get)
+            merged[area] = better(merged.get(area), level)
+
         return merged
 
 def get_user_access(user_id: int) -> dict[str, str]:

@@ -3,47 +3,8 @@ import streamlit as st
 from typing import Optional, Dict
 from utils.auth import get_current_user
 
-def _headers_lower() -> Dict[str, str]:
-    try:
-        return {k.lower(): v for k, v in (st.context.headers or {}).items()}
-    except Exception:
-        return {}
 
-def _guess_current_path() -> str:
-    """
-    Best-effort way to get the user's current path+query from proxy headers.
-    Falls back to "/".
-    """
-    h = _headers_lower()
-
-    # Common reverse-proxy headers you might see on Azure App Service:
-    # - x-original-url: full original URL (if present)
-    # - x-appservice-request-uri: full URL on some stacks
-    # - x-forwarded-uri: path component only
-    # - x-forwarded-proto, x-forwarded-host: can reconstruct full URL if needed
-    for key in ("x-original-url", "x-appservice-request-uri"):
-        url = h.get(key)
-        if url:
-            try:
-                u = urllib.parse.urlparse(url)
-                pathq = u.path or "/"
-                if u.query:
-                    pathq += f"?{u.query}"
-                return pathq
-            except Exception:
-                pass
-
-    xf_uri = h.get("x-forwarded-uri")
-    if xf_uri:
-        # Usually already path+optional query
-        return xf_uri or "/"
-
-    # No reliable signal — use the app root
-    return "/"
-
-def build_login_url(redirect_to: Optional[str] = None) -> str:
-    if not redirect_to:
-        redirect_to = _guess_current_path()
+def build_login_url(redirect_to: str = "/") -> str:
     return "/.auth/login/aad?post_login_redirect_uri=" + urllib.parse.quote(redirect_to, safe="")
 
 def build_logout_url(redirect_to: str = "/") -> str:

@@ -1,36 +1,81 @@
-INSERT INTO group_area_rights
-(group_oid, area_id, access_level)
-SELECT 
-    TRY_CONVERT(UNIQUEIDENTIFIER, v.group_oid),
-    a.id,
-    v.access_level
-FROM (VALUES
-    (N'23b95f1c-02f8-4e0e-bb18-153b97fc8004', N'Production', N'Read'),
-    (N'feacdb25-3548-41c1-a883-cd390b15782c', N'Production', N'Write'),
-    (N'3f772c96-0723-4069-8d15-add5b53f30df', N'Logistics', N'Read'),
-    (N'95f3232c-6f40-44de-86b0-b4f148963255', N'Logistics', N'Write'),
-    (N'2f806a22-d7e8-48b2-9ee4-a16a03dde648', N'Quality Management', N'Write'),
-    (N'741b0872-4d2b-47a5-a1e5-373803ce12ef', N'Quality Management', N'Read'),
-    (N'391d747e-a387-4d7b-ae64-66c7141266a8', N'Sales', N'Read'),
-    (N'c4270822-5292-4e9c-958c-2ca332058001', N'Sales', N'Write')
-) AS v(group_oid, area_name, access_level)
-JOIN application_areas a   
-    ON a.area_name = v.area_name
-LEFT JOIN group_area_rights gar 
-    ON gar.group_oid = TRY_CONVERT(UNIQUEIDENTIFIER, v.group_oid)
-    AND gar.area_id = a.id 
-WHERE gar.id IS NULL;
+SET NOCOUNT ON;
 
-DECLARE @GlobalAdminOid UNIQUEIDENTIFIER = TRY_CONVERT(UNIQUEIDENTIFIER, N'28ff3777-4390-428a-8355-ae80bca1cb62');
+-- Expect sqlcmd -v variables for each group OID:
+--   -v PROD_READ_OID="..."   -v PROD_WRITE_OID="..."
+--   -v LOG_READ_OID="..."    -v LOG_WRITE_OID="..."
+--   -v QM_READ_OID="..."     -v QM_WRITE_OID="..."
+--   -v SALES_READ_OID="..."  -v SALES_WRITE_OID="..."
+--   -v GLOBAL_ADMIN_OID="..."   (optional)
 
-INSERT INTO group_area_rights
-(group_oid, area_id, access_level)
-SELECT 
-    @GlobalAdminOid,
-    a.id,
-    N'Admin'
-FROM application_areas a   
-LEFT JOIN group_area_rights gar 
-    ON gar.group_oid = @GlobalAdminOid
-    AND gar.area_id = a.id  
-WHERE gar.id IS NULL;
+DECLARE @ProdRead   UNIQUEIDENTIFIER = TRY_CONVERT(UNIQUEIDENTIFIER, N'$(PROD_READ_OID)');
+DECLARE @ProdWrite  UNIQUEIDENTIFIER = TRY_CONVERT(UNIQUEIDENTIFIER, N'$(PROD_WRITE_OID)');
+DECLARE @LogRead    UNIQUEIDENTIFIER = TRY_CONVERT(UNIQUEIDENTIFIER, N'$(LOG_READ_OID)');
+DECLARE @LogWrite   UNIQUEIDENTIFIER = TRY_CONVERT(UNIQUEIDENTIFIER, N'$(LOG_WRITE_OID)');
+DECLARE @QMRead     UNIQUEIDENTIFIER = TRY_CONVERT(UNIQUEIDENTIFIER, N'$(QM_READ_OID)');
+DECLARE @QMWrite    UNIQUEIDENTIFIER = TRY_CONVERT(UNIQUEIDENTIFIER, N'$(QM_WRITE_OID)');
+DECLARE @SalesRead  UNIQUEIDENTIFIER = TRY_CONVERT(UNIQUEIDENTIFIER, N'$(SALES_READ_OID)');
+DECLARE @SalesWrite UNIQUEIDENTIFIER = TRY_CONVERT(UNIQUEIDENTIFIER, N'$(SALES_WRITE_OID)');
+DECLARE @GlobalAdmin UNIQUEIDENTIFIER = TRY_CONVERT(UNIQUEIDENTIFIER, N'$(GLOBAL_ADMIN_OID)');
+
+IF @ProdRead IS NULL AND @ProdWrite IS NULL AND
+   @LogRead IS NULL AND @LogWrite IS NULL AND
+   @QMRead IS NULL AND @QMWrite IS NULL AND
+   @SalesRead IS NULL AND @SalesWrite IS NULL AND
+   @GlobalAdmin IS NULL
+BEGIN
+    PRINT 'Group seed: no OIDs provided, skipping.';
+    RETURN;
+END;
+
+-- Resolve application area IDs once
+DECLARE @Area_Production INT = (SELECT id FROM dbo.application_areas WHERE area_name = N'Production');
+DECLARE @Area_Logistics  INT = (SELECT id FROM dbo.application_areas WHERE area_name = N'Logistics');
+DECLARE @Area_QM         INT = (SELECT id FROM dbo.application_areas WHERE area_name = N'Quality Management');
+DECLARE @Area_Sales      INT = (SELECT id FROM dbo.application_areas WHERE area_name = N'Sales');
+DECLARE @Area_Admin      INT = (SELECT id FROM dbo.application_areas WHERE area_name = N'Admin');
+
+;WITH all_groups AS (
+    SELECT * FROM (VALUES
+        (@ProdRead,   @Area_Production, N'Read'),
+        (@ProdWrite,  @Area_Production, N'Write'),
+        (@LogRead,    @Area_Logistics,  N'Read'),
+        (@LogWrite,   @Area_Logistics,  N'Write'),
+        (@QMRead,     @Area_QM,         N'Read'),
+        (@QMWrite,    @Area_QM,         N'Write'),
+        (@SalesRead,  @Area_Sales,      N'Read'),
+        (@SalesWrite, @Area_Sales,      N'Write')
+    ) AS v(group_oid, area_id, access_level)
+),
+src AS (
+    SELECT group_oid, area_id, access_level
+    FROM all_groups
+    WHERE group_oid IS NOT NULL         -- skip any groups you didn’t provide
+      AND area_id IS NOT NULL           -- skip if an area name wasn’t found
+)
+MERGE dbo.group_area_rights AS tgt
+USING src
+  ON  tgt.group_oid = src.group_oid
+  AND tgt.area_id   = src.area_id
+WHEN MATCHED AND tgt.access_level <> src.access_level
+  THEN UPDATE SET tgt.access_level = src.access_level
+WHEN NOT MATCHED BY TARGET
+  THEN INSERT (group_oid, area_id, access_level)
+       VALUES (src.group_oid, src.area_id, src.access_level);
+
+-- Optional: Global Admin group gets Admin on all areas
+IF @GlobalAdmin IS NOT NULL
+BEGIN
+    ;WITH src_admin AS (
+        SELECT @GlobalAdmin AS group_oid, a.id AS area_id, N'Admin' AS access_level
+        FROM dbo.application_areas a
+    )
+    MERGE dbo.group_area_rights AS tgt
+    USING src_admin
+      ON  tgt.group_oid = src_admin.group_oid
+      AND tgt.area_id   = src_admin.area_id
+    WHEN MATCHED AND tgt.access_level <> src_admin.access_level
+      THEN UPDATE SET tgt.access_level = src_admin.access_level
+    WHEN NOT MATCHED BY TARGET
+      THEN INSERT (group_oid, area_id, access_level)
+           VALUES (src_admin.group_oid, src_admin.area_id, src_admin.access_level);
+END;

@@ -13,23 +13,3 @@ class LifecycleStages(Base):
     is_active = Column(Boolean, nullable=False, default=True)
 
     quarantined_products = relationship("QuarantinedProducts", back_populates="from_stage")
-
-
-class ApplicationArea(Base):
-    __tablename__ = 'application_areas'
-    
-    id = Column(Integer, primary_key=True)
-    area_name = Column(String(50), unique=True, nullable=False)
-    is_active = Column(Boolean, nullable=False, default=True)
-
-    app_area_right = relationship("AccessRight", back_populates="app_area")
-
-class AccessRight(Base):
-    __tablename__ = 'access_rights'
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    area_id = Column(Integer, ForeignKey("application_areas.id"), nullable=False)
-    access_level = Column(String(20), nullable=False)
-
-    access_right_user = relationship("User", back_populates="access_user")
-    app_area = relationship("ApplicationArea", back_populates="app_area_right")

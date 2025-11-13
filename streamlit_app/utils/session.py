@@ -1,11 +1,14 @@
 import streamlit as st
+from utils.access_bootstrap import ensure_user_and_access
 
 def require_login():
-    if "user_id" not in st.session_state:
-        st.warning("Please log in to access this page.")
-        st.stop()
+    ensure_user_and_access()
+    # if "user_id" not in st.session_state:
+    #     st.warning("Please log in to access this page.")
+    #     st.stop()
 
 def require_access(area, minimum_level="Read"):
+    ensure_user_and_access()
     access = st.session_state.get("access", [])
     user_level = access.get(area)
 

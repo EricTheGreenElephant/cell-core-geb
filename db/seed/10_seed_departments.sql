@@ -1,6 +1,7 @@
 MERGE dbo.departments AS tgt
 USING (
     VALUES
+        ('GEN', 'General', 1),
         ('PROD', 'Production', 1),
         ('QM', 'Quality Management', 1),
         ('SALES', 'Sales', 1),

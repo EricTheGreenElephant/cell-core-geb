@@ -8,6 +8,7 @@ on:
       - 'v*' # Prod only on version tags like v1.0.0
 
 permissions:
+  id-token: write
   contents: read
 
 jobs:
@@ -15,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      RG: rg-cellcore-dev
       MIGRATIONS_DIR: db/migrations
       SEED_DIR: db/seed
       VIEWS_DIR: db/views
@@ -25,42 +27,70 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with: 
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Open temp firewall for runner IP
+        shell: bash
+        run: |
+          # Derive short server name from FQDN in secrets
+          SERVER_FQDN="${{ secrets.AZURE_SQL_SERVER_DEV }}"
+          SERVER="${SERVER_FQDN%%.database.windows.net}"
+          RUNNER_IP=$(curl -s https://api.ipify.org)
+          RULE="gh-runner-${RUNNER_IP//./-}"
+          echo "SERVER=$SERVER" >> $GITHUB_ENV
+          echo "RUNNER_IP=$RUNNER_IP" >> $GITHUB_ENV
+          echo "RULE=$RULE" >> $GITHUB_ENV
+          echo "Opening firewall rule '$RULE' for $RUNNER_IP on server $SERVER in RG $RG"
+          az sql server firewall-rule create -g "$RG" -s "$SERVER" -n "$RULE" \
+          --start-ip-address "$RUNNER_IP" --end-ip-address "$RUNNER_IP"
+
+
       - name: Install sqlcmd (mssql-tools18)
+        shell: bash
         run: |
           set -e
           sudo apt-get update
-          sudo apt-get-install -y curl gnupg apt-transport-https software-properties-common
-          curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
-          sudo add-apt-repository "$(curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list)"
+          sudo apt-get install -y curl gnupg apt-transport-https software-properties-common
+          curl https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" | sudo tee /etc/apt/sources.list.d/microsoft-prod.list
           sudo apt-get update
-          sudo ACCEPT_EULA=Y apt-get install -y mssql-tools unixodbc-dev
-          echo 'export PATH="$PATH:/opt/mssql-tools18/bin:$PATH"' >> $GITHUB_ENV
+          sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
+          echo "/opt/mssql-tools18/bin" >> $GITHUB_PATH
       
       - name: Set environment (DEV vs PROD)
         shell: bash
         run: |
             set -e
-            if [[ "${GITHUB_REF##*/}" == "dev"]]; then
+            BRANCH="${GITHUB_REF_NAME}"
+            if [[ "$BRANCH" == "dev" ]]; then
               echo "Deploying to DEV ..."
-              echo "DB_SERVER=${{ secrets.AZURE_SQL_SERVER_DEV }}" >> $GITHUB_ENV
-              echo "DB_NAME=${{ secrets.AZURE_SQL_DATABASE_DEV }}" >> $GITHUB_ENV
-              echo "DB_USER=${{ secrets.AZURE_SQL_USERNAME_DEV }}" >> $GITHUB_ENV
-              echo "DB_PASS=${{ secrets.AZURE_SQL_PASSWORD_DEV }}" >> $GITHUB_ENV
+              echo "DB_SERVER=${{ secrets.AZURE_SQL_SERVER_DEV }}"    >> $GITHUB_ENV
+              echo "DB_NAME=${{ secrets.AZURE_SQL_DATABASE_DEV }}"   >> $GITHUB_ENV
               echo "IS_DEV=true" >> $GITHUB_ENV
             else
               echo "Deploying to PROD ..."
-              echo "DB_SERVER=${{ secrets.AZURE_SQL_SERVER_PROD }}" >> $GITHUB_ENV
+              echo "DB_SERVER=${{ secrets.AZURE_SQL_SERVER_PROD }}"  >> $GITHUB_ENV
               echo "DB_NAME=${{ secrets.AZURE_SQL_DATABASE_PROD }}" >> $GITHUB_ENV
-              echo "DB_USER=${{ secrets.AZURE_SQL_USERNAME_PROD }}" >> $GITHUB_ENV
-              echo "DB_PASS=${{ secrets.AZURE_SQL_PASSWORD_PROD }}" >> $GITHUB_ENV
               echo "IS_DEV=false" >> $GITHUB_ENV
             fi
 
-      - name: Smoke test connection
+      - name: Acquire AAD token for Azure SQL (for sqlcmd -G)
         shell: bash
         run: |
-            source $GITHUB_ENV
-            /opt/mssql-tools18/bin/sqlcmd -S "$DB_SERVER" -d "$DB_NAME" -U "$DB_USER" -P "$DB_PASS" -l 30 -b -Q "SELECT @@VERSION;"
+          TOKEN=$(az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv)
+          echo "SQLCMDACCESS_TOKEN=$TOKEN" >> $GITHUB_ENV
+
+      - name: Smoke test connection
+        shell: bash
+        env:
+          SQLCMDACCESS_TOKEN: ${{ env.SQLCMDACCESS_TOKEN }}
+        run: |
+            sqlcmd -S "$DB_SERVER" -d "$DB_NAME" -G -C -l 30 -b -Q "SELECT SUSER_SNAME(); SELECT DB_NAME();"
       
       - name: Define run_folder function
         shell: bash
@@ -85,11 +115,11 @@ jobs:
             IFS=$'\n' files=($(printf '%s\n' "${files[@]}" | sort))
             for f in "${files[@]}"; do
               echo "==> Applying: $f"
-              /opt/mssql-tools18/bin/sqlcmd \
+              sqlcmd \
                 -S "$DB_SERVER" \
                 -d "$DB_NAME" \
-                -U "$DB_USER" \
-                -P "$DB_PASS" \
+                -G \
+                -C \
                 -l 60 \
                 -b \
                 -I \
@@ -100,31 +130,72 @@ jobs:
 
       - name: Apply migrations
         shell: bash
-        run: |
-            source $GITHUB_ENV
-            /tmp/run_folder.sh "$MIGRATIONS_DIR"
+        env: 
+          SQLCMDACCESS_TOKEN: ${{ env.SQLCMDACCESS_TOKEN }}
+        run: /tmp/run_folder.sh "$MIGRATIONS_DIR"
 
       - name: Apply seeds (DEV only)
         if: env.IS_DEV == 'true'
         shell: bash
+        env: 
+          SQLCMDACCESS_TOKEN: ${{ env.SQLCMDACCESS_TOKEN }}
+        run: /tmp/run_folder.sh "$SEED_DIR"
+
+      - name: Load group OIDs from secrets
+        shell: bash
         run: |
-            source $GITHUB_ENV
-            /tmp/run_folder.sh "$SEED_DIR"
+          echo "PROD_READ_OID=${{ secrets.PROD_READ_OID }}"       >> $GITHUB_ENV
+          echo "PROD_WRITE_OID=${{ secrets.PROD_WRITE_OID }}"     >> $GITHUB_ENV
+          echo "LOG_READ_OID=${{ secrets.LOG_READ_OID }}"         >> $GITHUB_ENV
+          echo "LOG_WRITE_OID=${{ secrets.LOG_WRITE_OID }}"       >> $GITHUB_ENV
+          echo "QM_READ_OID=${{ secrets.QM_READ_OID }}"           >> $GITHUB_ENV
+          echo "QM_WRITE_OID=${{ secrets.QM_WRITE_OID }}"         >> $GITHUB_ENV
+          echo "SALES_READ_OID=${{ secrets.SALES_READ_OID }}"     >> $GITHUB_ENV
+          echo "SALES_WRITE_OID=${{ secrets.SALES_WRITE_OID }}"   >> $GITHUB_ENV
+          echo "GLOBAL_ADMIN_OID=${{ secrets.GLOBAL_ADMIN_OID }}" >> $GITHUB_ENV
+
+      - name: Seed group-area rights (parameterized)
+        shell: bash
+        env: 
+          SQLCMDACCESS_TOKEN: ${{ env.SQLCMDACCESS_TOKEN }}
+        run: |
+          sqlcmd -S "$DB_SERVER" -d "$DB_NAME" -G -C -b -I \
+            -v PROD_READ_OID="${PROD_READ_OID:-}" \
+            -v PROD_WRITE_OID="${PROD_WRITE_OID:-}" \
+            -v LOG_READ_OID="${LOG_READ_OID:-}" \
+            -v LOG_WRITE_OID="${LOG_WRITE_OID:-}" \
+            -v QM_READ_OID="${QM_READ_OID:-}" \
+            -v QM_WRITE_OID="${QM_WRITE_OID:-}" \
+            -v SALES_READ_OID="${SALES_READ_OID:-}" \
+            -v SALES_WRITE_OID="${SALES_WRITE_OID:-}" \
+            -v GLOBAL_ADMIN_OID="${GLOBAL_ADMIN_OID:-}" \
+            -i db/seed/31_seed_group_area_rights.sql
 
       - name: Apply views (CREATE OR ALTER)
         shell: bash
-        run: |
-            source $GITHUB_ENV
-            /tmp/run_folder.sh "$VIEWS_DIR"
+        env: 
+          SQLCMDACCESS_TOKEN: ${{ env.SQLCMDACCESS_TOKEN }}
+        run: /tmp/run_folder.sh "$VIEWS_DIR"
 
       - name: Apply postview (optional)
         shell: bash
-        run: |
-            source $GITHUB_ENV
-            /tmp/run_folder.sh "$POSTVIEW_DIR"
+        env: 
+          SQLCMDACCESS_TOKEN: ${{ env.SQLCMDACCESS_TOKEN }}
+        run: /tmp/run_folder.sh "$POSTVIEW_DIR"
 
       - name: Apply postseed (idempotent)
         shell: bash
+        env: 
+          SQLCMDACCESS_TOKEN: ${{ env.SQLCMDACCESS_TOKEN }}
+        run: /tmp/run_folder.sh "$POSTSEED_DIR"
+
+      - name: Close temp firewall hole
+        if: always()
+        shell: bash
         run: |
-            source $GITHUB_ENV
-            /tmp/run_folder.sh "$POSTSEED_DIR"
+          if [[ -n "${RULE:-}" && -n "${SERVER:-}" ]]; then
+            echo "Closing firewall rule '$RULE' on $SERVER in RG $RG"
+            az sql server firewall-rule delete -g "$RG" -s "$SERVER" -n "$RULE" || true
+          else
+            echo "[INFO] Firewall env vars missing; nothing to clean up."
+          fi

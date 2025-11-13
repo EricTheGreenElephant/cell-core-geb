@@ -12,10 +12,33 @@
 #         print(f"[DB ERROR] Failed to fetch user: {e}")
 #         return None
     
-from sqlalchemy import select, insert, update
+from sqlalchemy import select, insert, update, text
+from sqlalchemy.orm import Session
 from db.orm_session import get_session
 from models.users_models import User 
 
+
+def _get_default_department_id(db: Session) -> int:
+    """
+    Returns the id of the preferred default department.
+    Prefers 'GEN' (General); otherwise falls back to any active department.
+    """
+    row = db.execute(
+        text("SELECT TOP (1) id FROM dbo.departments WHERE department_code = :code AND is_active = 1"),
+        {"code": "GEN"},
+    ).first()
+    if row:
+        return int(row.id)
+    
+    row = db.execute(
+        text("SELECT TOP (1) id FROM dbo.departments WHERE is_active = 1 ORDER BY id")
+    ).first()
+    if row:
+        return int(row.id)
+    
+    raise RuntimeError(
+        "No active departments found. Seed at least one department (e.g., 'General')."
+    )
 
 def get_user_by_email(email: str):
     with get_session() as db:
@@ -60,9 +83,12 @@ def upsert_user_by_oid(*, oid: str, upn: str | None, display_name: str | None):
             db.commit()
             return (existing.id, display_name or existing.display_name)
         
+        dept_id = _get_default_department_id(db)
+
         new_id = db.execute(
             insert(User)
             .values(
+                department_id=dept_id,
                 azure_ad_object_id=oid,
                 user_principal_name=(upn or None),
                 display_name=(display_name or (upn or "User")),
