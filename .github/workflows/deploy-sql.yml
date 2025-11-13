@@ -166,7 +166,7 @@ jobs:
                 echo "[INFO] Skipping special param script $base (handled in separate step)."
                 continue
               fi
-              
+
               echo "==> Applying: $f"
               sqlcmd \
                 -S "tcp:$DB_SERVER,1433" \
@@ -230,8 +230,40 @@ jobs:
         env: 
           SQLCMDACCESS_TOKEN: ${{ env.SQLCMDACCESS_TOKEN }}
         run: /tmp/run_folder.sh "$VIEWS_DIR"
+      
+      - name: Check ETL prerequisites for postview
+        id: check_etl
+        shell: bash
+        run: |
+          set -e
+          READY=$(
+            sqlcmd \
+              -S "tcp:$DB_SERVER,1433" \
+              -d "$DB_NAME" \
+              -G \
+              -P "$TOKEN_FILE" \
+              -C \
+              -h -1 -W \
+              -Q "SET NO COUNT ON;
+                  IF EXISTS (
+                    SELECT 1
+                    FROM sys.tables
+                    WHERE name = 'dbo.stg_excel_data'
+                  )
+                    SELECT 1
+                  ELSE
+                    SELECT 0;"
+            | tr -d '\r'
+          )
+          echo "ETL_READY=$READY"
+          if [[ "$READY" == "1" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Apply postview (optional)
+        if: steps.check_etl.outputs.ready == 'true'
         shell: bash
         env: 
           SQLCMDACCESS_TOKEN: ${{ env.SQLCMDACCESS_TOKEN }}
