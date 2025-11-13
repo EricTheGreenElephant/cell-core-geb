@@ -236,6 +236,7 @@ jobs:
         shell: bash
         run: |
           set -e
+
           READY=$(
             sqlcmd \
               -S "tcp:$DB_SERVER,1433" \
@@ -244,17 +245,20 @@ jobs:
               -P "$TOKEN_FILE" \
               -C \
               -h -1 -W \
-              -Q "SET NO COUNT ON;
+              -Q "SET NOCOUNT ON;
                   IF EXISTS (
                     SELECT 1
-                    FROM sys.tables
-                    WHERE name = 'dbo.stg_excel_data'
+                    FROM sys.tables t
+                    JOIN sys.schemas s ON t.schema_id = s.schema_id
+                    WHERE t.name = 'stg_excel_data'
+                      AND s.name = 'dbo'
                   )
                     SELECT 1
                   ELSE
-                    SELECT 0;"
+                    SELECT 0;" \
             | tr -d '\r'
           )
+
           echo "ETL_READY=$READY"
           if [[ "$READY" == "1" ]]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
@@ -265,8 +269,6 @@ jobs:
       - name: Apply postview (optional)
         if: steps.check_etl.outputs.ready == 'true'
         shell: bash
-        env: 
-          SQLCMDACCESS_TOKEN: ${{ env.SQLCMDACCESS_TOKEN }}
         run: /tmp/run_folder.sh "$POSTVIEW_DIR"
 
       - name: Apply postseed (idempotent)
