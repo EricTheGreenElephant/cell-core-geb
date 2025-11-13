@@ -53,15 +53,16 @@ jobs:
       - name: Install sqlcmd (mssql-tools18)
         shell: bash
         run: |
-          set -e
-          sudo apt-get update
-          sudo apt-get install -y curl gnupg apt-transport-https software-properties-common
-          curl https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" | sudo tee /etc/apt/sources.list.d/microsoft-prod.list
+          set -euo pipefail
+          sudo mkdir -p /usr/share/keyrings
+          curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+            | sudo gpg --dearmor --yes -o /usr/share/keyrings/microsoft-prod.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/ubuntu/24.04/prod noble main" \
+            | sudo tee /etc/apt/sources.list.d/microsoft-prod.list > /dev/null
           sudo apt-get update
           sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
-          echo "/opt/mssql-tools18/bin" >> $GITHUB_PATH
-      
+          echo "/opt/mssql-tools18/bin" >> "$GITHUB_PATH"
+
       - name: Set environment (DEV vs PROD)
         shell: bash
         run: |
