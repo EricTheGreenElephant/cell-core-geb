@@ -1,6 +1,6 @@
 import streamlit as st
 from utils.session import require_access, require_login
-from utils.auth import show_user_sidebar
+# from utils.auth import show_user_sidebar
 from components.filaments.filament_form import render_add_filament_form
 from components.filaments.filament_mount_form import render_mount_form
 from components.filaments.filament_unmount_form import render_unmount_form
@@ -38,7 +38,7 @@ if "show_mount_edit_form" not in st.session_state:
 st.title("🧪Filament Management")
 
 # --- User logout ---
-show_user_sidebar()
+# show_user_sidebar()
 
 # --- Login check ---
 require_login()
