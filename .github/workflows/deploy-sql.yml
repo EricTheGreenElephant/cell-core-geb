@@ -95,15 +95,6 @@ jobs:
           TOKEN=$(az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv)
           echo "SQLCMDACCESS_TOKEN=$TOKEN" >> $GITHUB_ENV
 
-      - name: Write SQL access token to file (UTF-16LE)
-        shell: bash
-        env:
-          SQLCMDACCESS_TOKEN: ${{ env.SQLCMDACCESS_TOKEN }}
-        run: |
-          # sqlcmd on Linux expects the token in a UTF-16LE file when used via -P with -G
-          printf "%s" "$SQLCMDACESS_TOKEN" | iconv -f utf-8 -t utf-16le > /tmp/sqltoken
-          echo "SQLTOKEN=/tmp/sqltoken" >> "$GITHUB_ENV"
-
       - name: DNS & TCP probe
         shell: bash
         run: |
@@ -112,12 +103,21 @@ jobs:
           timeout 5 bash -lc 'cat </dev/null >/dev/tcp/'"$DB_SERVER"'/1433' \
             && echo "TCP 1433 reachable" || echo "TCP 1433 NOT reachable"
 
+      - name: Verify sqlcmd + token presence
+        shell: bash
+        env:
+          SQLCMDACCESS_TOKEN: ${{ env.SQLCMDACCESS_TOKEN }}
+        run: |
+          sqlcmd -? | head -n 3
+          echo "Token length: ${#SQLCMDACCESS_TOKEN}"
+          test ${#SQLCMDACCESS_TOKEN} -gt 1000 && echo "Token looks sane." || (echo "Token looks SHORT/empty"; exit 1)
+
       - name: Smoke test connection
         shell: bash
         env:
           SQLCMDACCESS_TOKEN: ${{ env.SQLCMDACCESS_TOKEN }}
         run: |
-            sqlcmd -S "tcp:$DB_SERVER,1433" -d "$DB_NAME" -G -C -P "$SQLTOKEN" -l 30 -b -Q "SELECT SUSER_SNAME(); SELECT DB_NAME();"
+            sqlcmd -S "tcp:$DB_SERVER,1433" -d "$DB_NAME" -G -C -l 30 -b -Q "SELECT SUSER_SNAME(); SELECT DB_NAME();"
       
       - name: Define run_folder function
         shell: bash
@@ -147,7 +147,6 @@ jobs:
                 -d "$DB_NAME" \
                 -G \
                 -C \
-                -P "$SQLTOKEN" \
                 -l 60 \
                 -b \
                 -I \
@@ -187,7 +186,7 @@ jobs:
         env: 
           SQLCMDACCESS_TOKEN: ${{ env.SQLCMDACCESS_TOKEN }}
         run: |
-          sqlcmd -S "tcp:$DB_SERVER,1433" -d "$DB_NAME" -G -C -P "$SQLTOKEN -b -I \
+          sqlcmd -S "tcp:$DB_SERVER,1433" -d "$DB_NAME" -G -C -b -I \
             -v PROD_READ_OID="${PROD_READ_OID:-}" \
             -v PROD_WRITE_OID="${PROD_WRITE_OID:-}" \
             -v LOG_READ_OID="${LOG_READ_OID:-}" \
