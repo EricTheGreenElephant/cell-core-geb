@@ -160,6 +160,13 @@ jobs:
 
             IFS=$'\n' files=($(printf '%s\n' "${files[@]}" | sort))
             for f in "${files[@]}"; do
+              base="$(basename "$f")"
+              
+              if [[ "$base" == "31_seed_group_area_rights.sql" ]]; then
+                echo "[INFO] Skipping special param script $base (handled in separate step)."
+                continue
+              fi
+              
               echo "==> Applying: $f"
               sqlcmd \
                 -S "tcp:$DB_SERVER,1433" \
