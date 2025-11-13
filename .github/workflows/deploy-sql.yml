@@ -92,8 +92,19 @@ jobs:
       - name: Acquire AAD token for Azure SQL (for sqlcmd -G)
         shell: bash
         run: |
+          set -e
+          # Get raw JWT access token for Azure SQL
           TOKEN=$(az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv)
+
+          # Optional: keep in env if you still want the length check step
           echo "SQLCMDACCESS_TOKEN=$TOKEN" >> $GITHUB_ENV
+
+          # Write token to UTF-16LE file for sqlcmd (-G -P <file>)
+          TOKEN_FILE=/tmp/sqltoken
+          printf '%s' "$TOKEN" | iconv -f ascii -t UTF-16LE > "$TOKEN_FILE"
+
+          echo "TOKEN_FILE=$TOKEN_FILE" >> $GITHUB_ENV
+
 
       - name: DNS & TCP probe
         shell: bash
@@ -117,7 +128,15 @@ jobs:
         env:
           SQLCMDACCESS_TOKEN: ${{ env.SQLCMDACCESS_TOKEN }}
         run: |
-            sqlcmd -S "tcp:$DB_SERVER,1433" -d "$DB_NAME" -G -C -l 30 -b -Q "SELECT SUSER_SNAME(); SELECT DB_NAME();"
+          sqlcmd \
+            -S "tcp:$DB_SERVER,1433" \
+            -d "$DB_NAME" \
+            -G \
+            -P "$TOKEN_FILE" \
+            -C \
+            -l 30 \
+            -b \
+            -Q "SELECT SUSER_SNAME(); SELECT DB_NAME();"
       
       - name: Define run_folder function
         shell: bash
@@ -146,6 +165,7 @@ jobs:
                 -S "tcp:$DB_SERVER,1433" \
                 -d "$DB_NAME" \
                 -G \
+                -P "$TOKEN_FILE" \
                 -C \
                 -l 60 \
                 -b \
@@ -186,7 +206,7 @@ jobs:
         env: 
           SQLCMDACCESS_TOKEN: ${{ env.SQLCMDACCESS_TOKEN }}
         run: |
-          sqlcmd -S "tcp:$DB_SERVER,1433" -d "$DB_NAME" -G -C -b -I \
+          sqlcmd -S "tcp:$DB_SERVER,1433" -d "$DB_NAME" -G -P "$TOKEN_FILE" -C -b -I \
             -v PROD_READ_OID="${PROD_READ_OID:-}" \
             -v PROD_WRITE_OID="${PROD_WRITE_OID:-}" \
             -v LOG_READ_OID="${LOG_READ_OID:-}" \
