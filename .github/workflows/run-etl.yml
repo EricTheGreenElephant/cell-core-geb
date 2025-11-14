@@ -14,6 +14,10 @@ permissions:
 jobs:
     etl:
         runs-on: ubuntu-latest
+
+        env: 
+            RG: rg-cellcore-dev
+
         steps:
             - uses: actions/checkout@v4
 
@@ -24,6 +28,21 @@ jobs:
                 tenant-id: ${{ secrets.AZURE_TENANT_ID }}
                 subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
             
+            - name: Open temp firewall for runner IP
+              shell: bash
+              run: |
+                SERVER_FQDN="${{ secrets.AZURE_SQL_SERVER_DEV }}"
+                SERVER="${SERVER_FQDN%%.database.windows.net}"
+                RUNNER_IP=$(curl -4 -s https://api.ipify.org)
+                RULE="gh-elt-${RUNNER_IP//./-}"
+
+                echo "SERVER=$SERVER" >> $GITHUB_ENV
+                echo "RUNNER_IP=$RUNNER_IP" >> $GITHUB_ENV
+                echo "RULE=$RULE" >> $GITHUB_ENV
+
+                echo "Opening firewall rule '$RULE' for $RUNNER_IP on server $SERVER in RG $RG"
+                az sql server firewall-rule list -g "$RG" -s "$SERVER" -o table
+
             - uses: actions/setup-python@v5
               with: { python-version: '3.11' }
 
@@ -56,9 +75,20 @@ jobs:
                 PYTHONPATH: ${{ github.workspace }}
               run: |
                 python -c "import pyodbc, pandas, openpyxl; print('imports OK')"
-                
+
             - name: Run ETL
               env: 
                 PYTHONPATH: ${{ github.workspace }}
               run: |
                 python -X faulthandler etl/one_run_etl.py --smart --excel "${{ github.event.inputs.excel_path }}"
+
+            - name: Close temp firewall hole
+              if: always()
+              shell: bash
+              run: |
+                if i[[ -n "${RULE:-}" && -n "${SERVER:-}" ]]; then
+                    echo "Closing firewall runle '$RULE' on $SERVER in RG $RG"
+                    az sql server firewall-rule delete -g "$RG" -s "$SERVER" -n "$RULE" || true
+                else
+                    echo "[INFO] Firewall env vars missing; nothing to clean up."
+                fi
