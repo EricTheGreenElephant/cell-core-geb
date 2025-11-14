@@ -23,6 +23,8 @@
 BEGIN TRY
   BEGIN TRAN;
 
+  DECLARE @CutoffDate date = '2025-07-17';
+
   IF OBJECT_ID('dbo.etl_harvest_map','U') IS NULL
     THROW 50301, 'etl_harvest_map missing; create it in migrations first.', 1;
 
@@ -31,7 +33,7 @@ BEGIN TRY
   ;WITH Valid AS (
     SELECT
       TRY_CAST(product_id  AS BIGINT)                  AS product_id_bigint,
-      TRY_CAST(filament_id AS BIGINT)                  AS filament_id_bigint, -- validated per your global rule
+      TRY_CAST(filament_id AS BIGINT)                  AS filament_id_bigint, -- validated per global rule
       TRY_CONVERT(DATETIME2, date_harvest)             AS print_date_dt,
       LTRIM(RTRIM(operator_harvest))                   AS operator_trim,
       LTRIM(RTRIM(product))                            AS product_trim
@@ -39,10 +41,11 @@ BEGIN TRY
     WHERE product IN (N'10K', N'6K')
       AND status_quality_check IS NOT NULL
       AND product      IS NOT NULL
-      AND printer      IS NOT NULL         -- still treat missing printer as invalid per your rule
+      AND printer      IS NOT NULL         
       AND date_harvest IS NOT NULL
       AND TRY_CAST(product_id  AS BIGINT) IS NOT NULL
       AND TRY_CAST(filament_id AS BIGINT) IS NOT NULL
+      AND TRY_CONVERT(date, date_harvest) >= @CutoffDate
   ),
   Ranked AS (
     SELECT v.*,

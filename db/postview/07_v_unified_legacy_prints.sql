@@ -20,6 +20,7 @@ WITH ValidStage AS (
       AND TRY_CAST(sed.filament_id AS BIGINT) IS NOT NULL
       AND sed.status_quality_check IS NOT NULL
       AND LTRIM(RTRIM(sed.product)) IN (N'10K', N'6K')
+      AND TRY_CONVERT(date, sed.date_harvest) >= '2025-07-17'
 ),
 Joined AS (
     SELECT

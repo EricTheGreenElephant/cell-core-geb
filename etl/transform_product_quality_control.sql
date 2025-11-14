@@ -33,6 +33,8 @@ SET XACT_ABORT ON;
 BEGIN TRY
   BEGIN TRAN;
 
+  DECLARE @CutoffDate date = '2025-07-17';
+
   /* ---------- 0) Fallback user ---------- */
   DECLARE @fallback_user_id INT =
     (SELECT TOP (1) id FROM dbo.users WITH (READPAST) ORDER BY id);
@@ -82,6 +84,7 @@ BEGIN TRY
       AND sed.weight_check_g IS NOT NULL
       AND sed.pressure_drop_check_mbar IS NOT NULL
       AND LTRIM(RTRIM(sed.product)) IN (N'10K', N'6K')  -- keep same scope
+      AND TRY_CONVERT(date, sed.date_harvest) >= @CutoffDate
   ),
   Mapped AS (
     SELECT
