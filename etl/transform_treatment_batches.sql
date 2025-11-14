@@ -28,6 +28,8 @@ SET XACT_ABORT ON;
 BEGIN TRY
   BEGIN TRAN;
 
+  DECLARE @CutoffDate date = '2025-07-17';
+
   /* ---------- 0) Helper map table (NVARCHAR key) ---------- */
   IF OBJECT_ID('dbo.etl_treatment_map2','U') IS NULL
   BEGIN
@@ -133,6 +135,7 @@ BEGIN TRY
     FROM dbo.stg_excel_data s
     WHERE s.transfer_id IS NOT NULL
       AND s.product_id  IS NOT NULL
+      AND TRY_CONVERT(date, s.date_harvest) >= @CutoffDate
   )
   INSERT INTO #prod(treatment_key, product_tracking_id)
   SELECT DISTINCT

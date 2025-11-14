@@ -1,6 +1,6 @@
 import streamlit as st
 from utils.session import require_access, require_login
-from utils.auth import show_user_sidebar
+# from utils.auth import show_user_sidebar
 from components.logistics.logistics_form import render_logistics_form
 from components.logistics.storage_assignment_form import render_storage_assignment_form
 from components.logistics.storage_audit import render_shelf_stage_mismatch_report
@@ -30,7 +30,7 @@ if "check_expired" not in st.session_state:
 st.title("Logistics")
 
 # --- User logout ---
-show_user_sidebar()
+# show_user_sidebar()
 
 # --- Login Check ---
 require_login()

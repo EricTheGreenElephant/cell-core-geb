@@ -1,9 +1,55 @@
 import os 
+import pyodbc
 import pandas as pd
 from sqlalchemy import create_engine, text 
 from streamlit_app.config import SQLALCHEMY_URL
 
 def make_mssql_engine():
+    """
+    Creates a SQLAlchemy engine.
+
+    - If Azure_SQL_ACCESS_TOKEN is present (e.g., in GitHub Actions),
+      connects using AAD token (no username/password).
+    - Otherwise, falls back to SQLALCHEMY_URL (local dev connection)
+    """
+    aad_token = os.getenv("AZURE_SQL_ACCESS_TOKEN")
+
+    # Cloud / CI path: use AAD access token
+    if aad_token:
+        server = os.getenv("DB_SERVER")
+        dbname = os.getenv("DB_NAME")
+        driver = os.getenv("DB_DRIVER", "ODBC Driver 18 for SQL Server")
+
+        if not server or not dbname:
+            raise RuntimeError(
+                "DB_SERVER and DB_NAME must be set when using AZURE_SQL_ACCESS_TOKEN."
+            )
+        
+        # Standard encrypted ODBC connection string
+        odbc_str = (
+            f"Driver={{{driver}}};"
+            f"Server={server};"
+            f"Database={dbname};"
+            "Encrypt=yes;"
+            "TrustServerCertificate=no;"
+        )
+
+        # Azure tokens must be UTF-16-LE bytes
+        token_bytes = bytes(aad_token, "utf-16-le")
+        SQL_COPT_SS_ACCESS_TOKEN = 1256
+
+        def _creator():
+            return pyodbc.connect(
+                odbc_str,
+                attrs_before={SQL_COPT_SS_ACCESS_TOKEN: token_bytes}
+            )
+        
+        return create_engine(
+            "mssql+pyodbc:///?autocommit=False",
+            creator=_creator,
+            fast_executemany=True,
+            future=True,      
+        )
     return create_engine(
         SQLALCHEMY_URL, 
         fast_executemany=True,

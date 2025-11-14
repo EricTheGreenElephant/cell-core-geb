@@ -16,11 +16,44 @@
 #     except pyodbc.Error as e:
 #         print(f"[ACCESS ERROR] {e}")
 #         return []
-    
+from __future__ import annotations    
 from sqlalchemy import select 
 from db.orm_session import get_session
-from models.lifecycle_stages_models import ApplicationArea, AccessRight
+from models.users_models import GroupAreaRight, ApplicationArea, AccessRight
 
+_ACCESS_ORDER = {"Read": 1, "Write": 2, "Admin": 3}
+
+def get_effective_access(user_id: int, group_oids: list[str]) -> dict[str, str]:
+    """
+    Returns { area_name: access_level } by union of:
+      - user-specific rights (access_rights)
+      - group-derived rights (group_area_rights)
+    with Admin > Write > Read precedence per area.
+    """
+    with get_session() as db:
+        user_rows = db.execute(
+            select(ApplicationArea.area_name, AccessRight.access_level)
+            .join(AccessRight, AccessRight.area_id == ApplicationArea.id)
+            .where(AccessRight.user_id == user_id)
+        ).all()
+
+        group_rows = []
+        if group_oids:
+            group_rows = db.execute(
+                select(ApplicationArea.area_name, GroupAreaRight.access_level)
+                .join(GroupAreaRight, GroupAreaRight.area_id == ApplicationArea.id)
+                .where(GroupAreaRight.group_oid.in_(group_oids))
+            ).all()
+
+        merged: dict[str, str] = {}
+        def better(current: str | None, incoming: str) -> str:
+            if not current: return incoming
+            return incoming if _ACCESS_ORDER[incoming] > _ACCESS_ORDER[current] else current
+        
+        for area, level in user_rows + group_rows:
+            merged[area] = better(merged.get(area), level)
+
+        return merged
 
 def get_user_access(user_id: int) -> dict[str, str]:
     with get_session() as db:
