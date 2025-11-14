@@ -1,7 +1,7 @@
 from __future__ import annotations    
 from sqlalchemy import select 
 from db.orm_session import get_session
-from models.users_models import GroupAreaRight, ApplicationArea, AccessRight
+from models.users_models import GroupAreaRight, ApplicationArea
 
 _ACCESS_ORDER = {"Read": 1, "Write": 2, "Admin": 3}
 
