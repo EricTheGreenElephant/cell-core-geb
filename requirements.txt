@@ -1,5 +1,5 @@
 streamlit
-pyodbc
+pyodbc==4.0.38
 python-dotenv
 pandas
 streamlit-aggrid

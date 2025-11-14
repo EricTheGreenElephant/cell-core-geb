@@ -1,4 +1,5 @@
 import os 
+import struct
 import pyodbc
 import pandas as pd
 from sqlalchemy import create_engine, text 
@@ -36,12 +37,14 @@ def make_mssql_engine():
 
         # Azure tokens must be UTF-16-LE bytes
         token_bytes = bytes(aad_token, "utf-16-le")
+        token_struct = struct.pack(f"<I{len(token_bytes)}s", len(token_bytes), token_bytes)
+
         SQL_COPT_SS_ACCESS_TOKEN = 1256
 
         def _creator():
             return pyodbc.connect(
                 odbc_str,
-                attrs_before={SQL_COPT_SS_ACCESS_TOKEN: token_bytes}
+                attrs_before={SQL_COPT_SS_ACCESS_TOKEN: token_struct}
             )
         
         return create_engine(
