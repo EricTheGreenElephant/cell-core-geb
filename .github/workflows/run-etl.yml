@@ -51,8 +51,14 @@ jobs:
                 echo "DB_NAME=${{ secrets.AZURE_SQL_DATABASE_DEV }}" >> $GITHUB_ENV
                 echo "DB_DRIVER=ODBC Driver 18 for SQL Server" >> $GITHUB_ENV
 
+            - name: Sanity-check critical imports
+              env:
+                PYTHONPATH: ${{ github.workspace }}
+              run: |
+                python -c "import pyodbc, pandas, openpyxl; print('imports OK')"
+                
             - name: Run ETL
               env: 
                 PYTHONPATH: ${{ github.workspace }}
               run: |
-                python etl/one_run_etl.py --smart --excel "${{ github.event.inputs.excel_path }}"
+                python -X faulthandler etl/one_run_etl.py --smart --excel "${{ github.event.inputs.excel_path }}"
