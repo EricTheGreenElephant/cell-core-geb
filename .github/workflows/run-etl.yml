@@ -52,5 +52,7 @@ jobs:
                 echo "DB_DRIVER=ODBC Driver 18 for SQL Server" >> $GITHUB_ENV
 
             - name: Run ETL
+              env: 
+                PYTHONPATH: ${{ github.workspace }}
               run: |
                 python etl/one_run_etl.py --smart --excel "${{ github.event.inputs.excel_path }}"
