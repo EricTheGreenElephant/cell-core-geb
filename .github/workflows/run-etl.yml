@@ -7,6 +7,10 @@ on:
                 required: false 
                 default: "etl/data/20241210_Excel-Tool_4-1_ErSi_Copy2.xlsm"
 
+permissions:
+    id-token: write
+    contents: read
+
 jobs:
     etl:
         runs-on: ubuntu-latest
