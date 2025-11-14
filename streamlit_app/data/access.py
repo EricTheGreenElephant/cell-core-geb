@@ -1,21 +1,3 @@
-# import pyodbc
-# from utils.db import db_connection
-
-# def get_user_access(user_id):
-#     try: 
-#         with db_connection() as conn:
-#             cursor = conn.cursor()
-#             cursor.execute("""
-#                         SELECT a.area_name, ar.access_level
-#                         FROM access_rights ar
-#                         JOIN application_areas a ON a.id = ar.area_id
-#                         WHERE ar.user_id = ? 
-#                         """, (user_id))
-#             rows = cursor.fetchall()
-#             return {row[0]: row[1] for row in rows}
-#     except pyodbc.Error as e:
-#         print(f"[ACCESS ERROR] {e}")
-#         return []
 from __future__ import annotations    
 from sqlalchemy import select 
 from db.orm_session import get_session
@@ -25,41 +7,34 @@ _ACCESS_ORDER = {"Read": 1, "Write": 2, "Admin": 3}
 
 def get_effective_access(user_id: int, group_oids: list[str]) -> dict[str, str]:
     """
-    Returns { area_name: access_level } by union of:
-      - user-specific rights (access_rights)
-      - group-derived rights (group_area_rights)
-    with Admin > Write > Read precedence per area.
+    Returns { area_name: access_level } based *only* on group-derived rights
+    (dbo.group_area_rights), ignoring any legacy per-user access.
     """
     with get_session() as db:
-        user_rows = db.execute(
-            select(ApplicationArea.area_name, AccessRight.access_level)
-            .join(AccessRight, AccessRight.area_id == ApplicationArea.id)
-            .where(AccessRight.user_id == user_id)
+        if not group_oids:
+            return {}
+        
+        rows = db.execute(
+            select(ApplicationArea.area_name, GroupAreaRight.access_level)
+            .join(GroupAreaRight, GroupAreaRight.area_id == ApplicationArea.id)
+            .where(GroupAreaRight.group_oid.in_(group_oids))
         ).all()
-
-        group_rows = []
-        if group_oids:
-            group_rows = db.execute(
-                select(ApplicationArea.area_name, GroupAreaRight.access_level)
-                .join(GroupAreaRight, GroupAreaRight.area_id == ApplicationArea.id)
-                .where(GroupAreaRight.group_oid.in_(group_oids))
-            ).all()
 
         merged: dict[str, str] = {}
+
         def better(current: str | None, incoming: str) -> str:
-            if not current: return incoming
+            if not current:
+                return incoming
             return incoming if _ACCESS_ORDER[incoming] > _ACCESS_ORDER[current] else current
         
-        for area, level in user_rows + group_rows:
-            merged[area] = better(merged.get(area), level)
+        for area_name, level in rows:
+            merged[area_name] = better(merged.get(area_name), level)
 
-        return merged
-
+        return merged 
+    
 def get_user_access(user_id: int) -> dict[str, str]:
-    with get_session() as db:
-        rows = db.execute(
-            select(ApplicationArea.area_name, AccessRight.access_level)
-            .join(AccessRight, AccessRight.area_id == ApplicationArea.id)
-            .where(AccessRight.user_id == user_id)
-        ).all()
-        return {area_name: access_level for area_name, access_level in rows}
+    """
+    Legacy helper; kept if old code still imports it.
+    Returns empty dict
+    """
+    return {}

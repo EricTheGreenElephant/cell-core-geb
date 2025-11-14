@@ -89,8 +89,8 @@ jobs:
               if: always()
               shell: bash
               run: |
-                if i[[ -n "${RULE:-}" && -n "${SERVER:-}" ]]; then
-                    echo "Closing firewall runle '$RULE' on $SERVER in RG $RG"
+                if [[ -n "${RULE:-}" && -n "${SERVER:-}" ]]; then
+                    echo "Closing firewall rule '$RULE' on $SERVER in RG $RG"
                     az sql server firewall-rule delete -g "$RG" -s "$SERVER" -n "$RULE" || true
                 else
                     echo "[INFO] Firewall env vars missing; nothing to clean up."
