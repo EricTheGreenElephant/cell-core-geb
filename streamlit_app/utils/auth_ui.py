@@ -1,6 +1,5 @@
 import urllib.parse
 import streamlit as st
-from typing import Optional, Dict
 from utils.auth import get_current_user
 
 

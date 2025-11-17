@@ -17,7 +17,7 @@ def insert_lids(db: Session, data: LidCreate) -> LidOut:
 
 @transactional
 def get_lid_inventory(db: Session) -> list[dict]:
-    sql = "SELECT * FROM v_lid_inventory ORDER BY received_at DESC"
+    sql = "SELECT * FROM v_lid_inventory WHERE serial_number <> 'LEGACY_SEAL' ORDER BY received_at DESC"
     result = db.execute(text(sql))
     cols = result.keys()
     return [dict(zip(cols, row)) for row in result.fetchall()]

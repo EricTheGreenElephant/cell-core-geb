@@ -7,9 +7,17 @@ on:
                 required: false 
                 default: "etl/data/20241210_Excel-Tool_4-1_ErSi_Copy2.xlsm"
 
+permissions:
+    id-token: write
+    contents: read
+
 jobs:
     etl:
         runs-on: ubuntu-latest
+
+        env: 
+            RG: rg-cellcore-dev
+
         steps:
             - uses: actions/checkout@v4
 
@@ -20,17 +28,37 @@ jobs:
                 tenant-id: ${{ secrets.AZURE_TENANT_ID }}
                 subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
             
+            - name: Open temp firewall for runner IP
+              shell: bash
+              run: |
+                SERVER_FQDN="${{ secrets.AZURE_SQL_SERVER_DEV }}"
+                SERVER="${SERVER_FQDN%%.database.windows.net}"
+                RUNNER_IP=$(curl -4 -s https://api.ipify.org)
+                RULE="gh-elt-${RUNNER_IP//./-}"
+
+                echo "SERVER=$SERVER" >> $GITHUB_ENV
+                echo "RUNNER_IP=$RUNNER_IP" >> $GITHUB_ENV
+                echo "RULE=$RULE" >> $GITHUB_ENV
+
+                echo "Opening firewall rule '$RULE' for $RUNNER_IP on server $SERVER in RG $RG"
+                az sql server firewall-rule create -g "$RG" -s "$SERVER" -n "$RULE" \
+                    --start-ip-address "$RUNNER_IP" --end-ip-address "$RUNNER_IP"
+                echo "Current firewall rules:"
+                az sql server firewall-rule list -g "$RG" -s "$SERVER" -o table
+
             - uses: actions/setup-python@v5
               with: { python-version: '3.11' }
 
             - name: Install system ODBC + msodbcsql18
               run: | 
+                set -euo pipefail
+                sudo mkdir -p /usr/share/keyrings
+                curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+                | sudo gpg --dearmor --yes -o /usr/share/keyrings/microsoft-prod.gpg
+                echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/ubuntu/24.04/prod noble main" \
+                | sudo tee /etc/apt/sources.list.d/microsoft-prod.list > /dev/null
                 sudo apt-get update
-                sudo apt-get install -y unixodbc-dev curl gnupg apt-transport-https
-                curl https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
-                echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" | sudo tee /etc/apt/sources.list.d/microsoft-prod.list
-                sudo apt-get update
-                sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+                sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
 
             - name: Install Python deps
               run: |
@@ -45,6 +73,25 @@ jobs:
                 echo "DB_NAME=${{ secrets.AZURE_SQL_DATABASE_DEV }}" >> $GITHUB_ENV
                 echo "DB_DRIVER=ODBC Driver 18 for SQL Server" >> $GITHUB_ENV
 
-            - name: Run ETL
+            - name: Sanity-check critical imports
+              env:
+                PYTHONPATH: ${{ github.workspace }}
               run: |
-                python etl/one_run_etl.py --smart --excel "${{ github.event.inputs.excel_path }}"
+                python -c "import pyodbc, pandas, openpyxl; print('imports OK')"
+
+            - name: Run ETL
+              env: 
+                PYTHONPATH: ${{ github.workspace }}
+              run: |
+                python -X faulthandler etl/one_run_etl.py --smart --excel "${{ github.event.inputs.excel_path }}"
+
+            - name: Close temp firewall hole
+              if: always()
+              shell: bash
+              run: |
+                if [[ -n "${RULE:-}" && -n "${SERVER:-}" ]]; then
+                    echo "Closing firewall rule '$RULE' on $SERVER in RG $RG"
+                    az sql server firewall-rule delete -g "$RG" -s "$SERVER" -n "$RULE" || true
+                else
+                    echo "[INFO] Firewall env vars missing; nothing to clean up."
+                fi

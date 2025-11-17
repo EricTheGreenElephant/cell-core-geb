@@ -1,5 +1,6 @@
 import streamlit as st
 from utils.session import require_login, require_access
+from utils.auth_ui import render_account_box
 # from utils.auth import show_user_sidebar
 from components.production.status_tracker import render_status_tracker
 from components.production.request_form import render_product_request_form
@@ -27,6 +28,7 @@ st.title("Production Management")
 
 # --- User logout ---
 # show_user_sidebar()
+render_account_box(expanded=True, home_after_logout="/")
 
 # --- Login Check ---
 require_login()

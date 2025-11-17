@@ -33,7 +33,7 @@ def ensure_user_and_access():
     # Resolve groups from headers
     groups = sorted(get_group_oids())
     # Compute effective access map from DB
-    access_map = get_effective_access(user_id=user_id, group_oids=groups)
+    access_map = get_effective_access(group_oids=groups)
 
     # Prime session_state 
     st.session_state["user_id"] = user_id

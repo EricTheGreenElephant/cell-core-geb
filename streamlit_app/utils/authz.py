@@ -1,7 +1,7 @@
 from __future__ import annotations
 import streamlit as st
 from functools import wraps
-from typing import Callable, Iterable
+from typing import Callable
 from utils.access_bootstrap import ensure_user_and_access
 
 

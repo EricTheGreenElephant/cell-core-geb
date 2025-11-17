@@ -17,7 +17,7 @@ def insert_seals(db: Session, data: SealCreate) -> SealOut:
 
 @transactional
 def get_seal_inventory(db: Session) -> list[dict]:
-    sql = "SELECT * FROM v_seal_inventory ORDER BY received_at DESC"
+    sql = "SELECT * FROM v_seal_inventory WHERE serial_number <> 'LEGACY_LID' ORDER BY received_at DESC"
     result = db.execute(text(sql))
     cols = result.keys()
     return [dict(zip(cols, row)) for row in result.fetchall()]

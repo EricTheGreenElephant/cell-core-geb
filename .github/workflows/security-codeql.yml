@@ -2,12 +2,12 @@ name: Security - CodeQL (Python)
 
 on:
   push:
-    branches: [ dev ]
-  pull_request:
-    branches: [ dev ]
-  schedule:
-    - cron: "0 5 * * 1"   # weekly, Mondays 05:00 UTC
-  workflow_dispatch: {}
+#     branches: [ dev ]
+#   pull_request:
+#     branches: [ dev ]
+#   schedule:
+#     - cron: "0 5 * * 1"   # weekly, Mondays 05:00 UTC
+#   workflow_dispatch: {}
 
 permissions:
   contents: read
