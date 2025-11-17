@@ -1,5 +1,6 @@
 import streamlit as st
 from utils.session import require_access, require_login
+from utils.auth_ui import render_account_box
 # from utils.auth import show_user_sidebar
 from components.logistics.logistics_form import render_logistics_form
 from components.logistics.storage_assignment_form import render_storage_assignment_form
@@ -31,6 +32,7 @@ st.title("Logistics")
 
 # --- User logout ---
 # show_user_sidebar()
+render_account_box(expanded=True, home_after_logout="/")
 
 # --- Login Check ---
 require_login()

@@ -1,5 +1,6 @@
 import streamlit as st
 from utils.session import require_login, require_access
+from utils.auth_ui import render_account_box
 # from utils.auth import show_user_sidebar
 from components.logistics.storage_audit import render_shelf_stage_mismatch_report
 from components.common.admin_record_lookup import render_admin_record_lookup
@@ -16,6 +17,7 @@ st.title("Admin Dashboard")
 
 # Show user info and logout
 # show_user_sidebar()
+render_account_box(expanded=True, home_after_logout="/")
 
 # --- Access Control ---
 require_login()

@@ -1,5 +1,6 @@
 import streamlit as st
 from utils.session import require_access, require_login
+from utils.auth_ui import render_account_box
 # from utils.auth import show_user_sidebar
 from components.filaments.filament_form import render_add_filament_form
 from components.filaments.filament_mount_form import render_mount_form
@@ -39,6 +40,7 @@ st.title("🧪Filament Management")
 
 # --- User logout ---
 # show_user_sidebar()
+render_account_box(expanded=True, home_after_logout="/")
 
 # --- Login check ---
 require_login()
