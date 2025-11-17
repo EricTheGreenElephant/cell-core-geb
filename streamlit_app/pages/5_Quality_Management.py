@@ -1,6 +1,7 @@
 import streamlit as st
 from utils.session import require_login, require_access
-from utils.auth import show_user_sidebar
+from utils.auth_ui import render_account_box
+# from utils.auth import show_user_sidebar
 from components.quality_management.product_qm_review_form import render_product_qm_review
 from components.quality_management.quarantine_review_form import render_quarantine_review_form
 from components.quality_management.investigation_review_form import render_investigation_review
@@ -18,7 +19,8 @@ if "view_quarantined_products" not in st.session_state:
 st.title("Quality Management")
 
 # --- User logout ---
-show_user_sidebar()
+# show_user_sidebar()
+render_account_box(expanded=True, home_after_logout="/")
 
 # --- Login Check ---
 require_login()

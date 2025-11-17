@@ -3,7 +3,7 @@ from datetime import datetime
 
 
 class MaterialUsageCreate(BaseModel):
-    product_id: int
+    product_tracking_id: int
     harvest_id: int 
     material_type: str
     lot_number: str
@@ -16,7 +16,7 @@ class MaterialUsageCreate(BaseModel):
 
 class MaterialUsageRead(BaseModel):
     id: int 
-    product_id: int
+    product_tracking_id: int
     harvest_id: int
     material_type: str
     lot_number: str

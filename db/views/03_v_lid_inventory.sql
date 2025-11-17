@@ -9,4 +9,5 @@ SELECT
     s.location_name
 FROM lids l
 LEFT JOIN users u ON l.received_by = u.id
-LEFT JOIN storage_locations s ON l.location_id = s.id;
+LEFT JOIN storage_locations s ON l.location_id = s.id
+WHERE l.serial_number <> 'LEGACY_LID';

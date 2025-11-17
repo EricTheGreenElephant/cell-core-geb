@@ -3,13 +3,15 @@ IF OBJECT_ID('v_product_status', 'V') IS NOT NULL
 GO
 
 CREATE VIEW v_product_status AS
-SELECT pt.id AS product_id,
+SELECT pt.id,
+    pt.product_id,
     lc.stage_name AS current_stage,
     ps.status_name AS current_status,
     loc.location_name,
     pt.last_updated_at,
 
-    ptype.name AS product_type,
+    COALESCE(ptype_pt.name,  ptype_req.name) AS product_type,
+    COALESCE(sku_pt.sku,     sku_req.sku)    AS sku,
 
     ph.id AS harvest_id,
     pr.lot_number,
@@ -35,19 +37,29 @@ SELECT pt.id AS product_id,
 FROM product_tracking pt
 JOIN product_harvest ph ON pt.harvest_id = ph.id
 JOIN product_requests pr ON ph.request_id = pr.id
-JOIN product_types ptype ON pr.product_id = ptype.id
 JOIN users printed_user ON ph.printed_by = printed_user.id
+-- SKU/Type from PRODUCT TRACKING (preferred)
+LEFT JOIN dbo.product_skus  sku_pt
+  ON pt.sku_id = sku_pt.id
+LEFT JOIN dbo.product_types ptype_pt
+  ON sku_pt.product_type_id = ptype_pt.id
+
+-- SKU/Type from REQUEST (fallback)
+LEFT JOIN dbo.product_skus  sku_req
+  ON pr.sku_id = sku_req.id
+LEFT JOIN dbo.product_types ptype_req
+  ON sku_req.product_type_id = ptype_req.id
 
 LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
 LEFT JOIN product_statuses ps ON pt.current_status_id = ps.id
-LEFT JOIN product_quality_control qc ON qc.product_id = pt.id
-LEFT JOIN treatment_batch_products tbi ON tbi.product_id = pt.id
-LEFT JOIN post_treatment_inspections pti ON pti.product_id = pt.id
-LEFT JOIN shipment_items si ON si.product_id = pt.id
+LEFT JOIN product_quality_control qc ON qc.product_tracking_id = pt.id
+LEFT JOIN treatment_batch_products tbi ON tbi.product_tracking_id = pt.id
+LEFT JOIN post_treatment_inspections pti ON pti.product_tracking_id = pt.id
+LEFT JOIN shipment_unit_items si ON si.product_tracking_id = pt.id
 LEFT JOIN shipments s ON si.shipment_id = s.id
 LEFT JOIN lids l ON ph.lid_id = l.id
 LEFT JOIN users qc_user ON qc.inspected_by = qc_user.id
 LEFT JOIN filament_mounting fm ON ph.filament_mounting_id = fm.id
-LEFT JOIN filaments f ON fm.filament_id = f.id
+LEFT JOIN filaments f ON fm.filament_tracking_id = f.id
 LEFT JOIN printers p ON fm.printer_id = p.id
 LEFT JOIN storage_locations loc ON pt.location_id = loc.id

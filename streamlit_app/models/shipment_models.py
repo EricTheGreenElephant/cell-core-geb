@@ -21,16 +21,28 @@ class Shipment(Base):
     carrier = Column(String(5))
     notes = Column(String(255))
 
-    items = relationship("ShipmentItem", back_populates="shipment")
+    unit_items = relationship("ShipmentUnitItems", back_populates="shipments", cascade="all, delete-orphan")
+    sku_items = relationship("ShipmentSKUItems", back_populates="shipments", cascade="all, delete-orphan")
 
 
-class ShipmentItem(Base):
-    __tablename__ = "shipment_items"
+class ShipmentUnitItems(Base):
+    __tablename__ = "shipment_unit_items"
+    
+    id = Column(Integer, primary_key=True)
+    shipment_id = Column(Integer, ForeignKey("shipments.id"), nullable=False)
+    product_tracking_id = Column(Integer, ForeignKey("product_tracking.id"), nullable=False)
+
+    shipments = relationship("Shipment", back_populates="unit_items")
+    product = relationship("ProductTracking")
+
+class ShipmentSKUItems(Base):
+    __tablename__ = "shipment_sku_items"
 
     id = Column(Integer, primary_key=True)
     shipment_id = Column(Integer, ForeignKey("shipments.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("product_tracking.id"), nullable=False)
+    product_sku_id = Column(Integer, ForeignKey("product_skus.id"), nullable=False)
     quantity = Column(Integer, nullable=False)
 
-    shipment = relationship("Shipment", back_populates="items")
+    shipments = relationship("Shipment", back_populates="sku_items")
+    product_sku = relationship("ProductSKU")
     

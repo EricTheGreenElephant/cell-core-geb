@@ -1,6 +1,11 @@
 import time
 import streamlit as st
-from services.logistics_services import get_qc_products_needing_storage, assign_storage_to_products, get_post_treatment_products_needing_storage
+from services.logistics_services import (
+    get_qc_products_needing_storage, 
+    assign_storage_to_products, 
+    get_post_treatment_products_needing_storage,
+    get_adhoc_products_needing_storage
+)
 from services.filament_service import get_storage_locations
 from constants.storage_constants import NEXT_STAGE_BY_RESULT, SHELF_OPTIONS_BY_RESULT
 from constants.product_status_constants import STATUS_MAP_QC_TO_BUSINESS
@@ -21,16 +26,18 @@ def render_storage_assignment_form():
 
     mode = st.selectbox(
         "Select Storage Assignment Mode",
-        options=["Post-Harvest QC", "Post-Treatment QC"]
+        options=["Post-Harvest QC", "Post-Treatment QC", "AdHoc Quarantine"]
     )
 
     try:
         with get_session() as db:
-            products = (
-                get_qc_products_needing_storage(db)
-                if mode == "Post-Harvest QC"
-                else get_post_treatment_products_needing_storage(db)
-            )
+            if mode == "Post-Harvest QC":
+                products = get_qc_products_needing_storage(db)
+            elif mode == "Post-Treatment QC":
+                products = get_post_treatment_products_needing_storage(db)
+            else:
+                products = get_adhoc_products_needing_storage(db)
+
             locations = get_storage_locations(db)
 
         if not products:
@@ -57,7 +64,7 @@ def render_storage_assignment_form():
                     if any(keyword in loc.description for keyword in allowed_keywords)
                 ]
 
-                label = f"#{prod.product_id} - {prod.product_type} ({business_status})"
+                label = f"#{prod.product_id} - {prod.sku} - {prod.sku_name} ({business_status})"
                 selected_shelf = st.selectbox(
                     label,
                     options=valid_shelves,
@@ -77,8 +84,10 @@ def render_storage_assignment_form():
                         (pid, loc_id, stage_code)
                         for pid, (loc_id, stage_code) in product_selections.items()
                     ]
+                    update_stage = False if mode == "AdHoc Quarantine" else True
+                    
                     with get_session() as db:
-                        assign_storage_to_products(db, assignments, user_id)
+                        assign_storage_to_products(db, assignments, user_id, update_stage=update_stage)
 
                     st.success("Storage assignment complete.")
                     time.sleep(1.5)

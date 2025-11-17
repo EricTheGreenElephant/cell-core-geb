@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Computed
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Computed, BigInteger, text
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from db.base import Base
@@ -7,6 +7,7 @@ from db.base import Base
 class Filament(Base):
     __tablename__ = 'filaments'
     id = Column(Integer, primary_key=True)
+    filament_id = Column(BigInteger, unique=True, nullable=False, index=True, server_default=text("NEXT VALUE FOR dbo.filament_id_seq"))
     lot_number = Column(String, nullable=False)
     serial_number = Column(String, nullable=False)
     weight_grams = Column(Float, nullable=False)
@@ -24,7 +25,7 @@ class Filament(Base):
 class FilamentMounting(Base):
     __tablename__ = 'filament_mounting'
     id = Column(Integer, primary_key=True)
-    filament_id = Column(Integer, ForeignKey('filaments.id'))
+    filament_tracking_id = Column(Integer, ForeignKey('filaments.id'))
     printer_id = Column(Integer, ForeignKey('printers.id'))
     mounted_by = Column(Integer, ForeignKey('users.id'))
     remaining_weight = Column(Float)
@@ -42,7 +43,7 @@ class FilamentMounting(Base):
 class FilamentAcclimatization(Base):
     __tablename__ = 'filament_acclimatization'
     id = Column(Integer, primary_key=True)
-    filament_id = Column(Integer, ForeignKey('filaments.id'))
+    filament_tracking_id = Column(Integer, ForeignKey('filaments.id'))
     status = Column(String)
     moved_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     moved_by = Column(Integer, ForeignKey('users.id'))

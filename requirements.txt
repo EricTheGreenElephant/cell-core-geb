@@ -1,8 +1,13 @@
 streamlit
-pyodbc
+pyodbc==4.0.38
 python-dotenv
 pandas
 streamlit-aggrid
 pydantic
 SQLAlchemy
 qrcode
+azure-identity
+pyjwt
+streamlit-js-eval
+requests
+openpyxl

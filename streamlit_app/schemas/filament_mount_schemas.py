@@ -7,7 +7,7 @@ from schemas.printer_schemas import PrinterOut
 
 class FilamentMountOut(BaseModel):
     id: int
-    filament_id: int
+    filament_tracking_id: int
     printer_id: int
     mounted_by: int
     remaining_weight: float

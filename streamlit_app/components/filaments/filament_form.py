@@ -38,8 +38,16 @@ def render_add_filament_form():
 
     # Creates the form display with inputs
     with st.form("add_filament_form"):
-        lot_number = st.text_input("Lot Number", max_chars=100).strip()
-        serial_number = st.text_input("Serial Number", max_chars=100).strip()
+        lot_number = st.text_input(
+            "Lot Number", 
+            max_chars=100, 
+            help="Enter number that proceeds unique ID, for example, 57668-f01-14 would be 57668."
+        ).strip()
+        serial_number = st.text_input(
+            "Serial Number", 
+            max_chars=100, 
+            help="Enter the full serial number, including lot, for example, 57668-f01-14"
+        ).strip()
         weight_grams = st.number_input("Initial Weight (g)", min_value=0.0, format="%.2f")
         location_label = st.selectbox("Storage Location", list(location_options.keys()))
         qc_result = st.selectbox("QC Result", ["PASS", "FAIL"])

@@ -3,7 +3,7 @@ from typing import List
 
 
 class SalesCatalogueProductOut(BaseModel):
-    product_id: int
+    product_tracking_id: int
     product_quantity: int
 
     model_config = ConfigDict(from_attributes=True)

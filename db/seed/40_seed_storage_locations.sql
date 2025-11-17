@@ -1,7 +1,5 @@
-IF NOT EXISTS(SELECT 1 FROM storage_locations)
-BEGIN
-    INSERT INTO storage_locations(location_name, location_type, description)
-    VALUES
+MERGE dbo.storage_locations AS tgt
+USING (VALUES
         ('2250', 'Shelf', 'Filament; Production Room'),
         ('2253', 'Shelf', 'Filament; Inventory Room'),
         ('2254', 'Shelf', 'Filament; Inventory Room'),
@@ -22,6 +20,9 @@ BEGIN
         ('2311', 'Shelf', 'CellScrew; Internal Use'),
         ('A', 'Room', 'Lids'),
         ('Offsite', 'Offsite', 'Treatment/Partner/Customer'),
-        ('Waste', 'Waste', 'Disposed Product');
-        
-END;
+        ('Waste', 'Waste', 'Disposed Product')
+) AS src(location_name, location_type, description)
+ON tgt.location_name = src.location_name
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (location_name, location_type, description, is_active)
+    VALUES (src.location_name, src.location_type, src.description, 1);

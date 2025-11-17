@@ -4,7 +4,8 @@ import time
 from services.shipment_services import (
     get_open_order_headers,
     get_open_orders_with_items, 
-    get_fifo_inventory_by_type, 
+    build_unit_requirements,
+    get_fifo_inventory_by_sku, 
     create_shipment_from_order,
     cancel_order_request
 )
@@ -47,8 +48,9 @@ def render_shipment_batch_form():
 
     with get_session() as db:
         details = get_open_orders_with_items(db, selected_order_id)
+        unit_need = build_unit_requirements(db, details["items"])
     
-    if not details:
+    if not unit_need:
         st.error("No open sales orders available for fulfillment.")
         return
 
@@ -61,90 +63,83 @@ def render_shipment_batch_form():
         st.markdown(f"**Parent Order:** {selected_order['parent_order_id']}")
     st.markdown("---")
 
-    # === Display Supplements Requested ===
-    supplements = details.get("supplements", [])
-    if supplements:
-        st.markdown("**Requested Supplement Items:**")
-        for s in supplements:
-            st.markdown(f"- {s['supplement_name']}: {s['quantity']}")
-        st.markdown("---")
-    
-    # === Inventory Fulfillment Logic ===
-    all_selected_products = {}
-    invalid_fulfillments = []
+    # === Display lines as ordered ===
+    picked_by_sku: dict[int, list[dict]] = {}
+    non_serialized_counts: dict[int, int] = {}
+    invalid_skus: list[str] = []
 
-    for item in details["items"]:
-        product_type = item["product_type"]
-        quantity_needed = item["quantity"]
+    for sku_id, meta in unit_need.items():
+        required = int(meta["required_units"])
+        order_qty = int(meta["order_qty"])
+        is_serialized = bool(meta["is_serialized"])
+        is_bundle = bool(meta["is_bundle"])
+        requires_picking = is_serialized or is_bundle
 
-        st.markdown(f"#### {product_type} ({quantity_needed} requested)")
+        sku_label = f"{meta['sku']} - {meta['sku_name']}"
+        st.markdown(f"#### {sku_label} (need {required})")
+
+        if not requires_picking:
+            st.info("Non-serialized item - no unit picking required.")
+            st.markdown(f"*Quantity to ship:* **{order_qty}**")
+            non_serialized_counts[sku_id] = order_qty
+            picked_by_sku[sku_id] = []
+            st.markdown("---")
+            continue
+        
+        st.markdown(f"#### {sku_label} (need {required} unit{'s' if required != 1 else ''})")
 
         with get_session() as db:
-            fifo_inventory = get_fifo_inventory_by_type(db, product_type, quantity_needed)
+            fifo = get_fifo_inventory_by_sku(db, sku_id=sku_id, limit=required)
 
-        if not fifo_inventory:
-            st.warning(f"No available inventory for {product_type}.")
-            all_selected_products[product_type] = []
-            invalid_fulfillments.append(product_type)
-            continue
+        if fifo and len(fifo) > 0:
+            st.markdown("*Auto-selected by FIFO*")
+            st.data_editor(pd.DataFrame(fifo), hide_index=True, num_rows="fixed", disabled=True, key=f"fifo_{sku_id}")
+        else:
+            st.warning(f"No available inventory found for {meta['sku']}.")
 
-        override = st.checkbox(f"Manual override for {product_type}", key=f"override_{product_type}")
+        override = st.checkbox(f"Manual override for {meta['sku']}", key=f"ovr_{sku_id}")
 
         if override:
             with get_session() as db:
-                all_inventory = get_fifo_inventory_by_type(db, product_type, 100)
+                all_inv = get_fifo_inventory_by_sku(db, sku_id=sku_id, limit=500)
 
-            option_labels = [
-                f"#{p['product_id']} | {p['print_date'].strftime('%Y-%m-%d')}" for p in all_inventory
-            ]
-            product_lookup = {label: p for label, p in zip(option_labels, all_inventory)}
+            options = [f"#{u['product_id']} | {u['print_date'].strftime('%Y-%d-%m')}" for u in all_inv]
+            lookup = {lbl: u for lbl, u in zip(options, all_inv)}
+            default = options[:required] if options else []
 
-            selected_options = st.multiselect(
-                f"Select products manually for {product_type}",
-                options=option_labels,
-                default=option_labels[:quantity_needed],
-                key=f"manual_{product_type}"
-            )
-
-            selected_inventory = [product_lookup[label] for label in selected_options]
-            if len(selected_inventory) != quantity_needed:
-                invalid_fulfillments.append(product_type)
-
-            df = pd.DataFrame(selected_inventory)
-            st.data_editor(df, hide_index=True, num_rows='fixed', key=f"manual_table_{product_type}")
+            chosen = st.multiselect(f"Pick {required} unit(s) for {meta['sku']}", options=options, default=default, key=f"ms_{sku_id}")
+            chosen_units = [lookup[x] for x in chosen]
+            if len(chosen_units) != required:
+                invalid_skus.append(meta["sku"])
+            picked_by_sku[sku_id] = chosen_units
         else:
-            selected_inventory = fifo_inventory
-            if len(selected_inventory) != quantity_needed:
-                invalid_fulfillments.append(product_type)
+            picked_by_sku[sku_id] = fifo or []
+            if len(picked_by_sku[sku_id]) != required:
+                invalid_skus.append(meta["sku"])
+        
+        st.markdown("---")
 
-            st.markdown("*Auto-selected by FIFO*")
-            df = pd.DataFrame(fifo_inventory)
-            st.data_editor(df, hide_index=True, num_rows="fixed", disabled=True, key=f"fifo_{product_type}")
+    notes = st.text_area("Notes (Required if canceling order):", max_chars=255).strip()
 
-        all_selected_products[product_type] = selected_inventory
-
-    notes = st.text_area(label="Notes (Required if canceling order):", max_chars=255)
-
-    # === Action Buttons ===
     user_id = st.session_state.get("user_id")
     col1, col2 = st.columns([1, 1])
 
     with col1:
-        canceled = st.button("Cancel Order Request", type="secondary", use_container_width=True)
+        canceled = st.button("Cancel Order Request", type="secondary", width='stretch')
     with col2:
-        submitted = st.button("Create Shipment", type="primary", use_container_width=True)
-    
-    # === Cancel Logic ===
+        submitted = st.button("Create Shipment", type="primary", width='stretch')
+
     if canceled:
         if not notes:
             st.warning("Notes required for a canceled order request!")
             return
+        
         try:
             with get_session() as db:
                 cancel_order_request(
-                    db=db, 
-                    order_id=selected_order_id, 
-                    user_id=user_id, 
+                    db=db,
+                    order_id=selected_order_id,
+                    user_id=user_id,
                     notes=notes,
                     old_status=selected_order["status"],
                     old_updated_by=selected_order["updated_by"],
@@ -157,12 +152,10 @@ def render_shipment_batch_form():
             st.error("Failed to cancel request.")
             st.exception(e)
 
-    # === Submission Logic ===
     if submitted:
-        if invalid_fulfillments:
-            st.error(f"Shipment cannot be created. These product types are incomplete: {', '.join(invalid_fulfillments)}")
+        if invalid_skus:
+            st.error("Shipment cannot be created. Incomplete component picks: " + ", ".join(invalid_skus))
             return
-
         try:
             with get_session() as db:
                 create_shipment_from_order(
@@ -171,7 +164,8 @@ def render_shipment_batch_form():
                     customer_id=selected_order["customer_id"],
                     creator_id=user_id,
                     updated_by=user_id,
-                    selected_products_by_type=all_selected_products,
+                    picked_by_component=picked_by_sku,
+                    non_serialized_counts=non_serialized_counts,
                     notes=notes
                 )
             st.success("Shipment created successfully.")

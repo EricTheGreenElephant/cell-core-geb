@@ -3,7 +3,8 @@ from components.lids_seals.lids_seals_inventory_form import render_lids_seals_in
 from components.lids_seals.lids_seals_add_form import render_add_lid_seal_form
 from components.lids_seals.lids_seals_edit_form import render_edit_lid_form
 from utils.session import require_access, require_login
-from utils.auth import show_user_sidebar
+from utils.auth_ui import render_account_box
+# from utils.auth import show_user_sidebar
 
 
 OPTIONS = ["Select an option...", "Lid", "Seal"]
@@ -11,7 +12,8 @@ OPTIONS = ["Select an option...", "Lid", "Seal"]
 st.title("Lids and Seals")
 
 # --- User logout ---
-show_user_sidebar()
+# show_user_sidebar()
+render_account_box(expanded=True, home_after_logout="/")
 
 # --- Login Check ---
 require_login()

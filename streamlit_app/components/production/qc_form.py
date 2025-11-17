@@ -1,6 +1,8 @@
 import streamlit as st
 import time
+from constants.general_constants import COLOR_MAP
 from services.qc_services import get_printed_products, insert_product_qc
+from services.reasons_services import get_reasons_for_context, filter_reasons_by_outcome
 from schemas.qc_schemas import ProductQCInput
 from db.orm_session import get_session
 
@@ -15,15 +17,18 @@ def render_qc_form():
         return
     
     product_map = {
-        f"#{p['product_id']} - {p['product_type']} (Lot: {p['lot_number']})": p
+        f"#{p['product_id']} | {p['sku']} - {p['sku_name']} (Lot: {p['lot_number']})": p
         for p in printed
     }
 
     selection = st.selectbox("Select Product for QC", list(product_map.keys()))
     selected = product_map[selection]
 
-    avg_weight = selected["average_weight"]
-    tolerance = selected["buffer_weight"]
+    with get_session() as db:
+        reason_rows = get_reasons_for_context(db, "HarvestQC")
+
+    avg_weight = float(selected["average_weight_g"] or 0)
+    tolerance = float(selected["weight_buffer_g"] or 0)
     weight_low = avg_weight - tolerance
     weight_high = avg_weight + tolerance
 
@@ -31,16 +36,14 @@ def render_qc_form():
     st.markdown(f"**Accepted Range:** {weight_low:.2f}g to {weight_high:.2f}g")
 
     weight = st.number_input("Measured Weight (g)", min_value=0.0, format="%.2f", key=f"hqc_weight_{selected['product_id']}")
+
+    st.markdown("**Pressure Testing parameters:**")
+    st.markdown("* 500 mbar ± 100 mbar")
+    st.markdown("* 6 mbar tolerance")
+    st.markdown("* 30 second measurement time")
+
     pressure = st.number_input("Pressure Drop (mbar)", min_value=0.0, format="%.2f", key=f"hqc_pressure_{selected['product_id']}")
     visual = st.radio("Visual Check", ["Pass", "Fail"], key=f"hqc_visual_{selected['product_id']}")
-
-    # Conditional formatting for result
-    color_map = {
-        "Passed": "green",
-        "B-Ware": "orange",
-        "Quarantine": "blue",
-        "Waste": "red"
-    }
 
     # Validation messages
     result = "Passed"
@@ -48,21 +51,40 @@ def render_qc_form():
         if weight < weight_low or weight > weight_high:
             st.error("Weight outside acceptable range.")
             result = "B-Ware"
-    if visual == "Fail":
-        # Manual choice after visual inspection fail
-        st.markdown("###### *** Visual inspection fail requires manual selection. ***")
-        result = st.selectbox("Inspection Result:", ["B-Ware", "Quarantine"])
+
     if pressure >= 6:
         st.error("Pressure above the acceptable tolerance.")
         result = "Waste"
 
+    chosen_reason_ids: list[int] = []
+    notes_placholder = ""
+
+    if visual == "Fail" and result != "Waste":
+        st.markdown("##### *** Visual inspection fail requires manual selection. ***")
+
+        result = st.selectbox("Inspection Result:", ["B-Ware", "Quarantine"], key=f"hqc_visfail_result_{selected['product_id']}")
+        filtered_reasons = filter_reasons_by_outcome(reason_rows, result)
+        reason_options = {f"{r['reason_label']} [{r['category']}]": r["id"] for r in filtered_reasons}
+
+        chosen_reason_labels = st.multiselect(
+            "Reason(s) for failure",
+            options=list(reason_options.keys()),
+            key=f"hqc_visfail_reasons_{selected['product_id']}"
+        )
+        chosen_reason_ids = [reason_options[label] for label in chosen_reason_labels]
+        notes_placholder = "; ".join(chosen_reason_labels)
+
     # Set conditional color 
-    color = color_map.get(result, "black")
+    color = COLOR_MAP.get(result, "black")
 
     st.markdown(f"<p><strong>Final QC Result:</strong> <span style='color:{color}'>{result}</span></p>", unsafe_allow_html=True)
+    if result == "B-Ware":
+        st.info("Please don't forget to indicate B-Ware on the label!")
+    elif result == "Waste":
+        st.info("Please don't forget to indicate Waste on the label!")
     
     with st.form("qc_form"):       
-        notes = st.text_area("Notes (optional)", max_chars=255, key=f"hqc_notes_{selected['product_id']}")
+        notes = st.text_area("Notes (optional)", value=notes_placholder, max_chars=255, key=f"hqc_notes_{selected['product_id']}").strip()
 
         submitted = st.form_submit_button("Submit QC")
 
@@ -70,16 +92,20 @@ def render_qc_form():
             if weight == 0.0 or pressure == 0.0:
                 st.warning("Please enter a valid weight and pressure before submitting.")
             else:
+                if visual == "Fail" and result == "B-Ware" and not notes.strip():
+                    st.error("Notes are required when selecting B-Ware due to a Visual Fail.")
+                    return
                 try:
                     user_id = st.session_state.get("user_id")
                     payload = ProductQCInput(
-                        product_id=selected["product_id"],
+                        product_tracking_id=selected["id"],
                         inspected_by=user_id,
                         weight_grams=weight,
                         pressure_drop=pressure,
                         visual_pass=(visual == "Pass"),
                         inspection_result=result,
-                        notes=notes
+                        notes=notes,
+                        reason_ids=chosen_reason_ids
                     )
                     with get_session() as db:
                         insert_product_qc(db=db, data=payload)

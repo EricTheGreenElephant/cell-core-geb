@@ -11,15 +11,13 @@ def load_product_status_data():
     
 def render_status_tracker():
     st.subheader("Product Status Tracker")
-
-    if refresh_cache("Refresh Product List", key="refresh_status"):
+    help_text = "Auf Deutsch: Daten Aktualisieren"
+    if refresh_cache("Refresh Product List", help=help_text, key="refresh_status"):
         load_product_status_data.clear()
 
     try:
-        # with get_session() as db:
-            # status_data = get_all_product_status(db)
         status_data = load_product_status_data()
-        st.dataframe(status_data, use_container_width=True)
+        st.dataframe(status_data, width='stretch')
     except Exception as e:
         st.error("Could not load product status.")
         st.exception(e)

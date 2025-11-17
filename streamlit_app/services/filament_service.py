@@ -43,12 +43,9 @@ def get_all_filament_statuses(db: Session) -> list[dict]:
 @transactional
 def get_filaments_not_acclimatizing(db: Session) -> list[dict]:
     sql = """
-        SELECT f.id, f.serial_number
-        FROM filaments f
-        WHERE f.qc_result = 'PASS'
-        AND f.id NOT IN (
-            SELECT filament_id FROM filament_acclimatization
-        )
+        SELECT id, serial_number FROM v_filament_status
+        WHERE qc_result = 'PASS'
+        AND current_status = 'In Storage';
     """
     result = db.execute(text(sql))
     cols = result.keys()
@@ -57,7 +54,7 @@ def get_filaments_not_acclimatizing(db: Session) -> list[dict]:
 @transactional
 def insert_filament_acclimatization(db: Session, filament_id: int, user_id: int):
     accl = FilamentAcclimatization(
-        filament_id=filament_id,
+        filament_tracking_id=filament_id,
         status="Acclimatizing",
         moved_at=datetime.now(timezone.utc),
         moved_by=user_id
@@ -71,12 +68,12 @@ def get_acclimatized_filaments(db: Session) -> list[dict]:
         SELECT f.id, f.serial_number, f.weight_grams,
             a.id AS acclimatization_id, a.ready_at, loc.location_name
         FROM filament_acclimatization a
-        JOIN filaments f ON a.filament_id = f.id
+        JOIN filaments f ON a.filament_tracking_id = f.id
         JOIN storage_locations loc ON f.location_id = loc.id
         WHERE a.ready_at <= GETDATE()
         AND a.status = 'Acclimatizing'
         AND NOT EXISTS (
-            SELECT 1 FROM filament_mounting m WHERE m.filament_id = f.id
+            SELECT 1 FROM filament_mounting m WHERE m.filament_tracking_id = f.id
         )
         ORDER BY a.ready_at ASC
     """
@@ -90,11 +87,11 @@ def restore_acclimatizing_filaments(db: Session) -> list[dict]:
         SELECT f.id, f.serial_number, f.weight_grams,
             a.id AS acclimatization_id, a.ready_at, loc.location_name
         FROM filament_acclimatization a
-        JOIN filaments f ON a.filament_id = f.id
+        JOIN filaments f ON a.filament_tracking_id = f.id
         JOIN storage_locations loc ON f.location_id = loc.id
         WHERE a.status = 'Acclimatizing'
         AND NOT EXISTS (
-            SELECT 1 FROM filament_mounting m WHERE m.filament_id = f.id
+            SELECT 1 FROM filament_mounting m WHERE m.filament_tracking_id = f.id
         )
         ORDER BY a.ready_at ASC
     """
@@ -126,7 +123,7 @@ def insert_filament_mount(
         raise ValueError("Filament not found")
     
     mounting = FilamentMounting(
-        filament_id=filament_id,
+        filament_tracking_id=filament_id,
         printer_id=printer_id,
         mounted_by=mounted_by,
         remaining_weight=filament.weight_grams,
@@ -151,9 +148,9 @@ def get_mounted_filaments(db: Session) -> list[dict]:
             p.name AS printer_name,
             fm.remaining_weight
         FROM filament_mounting fm
-        JOIN filaments f ON fm.filament_id = f.id
+        JOIN filaments f ON fm.filament_tracking_id = f.id
         JOIN printers p ON fm.printer_id = p.id
-        WHERE fm.unmounted_at IS NULL
+        WHERE fm.status = 'In Use'
         ORDER BY p.name
     """
     result = db.execute(text(sql))
@@ -183,10 +180,10 @@ def get_mountable_filament_mounts(db: Session, required_weight: float) -> list[d
             p.name AS printer_name,
             fm.remaining_weight
         FROM filament_mounting fm
-        JOIN filaments f ON fm.printer_id = f.id
+        JOIN filaments f ON fm.filament_tracking_id = f.id
         JOIN printers p ON fm.printer_id = p.id
         WHERE fm.remaining_weight >= :weight
-            AND fm.unmounted_at IS NULL
+            AND fm.status = 'In Use'
     """
     result = db.execute(text(sql), {"weight": required_weight})
     cols = result.keys()

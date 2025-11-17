@@ -26,7 +26,7 @@ def render_product_qm_review():
         target_stage_func = approve_products_for_treatment
 
     else:
-        stage_label = "Stored; Pending QM Approval for Sales"
+        stage_label = "Stored; Pending QM Approval"
         target_stage_func = approve_products_for_sales
 
     try:
@@ -47,12 +47,12 @@ def render_product_qm_review():
         return
     
     data_rows = [p.model_dump() for p in products]
-    st.dataframe(data_rows, use_container_width=True)
+    st.dataframe(data_rows, width='stretch')
 
     eligible_products = [
         p for p in products if p.current_stage_name == stage_label
     ]
-    eligible_product_ids = [{"pid": p.product_id, "result": p.inspection_result} for p in eligible_products]
+    eligible_product_ids = [{"pid": p.product_tracking_id, "result": p.inspection_result} for p in eligible_products]
 
     if eligible_product_ids:
         st.write(f"Eligible for Approval: {len(eligible_product_ids)} product(s).")
@@ -69,17 +69,18 @@ def render_product_qm_review():
                 st.exception(e)
 
     for p in products:
-        with st.expander(f"Product {p.product_id}"):
-            st.write(f"Current Stage: {p.current_stage_name}")
-            st.write(f"Product Type: {p.product_type_name}")
-            st.write(f"Inspection Result: {p.inspection_result}")
+        with st.expander(f"**Product:** {p.product_id}"):
+            st.write(f"**Current Stage:** {p.current_stage_name}")
+            st.write(f"**Product SKU:** {p.sku}")
+            st.write(f"**SKU Description:** {p.sku_name}")
+            st.write(f"**Inspection Result:** {p.inspection_result}")
 
             if approval_type == "Post-Treatment Approval":
-                st.write(f"Visual Pass: {p.visual_pass}")
-                st.write(f"Surface Treated: {p.surface_treated}")
-                st.write(f"Sterilized: {p.sterilized}")
+                st.write(f"**Visual Pass:** {p.visual_pass}")
+                st.write(f"**Surface Treated:** {p.surface_treated}")
+                st.write(f"**Sterilized:** {p.sterilized}")
             
-            st.write(f"Location: {p.current_location}")
+            st.write(f"**Location:** {p.current_location}")
 
             reason = st.text_area(
                     f"Comment (required if declining)",
@@ -99,7 +100,7 @@ def render_product_qm_review():
                             with get_session() as db:
                                 target_stage_func(
                                     db=db,
-                                    products=[{"pid": p.product_id, "result": p.inspection_result, "reason": reason}], 
+                                    products=[{"pid": p.product_tracking_id, "result": p.inspection_result, "reason": reason}], 
                                     user_id=user_id
                                 )
                             st.success(f"Product {p.product_id} approved.")
@@ -119,7 +120,7 @@ def render_product_qm_review():
                             with get_session() as db:
                                 decline_products_for_disposal(
                                     db=db, 
-                                    products=[{"pid": p.product_id, "result": "Waste"}],
+                                    products=[{"pid": p.product_tracking_id, "result": "Waste"}],
                                     comment=reason,
                                     user_id=user_id
                                 )

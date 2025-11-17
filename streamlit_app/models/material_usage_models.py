@@ -8,7 +8,7 @@ class MaterialUsage(Base):
     __tablename__ = "material_usage"
 
     id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, ForeignKey("product_tracking.id"), nullable=False)
+    product_tracking_id = Column(Integer, ForeignKey("product_tracking.id"), nullable=False)
     harvest_id = Column(Integer, ForeignKey("product_harvest.id"), nullable=False)
     material_type = Column(String(50), nullable=False)
     lot_number = Column(String(100), nullable=False)

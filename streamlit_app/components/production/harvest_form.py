@@ -21,13 +21,13 @@ def render_harvest_form():
         return
 
     for unit in pending:
-        with st.expander(f"🧾 Request #{unit['id']} - {unit['product_type']} (Lot: {unit['lot_number']})"):
+        with st.expander(f"🧾 **Request #{unit['id']}** | {unit['sku']} - {unit['sku_name']} (Lot: {unit['lot_number']})"):
             st.markdown(f"**Requested by:** {unit['requested_by']}  \n**Date:** {unit['requested_at']}")
 
             # Calculate required weight with tolerated buffer weight and additional buffer  
-            avg = unit["average_weight"]
-            buffer = unit["buffer_weight"]
-            required_weight = avg + buffer + 10
+            avg = float(unit["average_weight_g"] or 0)
+            buffer = float(unit["weight_buffer_g"] or 0)
+            required_weight = avg + buffer + 10.0
             
             # Filter available printers based on weight
             with get_session() as db:
@@ -68,9 +68,9 @@ def render_harvest_form():
                 # col_spacer is a column added only for width spacing
                 col1, col2, col_spacer = st.columns([0.5, 0.5, 1])
                 with col1:
-                    submitted = st.form_submit_button("✅ Harvest Product", use_container_width=True)
+                    submitted = st.form_submit_button("✅ Harvest Product", width='stretch')
                 with col2:
-                    cancel = st.form_submit_button("❌ Cancel Product", use_container_width=True)
+                    cancel = st.form_submit_button("❌ Cancel Product", width='stretch')
 
                 if submitted:
                     if not seal_id:

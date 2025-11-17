@@ -26,11 +26,14 @@ class TreatmentBatchOut(BaseModel):
 
 
 class TreatmentBatchProductCandidate(BaseModel):
+    id: int
     product_id: int
     current_stage_name: str
+    current_status: str
     last_updated_at: datetime
     harvest_id: int
-    product_type: str
+    sku: str
+    sku_name: str
     inspection_result: str
     location_name: Optional[str]
 
@@ -45,7 +48,8 @@ class PostHarvestStorageCandidate(BaseModel):
     last_updated_at: datetime
     inspection_result: str
     filament_serial: str
-    product_type: str
+    sku: str
+    sku_name: str
     printed_by: Optional[str]
     print_date: Optional[datetime]
 
@@ -55,5 +59,20 @@ class PostHarvestStorageCandidate(BaseModel):
 class PostTreatmentStorageCandidate(BaseModel):
     product_id: int
     harvest_id: int
-    product_type: str
+    sku: str
+    sku_name: str
     inspection_result: Optional[str]
+
+
+class AdHocQuarantineStorageCandidate(BaseModel):
+    product_id: int
+    quarantine_id: int
+    current_stage_name: str
+    last_updated_at: datetime
+    sku: str
+    sku_name: str
+    quarantined_by: int
+    quarantine_date: datetime
+    inspection_result: str
+
+    model_config = ConfigDict(from_attributes=True)

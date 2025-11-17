@@ -1,6 +1,7 @@
 import streamlit as st
 from utils.session import require_login, require_access
-from utils.auth import show_user_sidebar
+from utils.auth_ui import render_account_box
+# from utils.auth import show_user_sidebar
 from components.production.status_tracker import render_status_tracker
 from components.production.request_form import render_product_request_form
 from components.production.harvest_form import render_harvest_form
@@ -26,7 +27,8 @@ if "show_qc_requests" not in st.session_state:
 st.title("Production Management")
 
 # --- User logout ---
-show_user_sidebar()
+# show_user_sidebar()
+render_account_box(expanded=True, home_after_logout="/")
 
 # --- Login Check ---
 require_login()

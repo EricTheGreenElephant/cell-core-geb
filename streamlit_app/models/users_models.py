@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.mssql import UNIQUEIDENTIFIER
 from sqlalchemy.sql import func
 from db.base import Base
 
@@ -12,6 +13,7 @@ class User(Base):
     user_principal_name = Column(String(255), nullable=True)
     display_name = Column(String(100), nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
 
 
     received_filaments = relationship("models.filament_models.Filament", back_populates="received_user", foreign_keys="Filament.received_by")
@@ -25,3 +27,19 @@ class User(Base):
     quarantines_created = relationship("QuarantinedProducts", foreign_keys="[QuarantinedProducts.quarantined_by]", back_populates="quarantined_user")
     quarantines_resolved = relationship("QuarantinedProducts", foreign_keys="[QuarantinedProducts.resolved_by]", back_populates="resolved_user")
     material_usages = relationship("MaterialUsage", back_populates="user")
+
+
+class ApplicationArea(Base):
+    __tablename__ = 'application_areas'
+    
+    id = Column(Integer, primary_key=True)
+    area_name = Column(String(50), unique=True, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+
+class GroupAreaRight(Base):
+    __tablename__ = "group_area_rights"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    group_oid = Column(UNIQUEIDENTIFIER, nullable=False)
+    area_id = Column(Integer, nullable=False)
+    access_level = Column(String(20), nullable=False)

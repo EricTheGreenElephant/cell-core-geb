@@ -63,7 +63,7 @@ def render_storage_edit_form():
     change_status = st.checkbox(
         label="Change Product Status", 
         value=False, 
-        key=f"status_change_{selected["harvest_id"]}"
+        key=f"status_change_{selected['harvest_id']}"
     )
     
     if change_status:   

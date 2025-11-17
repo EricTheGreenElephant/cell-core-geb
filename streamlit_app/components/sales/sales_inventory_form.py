@@ -12,4 +12,4 @@ def render_sales_tab():
     if not rows:
         st.info("No products currently available for sale.")
     else:
-        st.dataframe(rows, use_container_width=True)
+        st.dataframe(rows, width='stretch')

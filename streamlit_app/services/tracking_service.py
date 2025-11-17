@@ -7,27 +7,45 @@ from utils.db_transaction import transactional
 
 
 def generate_tracking_id(db: Session, date=None) -> str:
-    if not date:
-        date = datetime.today()
+    """
+    Generate the next tracking_id based on the highest existing one in the product_tracking table.
+    Returns an integer (or string if you prefer).
+    """
+    result = db.execute(text(
+        """
+            SELECT MAX(CAST(tracking_id AS BIGINT)) 
+            FROM product_tracking
+        """
+    )).scalar()
     
-    prefix = date.strftime("PRD-%Y%d%m")
+    if result is None:
+        # If the table is empty, start with an initial value
+        next_id = 1000000
+    else:
+        next_id = result + 1
 
-    count = db.query(ProductTracking).filter(
-        ProductTracking.tracking_id.like(f"{prefix}-%")
-    ).count()
+    return str(next_id)
+    # if not date:
+    #     date = datetime.today()
+    
+    # prefix = date.strftime("PRD-%Y%d%m")
 
-    return f"{prefix}-{count + 1:05d}"
+    # count = db.query(ProductTracking).filter(
+    #     ProductTracking.tracking_id.like(f"{prefix}-%")
+    # ).count()
+
+    # return f"{prefix}-{count + 1:05d}"
 
 def log_product_status_change(db: Session, product_id: int, from_stage_id: int, to_stage_id: int, reason: str, user_id: int):
     db.execute(
         text("""
             INSERT INTO product_status_history
-                (product_id, from_stage_id, to_stage_id, reason, changed_by, changed_at)
+                (product_tracking_id, from_stage_id, to_stage_id, reason, changed_by, changed_at)
             VALUES
-                (:product_id, :from_stage_id, :to_stage_id, :reason, :user_id, GETDATE())
+                (:product_tracking_id, :from_stage_id, :to_stage_id, :reason, :user_id, GETDATE())
         """),
         {
-            "product_id": product_id,
+            "product_tracking_id": product_id,
             "from_stage_id": from_stage_id,
             "to_stage_id": to_stage_id,
             "reason": reason, 
@@ -141,11 +159,11 @@ def record_materials_post_harvest(db: Session, product_id: int, harvest_id: int,
     for material in materials:
         db.execute(text("""
             INSERT INTO material_usage (
-                product_id, harvest_id, material_type, lot_number, used_quantity, used_at, used_by
+                product_tracking_id, harvest_id, material_type, lot_number, used_quantity, used_at, used_by
             )
-            VALUES (:product_id, :harvest_id, :material_type, :lot_number, 1, :timestamp,  :user_id)
+            VALUES (:product_tracking_id, :harvest_id, :material_type, :lot_number, 1, :timestamp,  :user_id)
         """), {
-            "product_id": product_id,
+            "product_tracking_id": product_id,
             "harvest_id": harvest_id,
             "material_type": material["type"],
             "lot_number": material["lot"],
@@ -161,21 +179,21 @@ def record_filament_usage_post_qc(db: Session, product_id: int, harvest_id: int,
     """
     row = db.execute(text("""
         SELECT
-            fm.filament_id,
+            fm.filament_tracking_id,
             f.lot_number
         FROM product_harvest ph
         JOIN filament_mounting fm ON ph.filament_mounting_id = fm.id
-        JOIN filaments f ON fm.filament_id = f.id
+        JOIN filaments f ON fm.filament_tracking_id = f.id
         WHERE ph.id = :harvest_id
     """), {"harvest_id": harvest_id}).fetchone()
 
     db.execute(text("""
         INSERT INTO material_usage (
-            product_id, harvest_id, material_type, lot_number, used_quantity, used_at, used_by
+            product_tracking_id, harvest_id, material_type, lot_number, used_quantity, used_at, used_by
         )
-        VALUES (:product_id, :harvest_id, 'Filament', :lot_number, :qty, :timestamp, :user_id)
+        VALUES (:product_tracking_id, :harvest_id, 'Filament', :lot_number, :qty, :timestamp, :user_id)
     """), {
-        "product_id": product_id,
+        "product_tracking_id": product_id,
         "harvest_id": harvest_id,
         "lot_number": row.lot_number,
         "qty": weight_grams,
@@ -185,7 +203,7 @@ def record_filament_usage_post_qc(db: Session, product_id: int, harvest_id: int,
 
     db.commit()
 
-def validate_materials_available(db: Session, product_id: int, quantity: int) -> Tuple[List[str], Optional[str]]:
+def validate_materials_available(db: Session, sku_id: int, quantity: int):
     """
     Validates whether there is sufficient material from a single lot/batch of
     filament, lids, and seals to fulfill the product request.
@@ -195,19 +213,19 @@ def validate_materials_available(db: Session, product_id: int, quantity: int) ->
     info_message = None
 
     # === Get weight requirement ===
-    result = db.execute(text(
+    spec = db.execute(text(
         """
-            SELECT average_weight, buffer_weight
-            FROM product_types
-            WHERE id = :pid
+            SELECT sps.average_weight_g, sps.weight_buffer_g
+            FROM product_skus ps
+            LEFT JOIN product_print_specs sps ON sps.sku_id = ps.id
+            WHERE ps.id = :sid
         """
-    ), {"pid": product_id}).fetchone()
+    ), {"sid": sku_id}).fetchone()
 
-    if not result:
-        return ["Invalid product type."]
+    if not spec or spec.average_weight_g is None or spec.weight_buffer_g is None:
+        return (["Selected SKU has no print specs (average_weight_g/weight_buffer_g)."], None)
     
-    avg_weight, buffer_weight = result
-    weight_per_unit = avg_weight + buffer_weight
+    weight_per_unit = float(spec.average_weight_g) + float(spec.weight_buffer_g)
     total_required_weight = weight_per_unit * quantity
 
     # === Filament availability ===
@@ -215,39 +233,36 @@ def validate_materials_available(db: Session, product_id: int, quantity: int) ->
         """
             SELECT f.lot_number, SUM(fm.remaining_weight) AS available_grams
             FROM filament_mounting fm
-            JOIN filaments f ON fm.filament_id = f.id
+            JOIN filaments f ON fm.filament_tracking_id = f.id
             WHERE fm.status = 'In Use' AND f.qc_result = 'PASS'
             GROUP BY f.lot_number
         """
     )).fetchall()
 
-    used_filament = db.execute(text(
-        """
-            SELECT lot_number, SUM(used_quantity) AS used_grams
-            FROM material_usage
-            WHERE material_type = 'Filament' AND lot_number IS NOT NULL
-            GROUP BY lot_number
-        """
-    )).fetchall()
-    used_filament_map = {row.lot_number: row.used_grams for row in used_filament}
+    # used_filament = db.execute(text(
+    #     """
+    #         SELECT lot_number, SUM(used_quantity) AS used_grams
+    #         FROM material_usage
+    #         WHERE material_type = 'Filament' AND lot_number IS NOT NULL
+    #         GROUP BY lot_number
+    #     """
+    # )).fetchall()
+    # used_filament_map = {row.lot_number: float(row.used_grams or 0) for row in used_filament}
+    
     
     best_filament = None
     max_units_filament = 0
     for row in filament_lots:
-        remaining = row.available_grams - used_filament_map.get(row.lot_number, 0)
+        # remaining = float(row.available_grams or 0) - used_filament_map.get(row.lot_number, 0.0)
+        remaining = float(row.available_grams or 0)
         units = int(remaining // weight_per_unit)
         if units > max_units_filament:
             max_units_filament = units
             best_filament = row.lot_number
+            best_remaining = remaining
     
     if max_units_filament < quantity:
-        errors.append(f"Not enough filament from any single lot fulfill {total_required_weight:.2f}g.")
-    # filament_ok = any(
-    #     row.available_grams - used_filament_map.get(row.lot_number, 0) >= required_filament
-    #     for row in filament_lots
-    # )
-    # if not filament_ok:
-    #     errors.append(f"Not enough filament from any single lot to fulfill {required_filament:.2f}g.")
+        errors.append(f"Not enough filament from any single lot fulfill {total_required_weight:.2f}g. Only {best_remaining:.2f}g from LOT {best_filament}.")
 
     # === Lid availability ===
     lid_batches = db.execute(text(
@@ -267,25 +282,19 @@ def validate_materials_available(db: Session, product_id: int, quantity: int) ->
             GROUP BY lot_number
         """
     )).fetchall()
-    used_lids_map = {row.lot_number: row.used_units for row in used_lids}
+    used_lids_map = {row.lot_number: int(row.used_units or 0) for row in used_lids}
 
     best_lid = None
     max_units_lid = 0
     for row in lid_batches:
-        remaining = row.available_units - used_lids_map.get(row.serial_number, 0)
+        remaining = int(row.available_units or 0) - used_lids_map.get(row.serial_number, 0)
         if remaining > max_units_lid:
             max_units_lid = remaining
             best_lid = row.serial_number
     
     if max_units_lid < quantity:
         errors.append(f"Not enough lids from any single batch to fulfill {quantity} units.")
-    # lid_ok = any(
-    #     row.available_units - used_lids_map.get(row.serial_number, 0) >= quantity
-    #     for row in lid_batches
-    # )
-    # if not lid_ok:
-    #     errors.append(f"Not enough lids from any single batch to fulfill {quantity} units.")
-    
+
     # === Seal availability ===
     seal_batches = db.execute(text(
         """
@@ -304,24 +313,18 @@ def validate_materials_available(db: Session, product_id: int, quantity: int) ->
             GROUP BY lot_number
         """
     )).fetchall()
-    used_seals_map = {row.lot_number: row.used_units for row in used_seals}
+    used_seals_map = {row.lot_number: int(row.used_units or 0) for row in used_seals}
 
     best_seal = None
     max_units_seal = 0
     for row in seal_batches:
-        remaining = row.available_units - used_seals_map.get(row.serial_number, 0)
+        remaining = int(row.available_units or 0) - used_seals_map.get(row.serial_number, 0)
         if remaining > max_units_seal:
             max_units_seal = remaining
             best_seal = row.serial_number
 
     if max_units_seal < quantity:
         errors.append(f"Not enough seals from any single batch to fulfill {quantity} units.")
-    # seal_ok = any(
-    #     row.available_units - used_seals_map.get(row.serial_number, 0) >= quantity
-    #     for row in seal_batches
-    # )
-    # if not seal_ok:
-    #     errors.append(f"Not enough seals from any single batch to fulfill {quantity} units.")
     
     if errors:
         max_possible_unit = min(max_units_filament, max_units_lid, max_units_seal)

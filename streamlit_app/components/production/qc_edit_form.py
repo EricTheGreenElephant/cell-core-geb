@@ -15,7 +15,7 @@ def render_qc_edit_form():
         return
     
     options = {
-        f"Product #{r['harvest_id']} - {r['product_type']} (Lot: {r['lot_number']}) @ {r['print_date']}": r
+        f"QC #{r['qc_id']} - {r['product_id']} - {r['sku']} - {r['sku_name']} (Lot: {r['lot_number']}) @ {r['print_date']}": r
         for r in qc_records
     }
 
@@ -26,11 +26,11 @@ def render_qc_edit_form():
     pressure = st.number_input("Pressure Drop", min_value=0.0, format="%.2f", value=float(selected["pressure_drop"]))
     visual_pass = st.radio("Visual Pass", [True, False], index=0 if selected["visual_pass"] else 1)
     result = st.selectbox("Inspection Result", ["Passed", "B-Ware", "Quarantine", "Waste"], index=["Passed", "B-Ware", "Quarantine", "Waste"].index(selected["inspection_result"]))
-    notes = st.text_area("Notes", max_chars=255, value=selected["notes"] or "")
-    reason = st.text_area("Reason for Edit", max_chars=255)
+    notes = st.text_area("Notes", max_chars=255, value=selected["notes"] or "").strip()
+    reason = st.text_area("Reason for Edit", max_chars=255).strip()
 
     if st.button("Update QC Record"):
-        if not reason.strip():
+        if not reason:
             st.warning("A reason is required for the update.")
             return
         
@@ -54,7 +54,8 @@ def render_qc_edit_form():
             with get_session() as db:
                 update_qc_fields(
                     db=db,
-                    harvest_id=selected["harvest_id"],
+                    qc_id=selected["qc_id"],
+                    product_id=selected["id"],
                     updates=updates,
                     reason=reason,
                     user_id=st.session_state["user_id"]
