@@ -1,18 +1,5 @@
-# import pyodbc
-# from utils.db import db_connection
-
-# def get_user_by_email(email):
-#     try:
-#         with db_connection() as conn:
-#             cursor = conn.cursor()
-#             cursor.execute("SELECT id, display_name FROM users WHERE user_principal_name = ?", (email,))
-#             result = cursor.fetchone()
-#             return result
-#     except pyodbc.Error as e:
-#         print(f"[DB ERROR] Failed to fetch user: {e}")
-#         return None
-    
 from sqlalchemy import select, insert, update, text
+from typing import Optional
 from sqlalchemy.orm import Session
 from db.orm_session import get_session
 from models.users_models import User 
@@ -40,6 +27,38 @@ def _get_default_department_id(db: Session) -> int:
         "No active departments found. Seed at least one department (e.g., 'General')."
     )
 
+def _initials_part(name: str) -> str:
+    """
+    Take a name and return two letters in 'Xx' form (e.g. Heiko -> He)
+    """
+    letters = [c for c in name if c.isalpha()]
+    if not letters:
+        return 'Xx'
+    if len(letters) == 1:
+        raw = letters[0] + letters[0]
+    else:
+        raw = "".join(letters[:2])
+    return raw[0].upper() + raw[1].lower()
+
+def build_initials_from_display_name(display_name: Optional[str]) -> str:
+    """
+    Build the intial-signature from a display name.
+    """
+    if not display_name:
+        return "XxXx"
+    
+    parts = display_name.strip().split()
+    if not parts:
+        return "XxXx"
+    
+    if len(parts) == 1:
+        first_name = last_name = parts[0]
+    else:
+        first_name = parts[0]
+        last_name = parts[-1]
+
+    return _initials_part(first_name) + _initials_part(last_name)
+    
 def get_user_by_email(email: str):
     with get_session() as db:
         user = db.execute(
@@ -65,23 +84,37 @@ def upsert_user_by_oid(*, oid: str, upn: str | None, display_name: str | None):
     - If not found, insert a new user. 
     Returns (user_id, display_name).
     """
+    entra_display_name = display_name
+    source_name = entra_display_name or (upn or "User")
+    initials_display = build_initials_from_display_name(source_name)
+
     with get_session() as db:
         existing = db.execute(
             select(User.id, User.display_name).where(User.azure_ad_object_id == oid)
         ).first()
 
         if existing:
-            db.execute(
-                update(User)
-                .where(User.id == existing.id)
-                .values(
-                    user_principal_name=(upn or None),
-                    display_name=(display_name or existing.display_name),
-                    is_active=True,
+            if existing.display_name != initials_display:
+                db.execute(
+                    update(User)
+                    .where(User.id == existing.id)
+                    .values(
+                        user_principal_name=(upn or None),
+                        display_name=initials_display,
+                        is_active=True,
+                    )
                 )
-            )
+            else:
+                db.execute(
+                    update(User)
+                    .where(User.id == existing.id)
+                    .values(
+                        user_principal_name=(upn or None),
+                        is_active=True,
+                    )
+                )
             db.commit()
-            return (existing.id, display_name or existing.display_name)
+            return (existing.id, initials_display)
         
         dept_id = _get_default_department_id(db)
 
@@ -91,11 +124,11 @@ def upsert_user_by_oid(*, oid: str, upn: str | None, display_name: str | None):
                 department_id=dept_id,
                 azure_ad_object_id=oid,
                 user_principal_name=(upn or None),
-                display_name=(display_name or (upn or "User")),
+                display_name=initials_display,
                 is_active=True,
             )
             .returning(User.id)
         ).scalar_one()
 
         db.commit()
-        return (new_id, display_name or (upn or "User"))
+        return (new_id, initials_display)

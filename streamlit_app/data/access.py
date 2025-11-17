@@ -5,7 +5,7 @@ from models.users_models import GroupAreaRight, ApplicationArea
 
 _ACCESS_ORDER = {"Read": 1, "Write": 2, "Admin": 3}
 
-def get_effective_access(user_id: int, group_oids: list[str]) -> dict[str, str]:
+def get_effective_access(group_oids: list[str]) -> dict[str, str]:
     """
     Returns { area_name: access_level } based *only* on group-derived rights
     (dbo.group_area_rights), ignoring any legacy per-user access.
