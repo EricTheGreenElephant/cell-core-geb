@@ -48,9 +48,9 @@ def render_label_form():
         qr_data = product_id
 
         if label_choice == "Harvest":
-            background_path = "assets/GEB-Label-Image-wo-Text.png"
+            background_path = "streamlit_app/assets/GEB-Label-Image-wo-Text.png"
         else:
-            background_path = "assets/GEB-Label2-Image-wo-Text.png"
+            background_path = "streamlit_app/assets/GEB-Label2-Image-wo-Text.png"
 
         label_img = generate_label_with_overlays(
             background_path=background_path,

@@ -7,15 +7,17 @@ def get_label_data_by_product_id(db: Session, product_id: int):
         """
             SELECT
                 pt.id,
+                ps.sku AS reference_number,
                 ptype.name AS product_type,
-                ptype.average_weight AS volume,
+                pps.average_weight_g AS volume,
                 pr.lot_number,
-                CONVERT(VARCHAR, DATEADD(year, 1, ph.print_date), 23) AS expiration_date,
-                CONCAT('GEB-', UPPER(LEFT(ptype.name, 6)), '-', pt.id) AS reference_number
+                CONVERT(VARCHAR, DATEADD(year, 1, ph.print_date), 23) AS expiration_date
             FROM product_tracking pt
+            JOIN product_types ptype ON pt.product_type_id = ptype.id
+            JOIN product_skus ps ON pt.sku_id = ps.id
+            JOIN product_print_specs pps ON ps.id = pps.sku_id
             JOIN product_harvest ph ON pt.harvest_id = ph.id
             JOIN product_requests pr ON ph.request_id = pr.id
-            JOIN product_types ptype ON pr.product_id = ptype.id
             WHERE pt.id = :product_id
         """
     )
