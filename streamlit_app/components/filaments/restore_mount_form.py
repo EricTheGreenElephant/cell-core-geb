@@ -23,7 +23,7 @@ def render_restore_mount_form():
         return
     
     options = {
-        f"{m['serial_number']} on {m['printer_name']} (Unmounted at {m['unmounted_at']} - Remaining Weight: {m['remaining_weight']})": m for m in mounts
+        f"#{m['filament_id']} | {m['serial_number']} on {m['printer_name']} (Unmounted at {m['unmounted_at']} - Remaining Weight: {m['remaining_weight']})": m for m in mounts
     }
 
     selection = st.selectbox("Select Unmounted Filament to Restore", list(options.keys()))

@@ -29,7 +29,7 @@ def render_mount_form():
         return
     
     filament_options = {
-        f"{f['serial_number']} ({f['weight_grams']}g)": (f["id"], f["acclimatization_id"])
+        f"#{f['filament_id']} | {f['serial_number']} ({f['weight_grams']}g)": (f["id"], f["acclimatization_id"])
         for f in filaments
     }
 

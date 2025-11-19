@@ -22,7 +22,7 @@ def render_acclimatizing_form():
             st.info("All filaments are already acclimatizing or in production.")
         else:
             option_labels = {
-                f"{f['serial_number']}": f["id"]
+                f"#{f['filament_id']} | {f['serial_number']}": f["id"]
                 for f in options
             }
             selected = st.selectbox("Select filament to move", list(option_labels.keys()))
