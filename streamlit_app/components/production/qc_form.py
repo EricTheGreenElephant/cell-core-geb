@@ -17,7 +17,7 @@ def render_qc_form():
         return
     
     product_map = {
-        f"#{p['product_id']} | {p['sku']} - {p['sku_name']} (Lot: {p['lot_number']})": p
+        f"#{p['product_id']} | {'printer'} | {p['sku']} - {p['sku_name']}": p
         for p in printed
     }
 
