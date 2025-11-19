@@ -23,6 +23,7 @@ def get_printed_products(db: Session) -> list[dict]:
             sps.average_weight_g,
             sps.weight_buffer_g,
             pr.lot_number,
+            p.name as printer,
             ph.print_date
         FROM product_tracking pt
         JOIN product_harvest ph ON pt.harvest_id = ph.id
@@ -30,6 +31,8 @@ def get_printed_products(db: Session) -> list[dict]:
         JOIN product_skus ps ON ps.id = pr.sku_id
         LEFT JOIN product_print_specs sps ON sps.sku_id = ps.id
         LEFT JOIN lifecycle_stages lc ON pt.current_stage_id = lc.id
+        LEFT JOIN filament_mounting fm ON ph.filament_mounting_id = fm.id
+        LEFT JOIN printers p ON fm.printer_id = p.id
         WHERE lc.stage_order = 1
         AND lot_number <> 'LEGACY_LOT'
         ORDER BY ph.print_date
