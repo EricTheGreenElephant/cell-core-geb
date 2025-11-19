@@ -30,7 +30,7 @@ def render_edit_mount_form():
         return
     
     mount_options = {
-        f"{m.filament.serial_number} on {m.printer.name} (ID {m.id})": m for m in mounts
+        f"#{m.filament.filament_id} | {m.filament.serial_number} on {m.printer.name} (ID {m.id})": m for m in mounts
     }
 
     selection = st.selectbox("Select Mounting Record", list(mount_options.keys()))

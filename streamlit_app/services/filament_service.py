@@ -43,7 +43,7 @@ def get_all_filament_statuses(db: Session) -> list[dict]:
 @transactional
 def get_filaments_not_acclimatizing(db: Session) -> list[dict]:
     sql = """
-        SELECT id, serial_number FROM v_filament_status
+        SELECT id, filament_id, serial_number FROM v_filament_status
         WHERE qc_result = 'PASS'
         AND current_status = 'In Storage';
     """
@@ -65,7 +65,7 @@ def insert_filament_acclimatization(db: Session, filament_id: int, user_id: int)
 @transactional
 def get_acclimatized_filaments(db: Session) -> list[dict]:
     sql = """
-        SELECT f.id, f.serial_number, f.weight_grams,
+        SELECT f.id, f.filament_id, f.serial_number, f.weight_grams,
             a.id AS acclimatization_id, a.ready_at, loc.location_name
         FROM filament_acclimatization a
         JOIN filaments f ON a.filament_tracking_id = f.id
@@ -84,7 +84,7 @@ def get_acclimatized_filaments(db: Session) -> list[dict]:
 @transactional
 def restore_acclimatizing_filaments(db: Session) -> list[dict]:
     sql = """
-        SELECT f.id, f.serial_number, f.weight_grams,
+        SELECT f.id, f.filament_id, f.serial_number, f.weight_grams,
             a.id AS acclimatization_id, a.ready_at, loc.location_name
         FROM filament_acclimatization a
         JOIN filaments f ON a.filament_tracking_id = f.id
@@ -144,6 +144,7 @@ def get_mounted_filaments(db: Session) -> list[dict]:
     sql = """
         SELECT
             fm.id AS mount_id,
+            f.filament_id,
             f.serial_number,
             p.name AS printer_name,
             fm.remaining_weight
@@ -176,6 +177,7 @@ def get_mountable_filament_mounts(db: Session, required_weight: float) -> list[d
     sql = """
         SELECT
             fm.id,
+            f.filament_id,
             f.serial_number,
             p.name AS printer_name,
             fm.remaining_weight

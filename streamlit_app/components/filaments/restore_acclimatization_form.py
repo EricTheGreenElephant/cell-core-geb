@@ -23,7 +23,7 @@ def render_restore_acclimatization_form():
             return
         
         option_labels = {
-            f"{f['serial_number']} (Ready: {f['ready_at'].date()}, Location: {f['location_name']})": f['acclimatization_id']
+            f"#{f['filament_id']} | {f['serial_number']} (Ready: {f['ready_at'].date()}, Location: {f['location_name']})": f['acclimatization_id']
             for f in acclimatized
         }
 

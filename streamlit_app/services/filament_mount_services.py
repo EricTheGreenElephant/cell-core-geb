@@ -19,6 +19,7 @@ def get_unmounted_mounts(db: Session) -> list[dict]:
     sql = """
         SELECT
             fm.id AS mount_id,
+            f.filament_id,
             f.serial_number,
             p.name AS printer_name,
             fm.remaining_weight,

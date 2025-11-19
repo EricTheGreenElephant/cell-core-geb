@@ -24,7 +24,7 @@ def render_health_status():
         else:
             for filament in in_use:
                 remaining = filament.get("remaining_weight")
-                label = f"**{filament['serial_number']}** on {filament['printer_name']}"
+                label = f"**#{filament['filament_id']} | {filament['serial_number']}** on {filament['printer_name']}"
 
                 # Displays remaining weights and levels of criticality
                 if remaining is not None:

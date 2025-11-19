@@ -22,7 +22,7 @@ def render_unmount_form():
             st.info("No currently mounted filaments.")
         else:
             mount_labels = {
-                f"{m['serial_number']} on {m['printer_name']} ({m['remaining_weight']}g left)": m["mount_id"]
+                f"#{m['filament_id']} | {m['serial_number']} on {m['printer_name']} ({m['remaining_weight']}g left)": m["mount_id"]
                 for m in mounted
             }
             selected = st.selectbox("Select filament to unmount", list(mount_labels.keys()))
