@@ -74,7 +74,7 @@ def render_storage_assignment_form():
 
                 next_stage_code = NEXT_STAGE_BY_RESULT[business_status][mode]
 
-                product_selections[prod.product_id] = (selected_shelf.id, next_stage_code)
+                product_selections[prod.id] = (selected_shelf.id, next_stage_code)
 
             submitted = st.form_submit_button("Assign Storage")
             if submitted:

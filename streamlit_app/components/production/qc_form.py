@@ -35,7 +35,7 @@ def render_qc_form():
     st.markdown(f"**Target Weight:** {avg_weight:.2f}g ± {tolerance}g")
     st.markdown(f"**Accepted Range:** {weight_low:.2f}g to {weight_high:.2f}g")
 
-    weight = st.number_input("Measured Weight (g)", min_value=0.0, format="%.2f", key=f"hqc_weight_{selected['product_id']}")
+    weight = st.number_input("Measured Weight (g)", min_value=0, key=f"hqc_weight_{selected['product_id']}")
 
     st.markdown("**Pressure Testing parameters:**")
     st.markdown("* 500 mbar ± 100 mbar")
