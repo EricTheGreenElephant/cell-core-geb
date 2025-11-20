@@ -33,7 +33,7 @@ def render_label_form():
         expiration_formatted = f"{exp_date.month} / {exp_date.year}"
 
         label_fields = [
-            {"text": data["reference_number"], "position": (380, 40), "font_size": 42},
+            {"text": data["reference_number"], "position": (380, 40), "font_size": 44},
             {"text": data["product_type"], "position": (270, 169), "font_size": 42},
             {"text": f"{data['volume']} cm\u00b2", "position": (150, 246), "font_size": 42},
             {"text": f"{data['product_id']}", "position": (210, 550), "font_size": 42},
