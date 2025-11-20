@@ -7,6 +7,7 @@ def get_label_data_by_product_id(db: Session, product_id: int):
         """
             SELECT
                 pt.id,
+                pt.product_id,
                 ps.sku AS reference_number,
                 ptype.name AS product_type,
                 pps.average_weight_g AS volume,
@@ -18,7 +19,7 @@ def get_label_data_by_product_id(db: Session, product_id: int):
             JOIN product_print_specs pps ON ps.id = pps.sku_id
             JOIN product_harvest ph ON pt.harvest_id = ph.id
             JOIN product_requests pr ON ph.request_id = pr.id
-            WHERE pt.id = :product_id
+            WHERE pt.product_id = :product_id
         """
     )
 

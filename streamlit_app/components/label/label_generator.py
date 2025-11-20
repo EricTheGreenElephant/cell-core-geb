@@ -3,15 +3,23 @@ import qrcode
 from io import BytesIO
 
 
+LABEL_SIZE_MM = 76
+TARGET_DPI = 300
+MM_PER_INCH = 25.4
+
 def generate_label_with_overlays(
     background_path: str,
     fields: list[dict],
     qr_data: str,
     qr_position: tuple[int, int],
     font_path: str = None,
-    qr_size: int = 100,
+    qr_size: int = 270,
 ) -> BytesIO:
     base = Image.open(background_path).convert("RGBA")
+
+    # label_inches = LABEL_SIZE_MM / MM_PER_INCH
+    # target_px = int(round(label_inches * TARGET_DPI))
+
     draw = ImageDraw.Draw(base)
 
     def load_font(size):

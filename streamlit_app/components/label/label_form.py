@@ -1,5 +1,6 @@
 import streamlit as st
 import base64
+from datetime import datetime
 from components.label.label_generator import generate_label_with_overlays
 from services.label_services import get_label_data_by_product_id
 from db.orm_session import get_session
@@ -27,12 +28,16 @@ def render_label_form():
             st.warning("Product not found.")
             return
 
+        expiration_raw = data["expiration_date"]  # e.g. "2026-07-15"
+        exp_date = datetime.strptime(expiration_raw, "%Y-%m-%d")
+        expiration_formatted = f"{exp_date.month} / {exp_date.year}"
+
         label_fields = [
-            {"text": data["reference_number"], "position": (200, 26), "font_size": 18},
-            {"text": data["product_type"], "position": (110, 90), "font_size": 18},
-            {"text": f"{data['volume']}", "position": (48, 116), "font_size": 18},
-            {"text": f"{data['id']}", "position": (85, 244), "font_size": 18},
-            {"text": data["expiration_date"], "position": (78, 298), "font_size": 18},
+            {"text": data["reference_number"], "position": (380, 40), "font_size": 42},
+            {"text": data["product_type"], "position": (270, 169), "font_size": 42},
+            {"text": f"{data['volume']} cm\u00b2", "position": (150, 246), "font_size": 42},
+            {"text": f"{data['product_id']}", "position": (210, 550), "font_size": 42},
+            {"text": expiration_formatted, "position": (210, 660), "font_size": 42},
         ]
     
         # Temporary placeholder data
@@ -44,11 +49,12 @@ def render_label_form():
         #     {"text": "2026-08-01", "position": (40, 270), "font_size": 18},
         # ]
     
-        qr_position = (245, 190)
+        qr_position = (613, 333)
         qr_data = product_id
 
         if label_choice == "Harvest":
-            background_path = "streamlit_app/assets/GEB-Label-Image-wo-Text.png"
+            # background_path = "streamlit_app/assets/GEB-Label-Image-wo-Text.png"
+            background_path = "streamlit_app/assets/Label-V2.png"
         else:
             background_path = "streamlit_app/assets/GEB-Label2-Image-wo-Text.png"
 
