@@ -47,21 +47,32 @@ require_login()
 user_level = require_access("Logistics", minimum_level="Read")
 
 # --- Page structure ---
-tab1, tab2 , tab3, tab4 = st.tabs(["Inventory", "Add Filament", "Mount Filament", "Edit Filament"])
+tab1, tab2 , tab3, tab4 = st.tabs(["Inventory", "Add Filament", "Service Filament", "Edit Filament"])
 
 with tab1:
-    # Show individual status
-    toggle_button("show_health_status", "Show Filament Health Status", "Hide Filament Health Status")
+    toggle = st.selectbox(
+        label="Choose filament view:",
+        options=["Select an option...", "View Printer/Filament Status", "View Inventory"],
+        index=0
+    )
+    match toggle:
+        case "View Printer/Filament Status":
+            render_health_status()
+        case "View Inventory":
+            render_filament_inventory()
 
-    if st.session_state.get("show_health_status", False):
-        render_health_status()
-    st.divider()
+    # # Show individual status
+    # toggle_button("show_health_status", "Show Filament Health Status", "Hide Filament Health Status")
 
-    # --- Active Filament Inventory with Filter ---
-    toggle_button("show_active_inventory", "Show Active Filaments", "Hide Active Filaments")
+    # if st.session_state.get("show_health_status", False):
+    #     render_health_status()
+    # st.divider()
+
+    # # --- Active Filament Inventory with Filter ---
+    # toggle_button("show_active_inventory", "Show Active Filaments", "Hide Active Filaments")
     
-    if st.session_state.get("show_active_inventory", False):
-        render_filament_inventory()
+    # if st.session_state.get("show_active_inventory", False):
+    #     render_filament_inventory()
 
 with tab2: 
     # --- Show Add Form Button ---
@@ -74,19 +85,32 @@ with tab2:
 
 with tab3: 
     if user_level in ("Write", "Admin"):
-        toggle_button("show_mount_form", "Mount Filament", "Hide Mount Form")
-        if st.session_state.get("show_mount_form", False):
-            render_mount_form()
+        toggle = st.selectbox(
+            label="Choose Filament Action",
+            options=["Select an option...", "Mount Filament", "Unmount Filament", "Move to Acclimatization"],
+            index=0
+        )
+        match toggle:
+            case "Mount Filament":
+                render_mount_form()
+            case "Unmount Filament":
+                render_unmount_form()
+            case "Move to Acclimatization":
+                render_acclimatizing_form()
 
-        st.divider()
-        toggle_button("show_unmount_form", "Unmount Filament", "Hide Unmount Form")
-        if st.session_state.get("show_unmount_form", False):
-            render_unmount_form()
+        # toggle_button("show_mount_form", "Mount Filament", "Hide Mount Form")
+        # if st.session_state.get("show_mount_form", False):
+        #     render_mount_form()
+
+        # st.divider()
+        # toggle_button("show_unmount_form", "Unmount Filament", "Hide Unmount Form")
+        # if st.session_state.get("show_unmount_form", False):
+        #     render_unmount_form()
         
-        st.divider()
-        toggle_button("show_acclimatize_form", "Move to Acclimatization", "Hide Acclimatization Form")
-        if st.session_state.get("show_acclimatize_form", False):
-            render_acclimatizing_form()
+        # st.divider()
+        # toggle_button("show_acclimatize_form", "Move to Acclimatization", "Hide Acclimatization Form")
+        # if st.session_state.get("show_acclimatize_form", False):
+        #     render_acclimatizing_form()
 
 with tab4:
     if user_level in ("Write", "Admin"):

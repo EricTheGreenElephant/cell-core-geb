@@ -10,6 +10,8 @@ render_account_box(expanded=True, home_after_logout="/")
 user = get_current_user()
 
 if not user:
+    st.title("Unauthorized")
+    st.write("You must be logged in to use application.")
     st.stop()
 
 user_id, access_map = ensure_user_and_access()
