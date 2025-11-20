@@ -42,7 +42,7 @@ def render_qc_form():
     st.markdown("* 6 mbar tolerance")
     st.markdown("* 30 second measurement time")
 
-    pressure = st.number_input("Pressure Drop (mbar)", min_value=0.0, format="%.2f", key=f"hqc_pressure_{selected['product_id']}")
+    pressure = st.number_input("Pressure Drop (mbar)", min_value=0.0, format="%.3f", key=f"hqc_pressure_{selected['product_id']}")
     visual = st.radio("Visual Check", ["Pass", "Fail"], key=f"hqc_visual_{selected['product_id']}")
 
     # Validation messages
