@@ -218,6 +218,11 @@ def get_filaments(db: Session) -> list[FilamentOut]:
     return [FilamentOut.model_validate(f) for f in filaments]
 
 @transactional
+def search_filament(db: Session, filament_id: int) -> dict:
+    filament = db.scalar(select(Filament).where(Filament.filament_id == filament_id))
+    return filament
+
+@transactional
 def delete_filament_acclimatization(db: Session, acclimatization_id: int, reason: str, user_id: int):
     accl = db.get(FilamentAcclimatization, acclimatization_id)
     if not accl:
