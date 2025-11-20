@@ -37,7 +37,7 @@ def render_filament_inventory():
                 gridOptions=gridOptions,
                 enable_enterprise_modules=False,
                 height=500,
-                fit_columns_on_grid_load=False,
+                fit_columns_on_grid_load=True,
                 reload_data=True,
             )
         else:
