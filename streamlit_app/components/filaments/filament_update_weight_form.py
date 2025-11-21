@@ -29,20 +29,20 @@ def render_filament_weight_update():
 
         # Make sure we have some default numeric value
         current_weight = filament["current_weight"] or 0.0
-
-        updated_weight = st.number_input(
-            label="Enter updated weight (g):",
-            value=float(current_weight),
-            min_value=0.0,
-            format="%0.2f",
-        )
-
-        if st.button("Save updated weight"):
-            with get_session() as db:
-                update_filament_weight(
-                    db,
-                    filament_pk=filament["filament_pk"],
-                    new_weight=updated_weight,
-                    table_updated=filament["weight_source"]
-                )
-            st.success("Filament weight updated successfully.")
+        with st.form("update_weight_form"):
+            updated_weight = st.number_input(
+                label="Enter updated weight (g):",
+                value=float(current_weight),
+                min_value=0.0,
+                format="%0.2f",
+            )
+            submitted = st.form_submit_button("Save updated weight")
+            if submitted:
+                with get_session() as db:
+                    update_filament_weight(
+                        db,
+                        filament_pk=filament["filament_pk"],
+                        new_weight=updated_weight,
+                        table_updated=filament["weight_source"]
+                    )
+                st.success("Filament weight updated successfully.")
