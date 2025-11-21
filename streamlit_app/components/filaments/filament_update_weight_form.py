@@ -14,6 +14,12 @@ def render_filament_weight_update():
 
     if filament:
         st.write(filament)
+        updated_weight = st.number_input(
+            label="Enter updated weight:",
+            min_value=0,
+            format="%0.2f"
+        )
+        st.write(updated_weight)
     else:
         st.warning("Filament ID not found! Please enter valid ID.")
         return

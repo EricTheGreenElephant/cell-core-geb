@@ -12,6 +12,7 @@ from components.filaments.restore_mount_form import render_restore_mount_form
 from components.filaments.filament_edit_form import render_edit_filament_tab
 from components.filaments.filament_mount_edit_form import render_edit_mount_form
 from components.filaments.restore_acclimatization_form import render_restore_acclimatization_form
+from components.filaments.filament_update_weight_form import render_filament_weight_update
 from components.common.toggle import toggle_button
 
 
@@ -87,7 +88,7 @@ with tab3:
     if user_level in ("Write", "Admin"):
         toggle = st.selectbox(
             label="Choose Filament Action",
-            options=["Select an option...", "Mount Filament", "Unmount Filament", "Move to Acclimatization"],
+            options=["Select an option...", "Mount Filament", "Unmount Filament", "Move to Acclimatization", "Update Filament Weight"],
             index=0
         )
         match toggle:
@@ -97,6 +98,8 @@ with tab3:
                 render_unmount_form()
             case "Move to Acclimatization":
                 render_acclimatizing_form()
+            case "Update Filament Weight":
+                render_filament_weight_update()
 
         # toggle_button("show_mount_form", "Mount Filament", "Hide Mount Form")
         # if st.session_state.get("show_mount_form", False):
