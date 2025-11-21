@@ -18,6 +18,7 @@ def render_filament_weight_update():
         st.write(filament)
         updated_weight = st.number_input(
             label="Enter updated weight:",
+            value=filament["weight_grams"],
             min_value=0,
             format="%0.2f"
         )
