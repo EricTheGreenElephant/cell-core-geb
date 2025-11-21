@@ -9,8 +9,10 @@ def render_filament_weight_update():
         placeholder="e.g. 101",
         step=1
     )
-    with get_session() as db:
-        filament = search_filament(db, filament_id)
+    search = st.button("Search Filament")
+    if search:
+        with get_session() as db:
+            filament = search_filament(db, filament_id)
 
     if filament:
         st.write(filament)
