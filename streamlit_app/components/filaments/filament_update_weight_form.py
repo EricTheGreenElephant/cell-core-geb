@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 from services.filament_service import search_filament, update_filament_weight
 from db.orm_session import get_session
 
@@ -46,3 +47,5 @@ def render_filament_weight_update():
                         table_updated=filament["weight_source"]
                     )
                 st.success("Filament weight updated successfully.")
+                time.sleep(1)
+                st.rerun()

@@ -279,25 +279,33 @@ def update_filament_weight(
     """
     Updates the weight for a filament.
 
-    - If there is an 'In Use' mounting row for this filament -> update remaining_weight.
-    - Otherwise -> update filaments.weight_grams.
+    - If there is an 'In Use' mounting row for this filament -> update fm.remaining_weight
+    - Otherwise -> update f.weight_grams
     """
-    # Check if there is an 'In Use' mount
-    mounting = db.scalar(
-        select(FilamentMounting).where(
+    # 1) Check if there is an 'In Use' mount for this filament
+    mounting_id = db.scalar(
+        select(FilamentMounting.id).where(
             FilamentMounting.filament_tracking_id == filament_pk,
             FilamentMounting.status == "In Use",
         )
     )
 
-    if mounting:
-        mounting.remaining_weight = new_weight
+    if mounting_id is not None:
+        # 2a) Update filament_mounting.remaining_weight
+        stmt = (
+            update(FilamentMounting)
+            .where(FilamentMounting.id == mounting_id)
+            .values(remaining_weight=new_weight)
+        )
     else:
-        filament = db.get(Filament, filament_pk)
-        if not filament:
-            raise ValueError("Filament not found")
-        filament.weight_grams = new_weight
+        # 2b) Update filaments.weight_grams
+        stmt = (
+            update(Filament)
+            .where(Filament.id == filament_pk)
+            .values(weight_grams=new_weight)
+        )
 
+    db.execute(stmt)
     db.commit()
 
 @transactional
