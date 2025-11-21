@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import select, update, func, text
+from sqlalchemy import select, update, func, text, and_
+from typing import Optional
 from datetime import datetime, timezone
 from services.audit_services import update_record_with_audit
 from models.filament_models import (
@@ -218,9 +219,86 @@ def get_filaments(db: Session) -> list[FilamentOut]:
     return [FilamentOut.model_validate(f) for f in filaments]
 
 @transactional
-def search_filament(db: Session, filament_id: int) -> dict:
-    filament = db.scalar(select(Filament).where(Filament.filament_id == filament_id))
-    return FilamentOut.model_validate(filament)
+def search_filament(db: Session, filament_id: int) -> Optional[dict]:
+    """
+    Returns filament info + computed current_weight.
+
+    current_weight is:
+      - filament_mounting.remaining_weight if an 'In Use' mount exists
+      - else filaments.weight_grams if > 0
+      - else None
+    """
+    stmt = (
+        select(Filament, FilamentMounting)
+        .join(
+            FilamentMounting,
+            and_(
+                FilamentMounting.filament_tracking_id == Filament.id,
+                FilamentMounting.status == "In Use",
+            ),
+            isouter=True,  # left join
+        )
+        .where(Filament.filament_id == filament_id)
+        # if multiple In Use rows could exist, you might want to order_by & limit(1)
+        # .order_by(FilamentMounting.mounted_at.desc())
+    )
+
+    row = db.execute(stmt).first()
+    if row is None:
+        return None
+
+    filament: Filament = row[0]
+    mounting: FilamentMounting | None = row[1]
+
+    if mounting is not None:
+        current_weight = mounting.remaining_weight
+        weight_source = "mounting"
+    elif filament.weight_grams is not None and filament.weight_grams > 0:
+        current_weight = filament.weight_grams
+        weight_source = "filament"
+    else:
+        current_weight = None
+        weight_source = "none"
+
+    return {
+        "filament_pk": filament.id,            # internal PK
+        "filament_id": filament.filament_id,   # external logical ID
+        "serial_number": filament.serial_number,
+        "mount_id": mounting.id if mounting else None,
+        "current_weight": current_weight,
+        "weight_source": weight_source,
+    }
+
+@transactional
+def update_filament_weight(
+    db: Session,
+    filament_pk: int,
+    new_weight: float,
+    table_updated: str
+):
+    """
+    Updates the weight for a filament.
+
+    - If there is an 'In Use' mounting row for this filament -> update remaining_weight.
+    - Otherwise -> update filaments.weight_grams.
+    """
+    # Check if there is an 'In Use' mount
+    mounting = db.scalar(
+        select(FilamentMounting).where(
+            FilamentMounting.filament_tracking_id == filament_pk,
+            FilamentMounting.status == "In Use",
+        )
+    )
+
+    if mounting:
+        mounting.remaining_weight = new_weight
+    else:
+        filament = db.get(Filament, filament_pk)
+        if not filament:
+            raise ValueError("Filament not found")
+        filament.weight_grams = new_weight
+
+    db.commit()
 
 @transactional
 def delete_filament_acclimatization(db: Session, acclimatization_id: int, reason: str, user_id: int):
