@@ -274,7 +274,8 @@ def update_filament_weight(
     db: Session,
     filament_pk: int,
     new_weight: float,
-    table_updated: str
+    reason: str,
+    user_id: int,
 ):
     """
     Updates the weight for a filament.
@@ -283,30 +284,68 @@ def update_filament_weight(
     - Otherwise -> update f.weight_grams
     """
     # 1) Check if there is an 'In Use' mount for this filament
-    mounting_id = db.scalar(
-        select(FilamentMounting.id).where(
+    mounting = db.execute(
+        select(FilamentMounting)
+        .where(
             FilamentMounting.filament_tracking_id == filament_pk,
-            FilamentMounting.status == "In Use",
+            FilamentMounting.status == "In Use", 
         )
+    ).scalar_one_or_none()
+
+    if mounting is not None:
+        table_name = "filament_mounting"
+        record_id = mounting.id 
+        field_name = "remaining_weight"
+        old_value = mounting.remaining_weight
+    else:
+        filament = db.get(Filament, filament_pk)
+        if filament is None:
+            raise ValueError(f"Filament with id={filament_pk} not found")
+        
+        table_name = "filaments"
+        record_id = filament.id
+        field_name = "weight_grams"
+        old_value = filament.weight_grams 
+
+    audit = FieldChangeAudit(
+        table=table_name,
+        record_id=record_id,
+        field=field_name,
+        old_value=old_value,
+        new_value=new_weight,
+        reason=reason,
+        changed_by=user_id,
     )
 
-    if mounting_id is not None:
-        # 2a) Update filament_mounting.remaining_weight
-        stmt = (
-            update(FilamentMounting)
-            .where(FilamentMounting.id == mounting_id)
-            .values(remaining_weight=new_weight)
-        )
-    else:
-        # 2b) Update filaments.weight_grams
-        stmt = (
-            update(Filament)
-            .where(Filament.id == filament_pk)
-            .values(weight_grams=new_weight)
-        )
+    update_record_with_audit(db, audit, update=True)
 
-    db.execute(stmt)
     db.commit()
+
+
+    # mounting_id = db.scalar(
+    #     select(FilamentMounting.id).where(
+    #         FilamentMounting.filament_tracking_id == filament_pk,
+    #         FilamentMounting.status == "In Use",
+    #     )
+    # )
+
+    # if mounting_id is not None:
+    #     # 2a) Update filament_mounting.remaining_weight
+    #     stmt = (
+    #         update(FilamentMounting)
+    #         .where(FilamentMounting.id == mounting_id)
+    #         .values(remaining_weight=new_weight)
+    #     )
+    # else:
+    #     # 2b) Update filaments.weight_grams
+    #     stmt = (
+    #         update(Filament)
+    #         .where(Filament.id == filament_pk)
+    #         .values(weight_grams=new_weight)
+    #     )
+
+    # db.execute(stmt)
+    # db.commit()
 
 @transactional
 def delete_filament_acclimatization(db: Session, acclimatization_id: int, reason: str, user_id: int):

@@ -78,74 +78,31 @@ def render_filament_weight_update():
             step=0.1,
             format="%.2f",
         )
+        reason = st.text_input(
+            "Reason for weight change",
+            help="Explain why the filament weight is being adjusted for audit trail."
+        )
         submitted = st.form_submit_button("Update Weight")
     
     if submitted:
+        if not reason.strip():
+            st.warning("Please provide a reason for this change.")
+            st.stop()
+
+        current_user_id = st.session_state["user_id"]
+
         with get_session() as db:
             update_filament_weight(
                 db=db,
                 filament_pk=result["filament_pk"],
                 new_weight=float(new_weight),
-                table_updated=result["weight_source"],
+                reason=reason.strip(),
+                user_id=current_user_id,
             )
 
             refreshed = search_filament(db, result["filament_id"])
         
         if refreshed is not None:
             st.session_state[SESSION_KEY] = refreshed
-        st.success("Filament weight updated successfully.")
+        st.success("Filament weight updated successfully. (Refresh for updated value)")
 
-    filament_id = st.number_input(
-        label="Enter Filament ID:",
-        placeholder="e.g. 101",
-        step=1,
-        format="%d",
-    )
-
-    # if st.button("Search Filament"):
-    #     with get_session() as db:
-    #         filament = search_filament(db, filament_id)
-
-    #     if not filament:
-    #         st.warning("Filament ID not found! Please enter a valid ID.")
-    #         return
-
-    #     # Display info
-    #     st.info(
-    #         f"Filament ID: {filament['filament_id']} | "
-    #         f"Serial: {filament['serial_number']} | "
-    #         f"Current weight: {filament['current_weight']} g "
-    #         f"(source: {filament['weight_source']})"
-    #     )
-
-    #     # Make sure we have some default numeric value
-    #     current_weight = filament["current_weight"] or 0.0
-    #     with st.form("update_weight_form"):
-    #         updated_weight = st.number_input(
-    #             label="Enter updated weight (g):",
-    #             value=float(current_weight),
-    #             min_value=0.0,
-    #             format="%0.2f",
-    #         )
-
-    #         submitted = st.form_submit_button("Save updated weight")
-    #         if submitted:
-    #             if updated_weight != filament["current_weight"]:
-    #                 new_weight = updated_weight
-    #             else:
-    #                 st.info("No updates detected!")
-    #                 return
-    #             try:
-    #                 with get_session() as db:
-    #                     update_filament_weight(
-    #                         db,
-    #                         filament_pk=filament["filament_pk"],
-    #                         new_weight=new_weight,
-    #                         table_updated=filament["weight_source"]
-    #                     )
-    #                 st.success("Filament weight updated successfully.")
-    #                 time.sleep(1.5)
-    #                 st.rerun()
-    #             except Exception as e:
-    #                 st.error("Update Failed")
-    #                 st.exception(e)
