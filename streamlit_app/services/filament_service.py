@@ -321,32 +321,6 @@ def update_filament_weight(
 
     db.commit()
 
-
-    # mounting_id = db.scalar(
-    #     select(FilamentMounting.id).where(
-    #         FilamentMounting.filament_tracking_id == filament_pk,
-    #         FilamentMounting.status == "In Use",
-    #     )
-    # )
-
-    # if mounting_id is not None:
-    #     # 2a) Update filament_mounting.remaining_weight
-    #     stmt = (
-    #         update(FilamentMounting)
-    #         .where(FilamentMounting.id == mounting_id)
-    #         .values(remaining_weight=new_weight)
-    #     )
-    # else:
-    #     # 2b) Update filaments.weight_grams
-    #     stmt = (
-    #         update(Filament)
-    #         .where(Filament.id == filament_pk)
-    #         .values(weight_grams=new_weight)
-    #     )
-
-    # db.execute(stmt)
-    # db.commit()
-
 @transactional
 def delete_filament_acclimatization(db: Session, acclimatization_id: int, reason: str, user_id: int):
     accl = db.get(FilamentAcclimatization, acclimatization_id)

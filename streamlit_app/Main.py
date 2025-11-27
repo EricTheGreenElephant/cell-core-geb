@@ -17,7 +17,7 @@ if not user:
 user_id, access_map = ensure_user_and_access()
 
 # 5️ App content (only runs if signed in)
-st.title("CellCore")
+st.title("CellCore Development")
 st.write(f"Welcome, **{user['name'] or user['email'] or 'friend'}**!")
 
 # show who/what (comment out in prod)

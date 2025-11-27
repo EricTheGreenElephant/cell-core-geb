@@ -1,7 +1,16 @@
 MERGE dbo.issue_reasons AS tgt 
 USING (
     VALUES 
-        ('VIS_MISSING_LID',   'Missing lid',            'Visual',    'B-Ware', 1),
+        ('VIS_COLOR_DIFF',   'Color differences',      'Visual',    'B-Ware', 1),
+        ('VIS_UNDER_EXT',    'Under-extrusion bottom', 'Visual',    'B-Ware', 1),
+        ('VIS_BLACK_LINE_W',   'Black line with scratch', 'Visual',   'B-Ware', 1),
+        ('VIS_BLACK_LINE_WO', 'Black line without scratch', 'Visual', 'B-Ware', 1),
+        ('VIS_PARTICLES_IN', 'Particles in inner area', 'Visual',    'B-Ware', 1),
+        ('VIS_GREATER_FIVE', 'Greater than five particles', 'Visual', 'B-Ware', 1),
+        ('VIS_CRACKS', 'Cracks/Damage outer shell', 'Visual', 'Waste', 1),
+        ('VIS_TEARS', 'Tears/Damage on surface', 'Visual', 'Waste', 1),
+        ('VIS_OFFSET', 'Offset', 'Visual', 'Waste', 1),
+        ('VIS_GYROID', 'Visible gyroid pattern', 'Visual', 'Waste', 1),
         ('VIS_BROKEN_BAG',    'Broken bag',             'Visual',    'B-Ware', 1),
         ('VIS_CONTAMINATION', 'Contamination visible',  'Visual',    'Waste', 1),
         ('PKG_SEAL_ISSUE',    'Packaging seal issue',   'Packaging', 'B-Ware', 1),
