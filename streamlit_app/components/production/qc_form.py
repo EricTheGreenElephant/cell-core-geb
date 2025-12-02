@@ -17,7 +17,7 @@ def render_qc_form():
         return
     
     product_map = {
-        f"#{p['product_id']} | {p['sku']} - {p['sku_name']} (Lot: {p['lot_number']})": p
+        f"#{p['product_id']} | {p['printer']} | {p['sku']} - {p['sku_name']}": p
         for p in printed
     }
 
@@ -35,14 +35,14 @@ def render_qc_form():
     st.markdown(f"**Target Weight:** {avg_weight:.2f}g ± {tolerance}g")
     st.markdown(f"**Accepted Range:** {weight_low:.2f}g to {weight_high:.2f}g")
 
-    weight = st.number_input("Measured Weight (g)", min_value=0.0, format="%.2f", key=f"hqc_weight_{selected['product_id']}")
+    weight = st.number_input("Measured Weight (g)", min_value=0, key=f"hqc_weight_{selected['product_id']}")
 
     st.markdown("**Pressure Testing parameters:**")
     st.markdown("* 500 mbar ± 100 mbar")
     st.markdown("* 6 mbar tolerance")
     st.markdown("* 30 second measurement time")
 
-    pressure = st.number_input("Pressure Drop (mbar)", min_value=0.0, format="%.2f", key=f"hqc_pressure_{selected['product_id']}")
+    pressure = st.number_input("Pressure Drop (mbar)", min_value=0.0, format="%.3f", key=f"hqc_pressure_{selected['product_id']}")
     visual = st.radio("Visual Check", ["Pass", "Fail"], key=f"hqc_visual_{selected['product_id']}")
 
     # Validation messages

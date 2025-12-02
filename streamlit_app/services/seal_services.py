@@ -28,6 +28,7 @@ def get_available_seal_batches(db: Session) -> list[dict]:
         SELECT id, serial_number, quantity
         FROM seals
         WHERE qc_result = 'PASS'
+            AND serial_number <> 'LEGACY_SEAL'
         ORDER BY received_at DESC
     """
     result = db.execute(text(sql))
