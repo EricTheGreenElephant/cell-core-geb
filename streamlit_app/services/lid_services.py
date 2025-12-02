@@ -28,6 +28,7 @@ def get_available_lid_batches(db: Session) -> list[dict]:
         SELECT id, serial_number
         FROM lids
         WHERE qc_result = 'PASS'
+            AND serial_number <> 'LEGACY_LID'
         ORDER BY received_at DESC
     """
     result = db.execute(text(sql))

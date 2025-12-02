@@ -35,9 +35,9 @@ def render_filament_inventory():
             AgGrid(
                 df_filaments,
                 gridOptions=gridOptions,
-                enable_enterprise_modules=True,
+                enable_enterprise_modules=False,
                 height=500,
-                fit_columns_on_grid_load=False,
+                fit_columns_on_grid_load=True,
                 reload_data=True,
             )
         else:

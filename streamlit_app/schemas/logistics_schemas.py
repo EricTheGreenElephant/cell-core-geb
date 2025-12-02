@@ -41,6 +41,7 @@ class TreatmentBatchProductCandidate(BaseModel):
 
 
 class PostHarvestStorageCandidate(BaseModel):
+    id: int
     product_id: int
     current_stage_name: str
     location_id: Optional[int]
@@ -57,6 +58,7 @@ class PostHarvestStorageCandidate(BaseModel):
 
 
 class PostTreatmentStorageCandidate(BaseModel):
+    id: int
     product_id: int
     harvest_id: int
     sku: str
@@ -65,6 +67,7 @@ class PostTreatmentStorageCandidate(BaseModel):
 
 
 class AdHocQuarantineStorageCandidate(BaseModel):
+    id: int
     product_id: int
     quarantine_id: int
     current_stage_name: str

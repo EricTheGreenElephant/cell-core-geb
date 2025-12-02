@@ -108,7 +108,8 @@ def create_treatment_batch(db: Session, data: TreatmentBatchCreate):
 def get_qc_products_needing_storage(db: Session) -> list[PostHarvestStorageCandidate]:
     stmt = (
         select(
-            ProductTracking.id.label("product_id"),
+            ProductTracking.id,
+            ProductTracking.product_id,
             LifecycleStages.stage_name.label("current_stage_name"),
             ProductTracking.location_id,
             ProductHarvest.id.label("harvest_id"),
@@ -140,7 +141,8 @@ def get_qc_products_needing_storage(db: Session) -> list[PostHarvestStorageCandi
 def get_post_treatment_products_needing_storage(db: Session) -> list[PostTreatmentStorageCandidate]:
     stmt = (
         select(
-            ProductTracking.id.label("product_id"),
+            ProductTracking.id,
+            ProductTracking.product_id,
             ProductHarvest.id.label("harvest_id"),
             ProductSKU.sku,
             ProductSKU.name.label("sku_name"),
@@ -160,7 +162,8 @@ def get_post_treatment_products_needing_storage(db: Session) -> list[PostTreatme
 def get_adhoc_products_needing_storage(db: Session) -> list[AdHocQuarantineStorageCandidate]:
     stmt = (
         select(
-            ProductTracking.id.label("product_id"),
+            ProductTracking.id,
+            ProductTracking.product_id,
             QuarantinedProducts.id.label("quarantine_id"),
             LifecycleStages.stage_name.label("current_stage_name"),
             ProductSKU.sku,
@@ -196,7 +199,7 @@ def assign_storage_to_products(db: Session, assignments: list[tuple[str, int, st
                 text("""
                     UPDATE quarantined_products
                     SET location_id = :loc
-                    WHERE product_tradking_id = :pid AND quarantine_status = 'Active'
+                    WHERE product_tracking_id = :pid AND quarantine_status = 'Active'
                 """),
                 {"loc": location_id, "pid": product_id}
             )

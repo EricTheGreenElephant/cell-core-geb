@@ -198,7 +198,8 @@ def render_treatment_qc_form():
                         help="If choosing B-Ware/Quarantine, a note is required."
                     )
 
-                    if chosen_outcome != 'Waste':
+                    # if chosen_outcome != 'Waste':
+                    if chosen_outcome:
                         filtered_reasons = filter_reasons_by_outcome(reason_rows, chosen_outcome)
                         reason_opts = {f"{r['reason_label']} [{r['category']}]": r["id"] for r in filtered_reasons}
 
@@ -211,7 +212,7 @@ def render_treatment_qc_form():
 
                         suggested_text = "; ".join(chosen_reason_labels)
                         chosen_notes = st.text_area(
-                            "Notes (required if B-Ware)",
+                            "Notes (required)",
                             value=suggested_text,
                             max_chars=255,
                             key=f"visfail_notes_{p['product_id']}"
