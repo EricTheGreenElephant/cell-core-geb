@@ -11,7 +11,7 @@ MM_PER_INCH = 25.4
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DEFAULT_FONT_PATH = os.path.join(
-    BASE_DIR, "..", "..", "assets", "fonts", "Inter-Regular.ttf"
+    BASE_DIR, "..", "..", "assets", "fonts", "Inter-Bold.ttf"
 )
 
 def generate_label_with_overlays(

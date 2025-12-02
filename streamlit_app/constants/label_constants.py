@@ -40,11 +40,11 @@ QR_LABEL_MAP = [
                 'font_size': 44
             },
             'surface_area': {
-                'position': (150, 246),
-                'font_size': 42
+                'position': (150, 245),
+                'font_size': 40
             },
             'product_id': {
-                'position': (210, 550),
+                'position': (210, 545),
                 'font_size': 42
             },
             'expiration_formatted': {
@@ -92,7 +92,7 @@ QR_LABEL_MAP = [
         'allowed_skus': ['GEB-CSmTCS', 'GEB-CSmTC2S', 'GEB-CSmTCS-2'],
         'label_specs': {
             'product_sku': {
-                'position': (450, 35),
+                'position': (440, 35),
                 'font_size': 44
             },
             'surface_area': {
