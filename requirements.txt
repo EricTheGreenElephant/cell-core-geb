@@ -5,6 +5,7 @@ pandas
 streamlit-aggrid
 pydantic
 SQLAlchemy
+qrcode
 azure-identity
 pyjwt
 streamlit-js-eval
