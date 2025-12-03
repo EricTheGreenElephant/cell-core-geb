@@ -49,7 +49,7 @@ DECLARE @Area_Admin      INT = (SELECT id FROM dbo.application_areas WHERE area_
 src AS (
     SELECT group_oid, area_id, access_level
     FROM all_groups
-    WHERE group_oid IS NOT NULL         -- skip any groups you didn’t provide
+    WHERE group_oid IS NOT NULL         -- skip any groups not provided
       AND area_id IS NOT NULL           -- skip if an area name wasn’t found
 )
 MERGE dbo.group_area_rights AS tgt
