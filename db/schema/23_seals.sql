@@ -1,6 +1,6 @@
-IF OBJECT_ID('lids', 'U') IS NULL
+IF OBJECT_ID('seals', 'U') IS NULL
 BEGIN 
-    CREATE TABLE lids (
+    CREATE TABLE seals (
         id INT PRIMARY KEY IDENTITY(1,1),
         serial_number NVARCHAR(100) NOT NULL UNIQUE,
         quantity INT NOT NULL,
@@ -9,8 +9,8 @@ BEGIN
         received_by INT NOT NULL,
         qc_result NVARCHAR(10) NOT NULL CHECK (qc_result IN ('PASS', 'FAIL')),
 
-        CONSTRAINT fk_lid_location
+        CONSTRAINT fk_seal_location
             FOREIGN KEY (location_id) REFERENCES storage_locations(id),
-        CONSTRAINT fk_lid_user FOREIGN KEY (received_by) REFERENCES users(id)
+        CONSTRAINT fk_seal_user FOREIGN KEY (received_by) REFERENCES users(id)
     );
 END;

@@ -1,11 +1,18 @@
 from PIL import Image, ImageDraw, ImageFont
 import qrcode
+import os
 from io import BytesIO
 
 
 LABEL_SIZE_MM = 76
 TARGET_DPI = 300
 MM_PER_INCH = 25.4
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+DEFAULT_FONT_PATH = os.path.join(
+    BASE_DIR, "..", "..", "assets", "fonts", "Inter-Bold.ttf"
+)
 
 def generate_label_with_overlays(
     background_path: str,
@@ -26,9 +33,9 @@ def generate_label_with_overlays(
 
     draw = ImageDraw.Draw(base)
 
-    def load_font(size):
+    def load_font(size, font_path=DEFAULT_FONT_PATH):
         try:
-            return ImageFont.truetype(font_path or "arial.ttf", size=size)
+            return ImageFont.truetype(font_path, size=size)
         except IOError:
             return ImageFont.load_default()
         
@@ -37,7 +44,8 @@ def generate_label_with_overlays(
         text = field["text"]
         position = field["position"]
         font_size = field.get("font_size", 16)
-        font = load_font(font_size)
+        font_path = field.get("font_path", DEFAULT_FONT_PATH)
+        font = load_font(font_size, font_path)
         draw.text(position, text, font=font, fill="black")
 
     if qr_required:

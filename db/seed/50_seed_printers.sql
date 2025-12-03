@@ -1,16 +1,14 @@
-INSERT INTO dbo.printers (name, location_id, status, is_active)
-SELECT v.name, s.id, v.status, 1
-FROM (VALUES
-    ('GEB1', '2250', 'Active', 1),
-    ('GEB2', '2250', 'Active', 1),
-    ('GEB3', '2250', 'Active', 1),
-    ('GEB4', '2250', 'Active', 1),
-    ('GEB5', '2250', 'Active', 1),
-    ('GEB6', '2250', 'Active', 1),
-    ('GEB7', '2250', 'Active', 1)
-) AS v(name, location_name, status, is_active)
-JOIN dbo.storage_locations s 
-    ON s.location_name = v.location_name
-LEFT JOIN dbo.printers p
-    ON p.name = v.name 
-WHERE p.id IS NULL;
+MERGE dbo.printers AS tgt
+USING (VALUES
+    ('GEB1', 'Active', 1),
+    ('GEB2', 'Active', 1),
+    ('GEB3', 'Active', 1),
+    ('GEB4', 'Active', 1),
+    ('GEB5', 'Active', 1),
+    ('GEB6', 'Active', 1),
+    ('GEB7', 'Active', 1)
+) AS src(name, status, is_active)
+ON tgt.name = src.name
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (name, status, is_active)
+    VALUES (src.name, src.status, src.is_active);
