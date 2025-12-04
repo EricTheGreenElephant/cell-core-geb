@@ -31,6 +31,7 @@ def render_label_form():
     product_sku = ""
     manual_entry = False
     details_required = False
+    automate = False
 
     search_option = st.selectbox(
         "Choose Search Option:",
@@ -61,29 +62,29 @@ def render_label_form():
                 step=1,
                 help="This will automatically generate the addtional IDs for label printing."
             )
-
+            
             if product_amount > 1:
                 automate = st.checkbox(
-                    "Automate Product ID numbers",
+                    "Auto Generate Product ID numbers",
                     value=False
                 )
 
-                if automate:
+            if automate:
+                product_id_input = st.number_input(
+                    label="Enter First Product ID",
+                    min_value=0,
+                    step=1
+                )
+                product_ids = [product_id_input + x for x in range(0, product_amount)]
+
+            else:
+                for i in range(int(product_amount)):
                     product_id_input = st.number_input(
-                        label="Enter Product ID",
-                        min_value=0,
+                        f"Product ID:",
+                        key=f"product_id_{i}",
                         step=1
                     )
-                    product_ids = [product_id_input + x for x in range(0, product_amount)]
-
-                else:
-                    for i in range(int(product_amount)):
-                        product_id_input = st.number_input(
-                            f"Product ID:",
-                            key=f"product_id_{i}",
-                            step=1
-                        )
-                        product_ids.append(product_id_input)
+                    product_ids.append(product_id_input)
 
         else:
             # product_id = st.text_input("Enter Product ID")
