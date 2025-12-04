@@ -4,7 +4,6 @@ from datetime import datetime
 from components.label.label_generator import generate_label_with_overlays
 from services.label_services import get_label_data_by_product_id
 from db.orm_session import get_session
-from streamlit.components.v1 import html
 from constants.label_constants import SKU_DATA_SPECS, QR_LABEL_MAP
 
 def label_validation(product_sku: str):
@@ -20,8 +19,9 @@ def label_spec_finder(label: str):
             label_specs = package["label_specs"]
             qr_required = package["qr_required"]
             qr_specs = package["qr_specs"]
-            return label_specs, qr_required, qr_specs
-    return {}, False, {}
+            print_size = package["print_size"]
+            return label_specs, qr_required, qr_specs, print_size
+    return {}, False, {}, 0
 
 def render_label_form():
     st.subheader("Generate Product Label")
@@ -45,13 +45,6 @@ def render_label_form():
             help="If you need to manually generate Product ID for label, click here. This will generally be needed throughout testing, since Product IDs may not match."
         )
 
-        # product_id = st.text_input("Enter Product ID")
-        product_id_search = st.number_input(
-            label="Enter Product ID",
-            min_value=0,
-            step=1
-        )
-
         if manual_entry:
             product_sku = st.selectbox(
                 label="Choose the Product SKU",
@@ -65,16 +58,40 @@ def render_label_form():
                 label="Enter number of products for label printing.",
                 min_value=0,
                 max_value=1000,
-                step=3 if product_specs["product_type"] == "CS MINI" else 1,
+                step=1,
                 help="This will automatically generate the addtional IDs for label printing."
             )
-            if product_specs["product_type"] == "CS MINI":
-                if product_amount % 3 != 0:
-                    st.error("Please enter amount in 3s!")
-                    return
 
-            product_ids = [product_id_search + x for x in range(0, product_amount)]
+            if product_amount > 1:
+                automate = st.checkbox(
+                    "Automate Product ID numbers",
+                    value=False
+                )
+
+                if automate:
+                    product_id_input = st.number_input(
+                        label="Enter Product ID",
+                        min_value=0,
+                        step=1
+                    )
+                    product_ids = [product_id_input + x for x in range(0, product_amount)]
+
+                else:
+                    for i in range(int(product_amount)):
+                        product_id_input = st.number_input(
+                            f"Product ID:",
+                            key=f"product_id_{i}",
+                            step=1
+                        )
+                        product_ids.append(product_id_input)
+
         else:
+            # product_id = st.text_input("Enter Product ID")
+            product_id_search = st.number_input(
+                label="Enter Product ID",
+                min_value=0,
+                step=1
+            )
             product_ids.append(product_id_search)
 
         product_id = st.radio(label="Choose Product ID", options=product_ids)
@@ -93,10 +110,10 @@ def render_label_form():
         index=0
     )
 
-    label_specs, qr_required, qr_specs = label_spec_finder(label_choice)
+    label_specs, qr_required, qr_specs, print_size = label_spec_finder(label_choice)
 
     if label_choice == "CSmini_v3":
-        options = [', '.join(str(x) for x in product_ids[y:y+3]) for y in range(0, len(product_ids)//3)] 
+        options = [', '.join(str(x) for x in product_ids[y*3:3*(y+1)]) for y in range(0, len(product_ids)//3)] 
         product_id = st.radio(
             "Choose Version 3 label Product ID display",
             options=options,
@@ -109,7 +126,7 @@ def render_label_form():
         if details_required:
             if manual_entry:
                 today = datetime.today()
-                expire_date = today.replace(year=today.year + 1)
+                expire_date = today.replace(year=today.year + 2)
                 expiration_formatted = f"{expire_date.month} / {expire_date.year}"
                 product_type = product_specs["product_type"]
                 surface_area = product_specs["surface_area"]
@@ -169,7 +186,7 @@ def render_label_form():
         #     qr_size = 270
         # qr_data = product_id
 
-        background_path = f"streamlit_app/assets/{label_choice}.png"
+        background_path = f"streamlit_app/assets/labels/{label_choice}.png"
         # if label_choice == "Harvest":
         #     # background_path = "streamlit_app/assets/GEB-Label-Image-wo-Text.png"
         #     background_path = "streamlit_app/assets/Label-V2.png"
@@ -187,7 +204,8 @@ def render_label_form():
             # qr_position=qr_position,
             # qr_size=qr_size,
             qr_specs=qr_specs,
-            qr_required=qr_required
+            qr_required=qr_required,
+            print_size=print_size
         )
 
 
@@ -195,7 +213,7 @@ def render_label_form():
 
         # --- Inline PDF preview(iframe) ---
         pdf_b64 = base64.b64encode(label_img.getvalue()).decode("utf-8")
-        html(
+        st.markdown(
             f"""
             <iframe
                 src="data:application/pdf;base64,{pdf_b64}"
@@ -204,7 +222,18 @@ def render_label_form():
                 style="border:1px solid #ddd; border-radius:8px;"
             ></iframe>
             """,
-            height=720
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            f"""
+            <p style="margin-top: 0.5rem;">
+                <a href="data:application/pdf;base64,{pdf_b64}" target="_blank">
+                    Open label in new tab
+                </a>
+            </p>
+            """,
+            unsafe_allow_html=True,
         )
 
         # st.image(label_img, caption="Generated Label", use_container_width=False)
