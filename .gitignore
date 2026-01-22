@@ -177,3 +177,6 @@ cython_debug/
 
 # Project csv files
 etl/data/_staging_preview.csv
+
+# Project Excel files
+*.xlsm

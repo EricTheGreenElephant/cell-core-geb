@@ -45,9 +45,11 @@ BEGIN TRY
 
   DECLARE @pt_10k INT = (SELECT id FROM dbo.product_types WHERE name = N'10K');
   DECLARE @pt_6k  INT = (SELECT id FROM dbo.product_types WHERE name = N'6K');
+  DECLARE @pt_csmini INT = (SELECT id FROM dbo.product_types WHERE name = N'CS MINI');
 
   DECLARE @sku_10k INT = (SELECT MIN(id) FROM dbo.product_skus WHERE product_type_id = @pt_10k);
   DECLARE @sku_6k  INT = (SELECT MIN(id) FROM dbo.product_skus WHERE product_type_id = @pt_6k);
+  DECLARE @sku_csmini INT = (SELECT MIN(id) FROM dbo.product_skus WHERE product_type_id = @pt_csmini);
 
   DECLARE @req_10k INT = (SELECT id FROM dbo.product_requests WHERE notes = N'LEGACY_REQUEST_10K' AND sku_id = @sku_10k);
   IF @pt_10k IS NOT NULL AND @sku_10k IS NOT NULL AND @req_10k IS NULL
@@ -63,6 +65,14 @@ BEGIN TRY
     INSERT dbo.product_requests (requested_by, sku_id, lot_number, status, notes)
     VALUES (@fallback_user_id, @sku_6k, N'LEGACY_LOT', N'Fulfilled', N'LEGACY_REQUEST_6K');
     SET @req_6k = SCOPE_IDENTITY();
+  END
+
+  DECLARE @req_csmini INT = (SELECT id FROM dbo.product_requests WHERE notes = N'LEGACY_REQUEST_CS_MINI' AND sku_id = @sku_csmini);
+  IF @pt_csmini IS NOT NULL AND @sku_csmini IS NOT NULL AND @req_csmini IS NULL 
+  BEGIN
+    INSERT dbo.product_requests (requested_by, sku_id, lot_number, status, notes)
+    VALUES (@fallback_user_id, @sku_csmini, N'LEGACY_LOT', N'Fulfilled', N'LEGACY_REQUEST_CS_MINI');
+    SET @req_csmini = SCOPE_IDENTITY();
   END
 
   /* -------- 1) Stage unified rows in sequence -------- */
@@ -100,6 +110,7 @@ BEGIN TRY
     u.print_date_dt,
     CASE WHEN u.product_name = N'10K' THEN @req_10k
          WHEN u.product_name = N'6K'  THEN @req_6k
+         WHEN u.product_name = N'CS MINI' THEN @req_csmini
          ELSE @req_10k END
   FROM #U u
   ORDER BY u.harvest_seq;

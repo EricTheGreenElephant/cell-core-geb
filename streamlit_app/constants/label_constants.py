@@ -110,7 +110,7 @@ QR_LABEL_MAP = [
                 'font_size': 42
             }
         },
-        'qr_required': True,
+        'qr_required': False,
         'qr_specs': {
             'qr_position': (613, 275),
             'qr_size': 270,

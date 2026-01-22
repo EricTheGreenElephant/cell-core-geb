@@ -11,3 +11,4 @@ pyjwt
 streamlit-js-eval
 requests
 openpyxl
+msal

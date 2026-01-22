@@ -101,6 +101,7 @@ BEGIN TRY
         ON ip.filament_id_bigint = pr.filament_id_bigint
        AND ip.printer_name       = pr.printer_name
   )
+
   INSERT INTO #src(filament_tracking_id, printer_id, remaining_weight, status)
   SELECT
     b.filament_tracking_id,
