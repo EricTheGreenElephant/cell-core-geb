@@ -80,6 +80,11 @@ jobs:
               run: |
                 sqlcmd -S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 30 -b -Q "SELECT @@VERSION AS version; SELECT SUSER_SNAME() AS whoami;"
 
+            - name: Stop Web App (prevents DB reconnection during rebuild)
+              shell: bash
+              run: |
+                az webapp stop -g "$RG" -n "cellcore-streamlit-web" || true
+
             - name: Drop and recreate DEV database
               shell: bash
               run: |
@@ -207,6 +212,12 @@ jobs:
             - name: Apply postseed
               shell: bash
               run: /tmp/run_folder.sh "$POSTSEED_DIR"
+
+            - name: Start Web App
+              if: always()
+              shell: bash
+              run: |
+                az webapp start -g "$RG" -n "cellcore-streamlit-web" || true
 
             - name: Close temp firewall hole
               if: always()
