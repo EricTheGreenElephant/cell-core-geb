@@ -85,56 +85,58 @@ jobs:
               run: |
                 az webapp stop -g "$RG" -n "cellcore-streamlit-web" || true
 
-            - name: Drop and recreate DEV database (Azure CLI)
-              shell: bash
-              run: |
-                set -euo pipefail
+            # Uncomment when a db drop and recreate is necessary
+            
+            # - name: Drop and recreate DEV database (Azure CLI)
+            #   shell: bash
+            #   run: |
+            #     set -euo pipefail
 
-                SERVER_FQDN="${DB_SERVER}"
-                SERVER="${SERVER_FQDN%%.database.windows.net}"
+            #     SERVER_FQDN="${DB_SERVER}"
+            #     SERVER="${SERVER_FQDN%%.database.windows.net}"
 
-                echo "Server short name: $SERVER"
-                echo "Database name: $DB_NAME"
+            #     echo "Server short name: $SERVER"
+            #     echo "Database name: $DB_NAME"
 
-                echo "Deleting database (if it exists)..."
-                if az sql db show -g "$RG" -s "$SERVER" -n "$DB_NAME" >/dev/null 2>&1; then
-                  az sql db delete -g "$RG" -s "$SERVER" -n "$DB_NAME" --yes
-                else
-                  echo "DB not found in Azure control plane; skipping delete."
-                fi
+            #     echo "Deleting database (if it exists)..."
+            #     if az sql db show -g "$RG" -s "$SERVER" -n "$DB_NAME" >/dev/null 2>&1; then
+            #       az sql db delete -g "$RG" -s "$SERVER" -n "$DB_NAME" --yes
+            #     else
+            #       echo "DB not found in Azure control plane; skipping delete."
+            #     fi
 
-                echo "Waiting for DB to be fully gone..."
-                for i in {1..60}; do
-                  if az sql db show -g "$RG" -s "$SERVER" -n "$DB_NAME" >/dev/null 2>&1; then
-                    echo "Still exists (attempt $i/60). Sleeping 5s..."
-                    sleep 5
-                  else
-                    echo "DB is gone."
-                    break
-                  fi
-                done
+            #     echo "Waiting for DB to be fully gone..."
+            #     for i in {1..60}; do
+            #       if az sql db show -g "$RG" -s "$SERVER" -n "$DB_NAME" >/dev/null 2>&1; then
+            #         echo "Still exists (attempt $i/60). Sleeping 5s..."
+            #         sleep 5
+            #       else
+            #         echo "DB is gone."
+            #         break
+            #       fi
+            #     done
 
-                if az sql db show -g "$RG" -s "$SERVER" -n "$DB_NAME" >/dev/null 2>&1; then
-                  echo "ERROR: DB still exists after waiting. Aborting."
-                  exit 1
-                fi
+            #     if az sql db show -g "$RG" -s "$SERVER" -n "$DB_NAME" >/dev/null 2>&1; then
+            #       echo "ERROR: DB still exists after waiting. Aborting."
+            #       exit 1
+            #     fi
 
-                echo "Creating database..."
-                # Pick the SKU you actually use. Examples:
-                # --service-objective S0   (DTU model)
-                # --compute-model Serverless --family Gen5 --capacity 2  (vCore example)
-                az sql db create -g "$RG" -s "$SERVER" -n "$DB_NAME" --service-objective S0
+            #     echo "Creating database..."
+            #     # Pick the SKU you actually use. Examples:
+            #     # --service-objective S0   (DTU model)
+            #     # --compute-model Serverless --family Gen5 --capacity 2  (vCore example)
+            #     az sql db create -g "$RG" -s "$SERVER" -n "$DB_NAME" --service-objective S0
 
-                echo "Waiting for DB to become Online..."
-                for i in {1..60}; do
-                  state=$(az sql db show -g "$RG" -s "$SERVER" -n "$DB_NAME" --query status -o tsv 2>/dev/null || true)
-                  echo "Status: $state"
-                  if [[ "$state" == "Online" ]]; then
-                    echo "DB is Online."
-                    break
-                  fi
-                  sleep 5
-                done
+            #     echo "Waiting for DB to become Online..."
+            #     for i in {1..60}; do
+            #       state=$(az sql db show -g "$RG" -s "$SERVER" -n "$DB_NAME" --query status -o tsv 2>/dev/null || true)
+            #       echo "Status: $state"
+            #       if [[ "$state" == "Online" ]]; then
+            #         echo "DB is Online."
+            #         break
+            #       fi
+            #       sleep 5
+            #     done
 
 
             - name: Define run_folder function
