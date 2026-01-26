@@ -7,6 +7,7 @@ USING (
         ('VIS_BLACK_LINE_WO', 'Black line without scratch', 'Visual', 'B-Ware', 1),
         ('VIS_PARTICLES_IN', 'Particles in inner area', 'Visual',    'B-Ware', 1),
         ('VIS_GREATER_FIVE', 'Greater than five particles', 'Visual', 'B-Ware', 1),
+        ('VIS_STRINGING', 'Stringing', 'Visual', 'B-Ware', 1),
         ('VIS_CRACKS', 'Cracks/Damage outer shell', 'Visual', 'Waste', 1),
         ('VIS_TEARS', 'Tears/Damage on surface', 'Visual', 'Waste', 1),
         ('VIS_OFFSET', 'Offset', 'Visual', 'Waste', 1),

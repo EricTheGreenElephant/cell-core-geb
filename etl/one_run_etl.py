@@ -67,9 +67,9 @@ def main():
 
     parser = argparse.ArgumentParser(description="One-shot ETL")
     # Uncomment for previous data
-    # parser.add_argument("--excel", default=os.getenv("EXCEL_PATH", "etl/data/2025825_Backup-ExcelTool_ErSi_Copy.xlsm"))
-    # Uncomment for latest data
-    parser.add_argument("--excel", default=os.getenv("EXCEL_PATH", "etl/data/20241210_Excel-Tool_4-1_ErSi_Copy2.xlsm"))
+    parser.add_argument("--excel", default=os.getenv("EXCEL_PATH", "etl/data/2025825_Backup-ExcelTool_ErSi_Copy.xlsm"))
+    # # Uncomment for latest data
+    # parser.add_argument("--excel", default=os.getenv("EXCEL_PATH", "etl/data/20241210_Excel-Tool_4-1_ErSi_Copy2.xlsm"))
     parser.add_argument("--no-truncate", action="store_true", help="Do not truncate staging tables before loading.")
     parser.add_argument("--no-stage", action="store_true", help="Skip all staging loads.")
     parser.add_argument("--no-transform", action="store_true", help="Skip all transforms.")
@@ -111,6 +111,7 @@ def main():
         run_transform(Path("etl/transform_product_tracking.sql"), "product_tracking", only_set)
         run_transform(Path("etl/transform_product_quality_control.sql"), "product_quality_control", only_set)
         run_transform(Path("etl/transform_treatment_batches.sql"), "treatment_batch", only_set)
+        run_transform(Path("etl/transform_post_treatment_inspections.sql"), "post_treatment_inspections", only_set)
 
 if __name__ == "__main__":
     main()

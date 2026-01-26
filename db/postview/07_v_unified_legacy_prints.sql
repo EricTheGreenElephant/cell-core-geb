@@ -19,7 +19,7 @@ WITH ValidStage AS (
       AND sed.filament_id IS NOT NULL
       AND TRY_CAST(sed.filament_id AS BIGINT) IS NOT NULL
       AND sed.status_quality_check IS NOT NULL
-      AND LTRIM(RTRIM(sed.product)) IN (N'10K', N'6K')
+      AND LTRIM(RTRIM(sed.product)) IN (N'10K', N'6K', N'CS MINI')
       AND TRY_CONVERT(date, sed.date_harvest) >= '2025-07-17'
 ),
 Joined AS (

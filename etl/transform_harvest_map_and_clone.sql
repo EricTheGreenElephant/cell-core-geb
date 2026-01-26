@@ -38,7 +38,7 @@ BEGIN TRY
       LTRIM(RTRIM(operator_harvest))                   AS operator_trim,
       LTRIM(RTRIM(product))                            AS product_trim
     FROM dbo.stg_excel_data
-    WHERE product IN (N'10K', N'6K')
+    WHERE product IN (N'10K', N'6K', N'CS MINI')
       AND status_quality_check IS NOT NULL
       AND product      IS NOT NULL
       AND printer      IS NOT NULL         

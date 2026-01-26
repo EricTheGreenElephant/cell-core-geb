@@ -83,7 +83,7 @@ BEGIN TRY
       AND sed.date_of_quality_check IS NOT NULL
       AND sed.weight_check_g IS NOT NULL
       AND sed.pressure_drop_check_mbar IS NOT NULL
-      AND LTRIM(RTRIM(sed.product)) IN (N'10K', N'6K')  -- keep same scope
+      AND LTRIM(RTRIM(sed.product)) IN (N'10K', N'6K', N'CS MINI')  -- keep same scope
       AND TRY_CONVERT(date, sed.date_harvest) >= @CutoffDate
   ),
   Mapped AS (

@@ -5,7 +5,7 @@ on:
             excel_path:
                 description: "Excel path in repo (leave default to use current)"
                 required: false 
-                default: "etl/data/20241210_Excel-Tool_4-1_ErSi_Copy2.xlsm"
+                default: "etl/data/20241210_Excel-Tool_4-1_ErSi_Copy.xlsm"
 
 permissions:
     id-token: write

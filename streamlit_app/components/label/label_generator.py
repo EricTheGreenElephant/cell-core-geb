@@ -24,12 +24,14 @@ def generate_label_with_overlays(
     font_path: str = None,
     # qr_size: int = 270,
     qr_required: bool = True,
+    print_size: int = 0
 
 ) -> BytesIO:
     base = Image.open(background_path).convert("RGBA")
 
-    # label_inches = LABEL_SIZE_MM / MM_PER_INCH
+    # label_inches = print_size / MM_PER_INCH
     # target_px = int(round(label_inches * TARGET_DPI))
+    # base = base.resize((target_px, target_px))
 
     draw = ImageDraw.Draw(base)
 
@@ -62,5 +64,6 @@ def generate_label_with_overlays(
     output = BytesIO()
     # base.save(output, format="PNG") 
     rgb_base.save(output, format="PDF")
+    # rgb_base.save(output, format="PDF", resolution=TARGET_DPI)
     output.seek(0)
     return output
