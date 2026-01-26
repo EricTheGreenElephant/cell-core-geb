@@ -85,12 +85,16 @@ jobs:
               run: |
                 set -euo pipefail
 
-                sqlcmd -S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 180 -b -I <<SQL
-                DECLARE @db sysname = N'${DB_NAME}';
+                # Write SQL to a file (no heredoc terminator problems)
+                python - <<'PY'
+                import os, pathlib
+
+                db = os.environ["DB_NAME"]
+                sql = f"""
+                DECLARE @db sysname = N'{db.replace("'", "''")}';
 
                 IF DB_ID(@db) IS NOT NULL
                 BEGIN
-                  -- Kill sessions using the target DB
                   DECLARE @kill nvarchar(max) = N'';
                   SELECT @kill = @kill + N'KILL ' + CAST(session_id AS nvarchar(10)) + N';'
                   FROM sys.dm_exec_sessions
@@ -108,8 +112,12 @@ jobs:
                 DECLARE @create nvarchar(max) =
                   N'CREATE DATABASE [' + REPLACE(@db, ']', ']]') + N']';
                 EXEC (@create);
-                  SQL
+                """
+                pathlib.Path("/tmp/rebuild.sql").write_text(sql, encoding="utf-8")
+                PY
 
+                # Run the file
+                sqlcmd -S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 180 -b -I -i /tmp/rebuild.sql
 
 
             - name: Define run_folder function
