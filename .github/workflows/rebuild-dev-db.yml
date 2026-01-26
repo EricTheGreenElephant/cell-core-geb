@@ -22,6 +22,12 @@ jobs:
                 tenant-id: ${{ secrets.AZURE_TENANT_ID }}
                 subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+            - name: Who am I in Azure?
+              shell: bash
+              run: |
+                az account show --query "{user:user.name, tenant:tenantId, sub:id}" -o jsonc
+                az ad signed-in-user show --query userPrincipalName -o tsv || true
+
             - name: Open temp firewall for runner IP
               shell: bash
               run: | 
@@ -68,6 +74,14 @@ jobs:
                 printf '%s' "$TOKEN" | iconv -f ascii -t UTF-16LE > "$TOKEN_FILE"
                 echo "TOKEN_FILE=$TOKEN_FILE" >> $GITHUB_ENV
 
+
+
+            - name: Token sanity check
+              shell: bash
+              run: |
+                echo "Token length: ${#SQLCMDACCESS_TOKEN}"
+
+
             - name: Smoke test server connectivity
               shell: bash
               run: |
@@ -76,7 +90,7 @@ jobs:
             - name: Drop and recreate DEV database
               shell: bash
               run: |
-                sqlcmd _S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 60 -b -Q "
+                sqlcmd -S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 60 -b -Q "
                     IF DB_ID(N'$DB_NAME') IS NOT NULL
                     BEGIN
                         ALTER DATABASE [$DB_NAME] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
