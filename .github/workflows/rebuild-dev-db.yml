@@ -85,81 +85,54 @@ jobs:
               run: |
                 az webapp stop -g "$RG" -n "cellcore-streamlit-web" || true
 
-            - name: Rebuild DEV database (diagnostic rename -> create)
+            - name: Drop and recreate DEV database
               shell: bash
               run: |
                 set -euo pipefail
 
                 python - <<'PY'
-                import os, pathlib, datetime, timezone
+                import os
+                import pathlib
 
                 db = os.environ["DB_NAME"]
-                suffix = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d%H%M%S")
-                old = f"{db}__old__{suffix}"
-
-                def esc(s: str) -> str:
-                  return s.replace("'", "''")
 
                 sql = f"""
                 SET NOCOUNT ON;
 
-                DECLARE @db sysname = N'{esc(db)}';
-                DECLARE @old sysname = N'{esc(old)}';
+                PRINT 'Dropping database if it exists: {db}';
 
-                PRINT 'Target DB: ' + @db;
-                PRINT 'Old DB:    ' + @old;
-
-                -- show current existence
-                SELECT name FROM sys.databases WHERE name IN (@db, @old);
-
-                IF DB_ID(@db) IS NOT NULL
+                IF DB_ID(N'{db}') IS NOT NULL
                 BEGIN
-                  PRINT 'DB exists; attempting rename...';
-
-                  BEGIN TRY
-                    DECLARE @rename nvarchar(max) =
-                      N'ALTER DATABASE [' + REPLACE(@db, ']', ']]') + N'] MODIFY NAME = [' + REPLACE(@old, ']', ']]') + N'];';
-                    EXEC (@rename);
-                  END TRY
-                  BEGIN CATCH
-                    PRINT 'Rename failed: ' + ERROR_MESSAGE();
-                    THROW;
-                  END CATCH
+                    DROP DATABASE [{db}];
+                    PRINT 'Database dropped.';
                 END
                 ELSE
                 BEGIN
-                  PRINT 'DB does not exist; skipping rename.';
+                    PRINT 'Database did not exist.';
                 END
 
-                -- verify rename result
-                PRINT 'After rename check:';
-                SELECT name FROM sys.databases WHERE name IN (@db, @old);
-
-                IF DB_ID(@db) IS NOT NULL
-                BEGIN
-                  -- If @db still exists here, rename did not work and CREATE will fail
-                  THROW 50001, 'Rename did not remove original DB name; refusing to CREATE to avoid "already exists".', 1;
-                END
-
-                PRINT 'Creating fresh DB...';
-                BEGIN TRY
-                  DECLARE @create nvarchar(max) =
-                    N'CREATE DATABASE [' + REPLACE(@db, ']', ']]') + N'];';
-                  EXEC (@create);
-                END TRY
-                BEGIN CATCH
-                  PRINT 'Create failed: ' + ERROR_MESSAGE();
-                  THROW;
-                END CATCH
-
-                PRINT 'Done.';
+                PRINT 'Creating database: {db}';
+                CREATE DATABASE [{db}];
+                PRINT 'Database created.';
                 """
+
                 pathlib.Path("/tmp/rebuild.sql").write_text(sql, encoding="utf-8")
                 PY
 
-                sqlcmd -S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 180 -b -I -i /tmp/rebuild.sql
+                echo "=== SQL being executed ==="
+                cat /tmp/rebuild.sql
+                echo "=========================="
 
-
+                sqlcmd \
+                  -S "tcp:$DB_SERVER,1433" \
+                  -d master \
+                  -G \
+                  -P "$TOKEN_FILE" \
+                  -C \
+                  -l 180 \
+                  -b \
+                  -I \
+                  -i /tmp/rebuild.sql
 
 
             - name: Define run_folder function
