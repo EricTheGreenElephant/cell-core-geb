@@ -83,30 +83,33 @@ jobs:
             - name: Drop and recreate DEV database
               shell: bash
               run: |
-                sqlcmd -S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 120 -b -I \
-                  -v DB_NAME="$DB_NAME" \
-                  -Q "
-                  DECLARE @db sysname = N'$(DB_NAME)';
+                set -euo pipefail
 
-                  IF DB_ID(@db) IS NOT NULL
-                  BEGIN
-                    -- Kill active sessions connected to the target DB
-                    DECLARE @kill nvarchar(max) = N'';
-                    SELECT @kill = @kill + N'KILL ' + CAST(session_id AS nvarchar(10)) + N';'
-                    FROM sys.dm_exec_sessions
-                    WHERE database_id = DB_ID(@db)
-                      AND session_id <> @@SPID;
+                sqlcmd -S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 180 -b -I <<SQL
+                DECLARE @db sysname = N'${DB_NAME}';
 
-                    IF (@kill <> N'')
-                      EXEC (@kill);
+                IF DB_ID(@db) IS NOT NULL
+                BEGIN
+                  -- Kill sessions using the target DB
+                  DECLARE @kill nvarchar(max) = N'';
+                  SELECT @kill = @kill + N'KILL ' + CAST(session_id AS nvarchar(10)) + N';'
+                  FROM sys.dm_exec_sessions
+                  WHERE database_id = DB_ID(@db)
+                    AND session_id <> @@SPID;
 
-                    DECLARE @sql nvarchar(max) = N'DROP DATABASE [' + REPLACE(@db, ']', ']]') + N']';
-                    EXEC (@sql);
-                  END;
+                  IF (@kill <> N'')
+                    EXEC (@kill);
 
-                  DECLARE @sql2 nvarchar(max) = N'CREATE DATABASE [' + REPLACE(@db, ']', ']]') + N']';
-                  EXEC (@sql2);
-                  "
+                  DECLARE @drop nvarchar(max) =
+                    N'DROP DATABASE [' + REPLACE(@db, ']', ']]') + N']';
+                  EXEC (@drop);
+                END;
+
+                DECLARE @create nvarchar(max) =
+                  N'CREATE DATABASE [' + REPLACE(@db, ']', ']]') + N']';
+                EXEC (@create);
+                  SQL
+
 
 
             - name: Define run_folder function
