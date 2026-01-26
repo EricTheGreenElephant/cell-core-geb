@@ -85,53 +85,80 @@ jobs:
               run: |
                 az webapp stop -g "$RG" -n "cellcore-streamlit-web" || true
 
-            - name: Rebuild DEV database (rename old -> create new)
+            - name: Rebuild DEV database (diagnostic rename -> create)
               shell: bash
               run: |
                 set -euo pipefail
 
                 python - <<'PY'
-                import os, pathlib, datetime
+                import os, pathlib, datetime, timezone
 
                 db = os.environ["DB_NAME"]
-                # unique suffix so reruns don't collide
-                suffix = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
+                suffix = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d%H%M%S")
                 old = f"{db}__old__{suffix}"
 
                 def esc(s: str) -> str:
                   return s.replace("'", "''")
 
                 sql = f"""
+                SET NOCOUNT ON;
+
                 DECLARE @db sysname = N'{esc(db)}';
                 DECLARE @old sysname = N'{esc(old)}';
 
+                PRINT 'Target DB: ' + @db;
+                PRINT 'Old DB:    ' + @old;
+
+                -- show current existence
+                SELECT name FROM sys.databases WHERE name IN (@db, @old);
+
                 IF DB_ID(@db) IS NOT NULL
                 BEGIN
-                  -- Rename the existing DB to free up the original name immediately
-                  DECLARE @rename nvarchar(max) = N'ALTER DATABASE [' + REPLACE(@db, ']', ']]') + N'] MODIFY NAME = [' + REPLACE(@old, ']', ']]') + N'];';
-                  EXEC (@rename);
-                END;
+                  PRINT 'DB exists; attempting rename...';
 
-                -- Create fresh DB with the original name
-                DECLARE @create nvarchar(max) = N'CREATE DATABASE [' + REPLACE(@db, ']', ']]') + N'];';
-                EXEC (@create);
-
-                -- Optional: try to drop the old one (best-effort). If it fails, it’s still renamed and harmless.
-                IF DB_ID(@old) IS NOT NULL
-                BEGIN
                   BEGIN TRY
-                    DECLARE @drop nvarchar(max) = N'DROP DATABASE [' + REPLACE(@old, ']', ']]') + N'];';
-                    EXEC (@drop);
+                    DECLARE @rename nvarchar(max) =
+                      N'ALTER DATABASE [' + REPLACE(@db, ']', ']]') + N'] MODIFY NAME = [' + REPLACE(@old, ']', ']]') + N'];';
+                    EXEC (@rename);
                   END TRY
                   BEGIN CATCH
-                    PRINT 'Could not drop old database (still in use). It has been renamed to: ' + @old;
+                    PRINT 'Rename failed: ' + ERROR_MESSAGE();
+                    THROW;
                   END CATCH
                 END
+                ELSE
+                BEGIN
+                  PRINT 'DB does not exist; skipping rename.';
+                END
+
+                -- verify rename result
+                PRINT 'After rename check:';
+                SELECT name FROM sys.databases WHERE name IN (@db, @old);
+
+                IF DB_ID(@db) IS NOT NULL
+                BEGIN
+                  -- If @db still exists here, rename did not work and CREATE will fail
+                  THROW 50001, 'Rename did not remove original DB name; refusing to CREATE to avoid "already exists".', 1;
+                END
+
+                PRINT 'Creating fresh DB...';
+                BEGIN TRY
+                  DECLARE @create nvarchar(max) =
+                    N'CREATE DATABASE [' + REPLACE(@db, ']', ']]') + N'];';
+                  EXEC (@create);
+                END TRY
+                BEGIN CATCH
+                  PRINT 'Create failed: ' + ERROR_MESSAGE();
+                  THROW;
+                END CATCH
+
+                PRINT 'Done.';
                 """
                 pathlib.Path("/tmp/rebuild.sql").write_text(sql, encoding="utf-8")
                 PY
 
                 sqlcmd -S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 180 -b -I -i /tmp/rebuild.sql
+
 
 
 
