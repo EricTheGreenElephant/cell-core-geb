@@ -16,17 +16,14 @@ jobs:
         
         steps:
             - name: Checkout repo
+              uses: actions/checkout@v4
+
+            - name: Azure login (OIDC)
               uses: azure/login@v2
               with:
                 client-id: ${{ secrets.AZURE_CLIENT_ID }}
                 tenant-id: ${{ secrets.AZURE_TENANT_ID }}
                 subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-            - name: Who am I in Azure?
-              shell: bash
-              run: |
-                az account show --query "{user:user.name, tenant:tenantId, sub:id}" -o jsonc
-                az ad signed-in-user show --query userPrincipalName -o tsv || true
 
             - name: Open temp firewall for runner IP
               shell: bash
@@ -74,12 +71,11 @@ jobs:
                 printf '%s' "$TOKEN" | iconv -f ascii -t UTF-16LE > "$TOKEN_FILE"
                 echo "TOKEN_FILE=$TOKEN_FILE" >> $GITHUB_ENV
 
-
-
-            - name: Token sanity check
+            - name: Who am I (Azure context)
               shell: bash
               run: |
-                echo "Token length: ${#SQLCMDACCESS_TOKEN}"
+                az account show --query "{tenant:tenantId, sub:id, user:user.name}" -o jsonc
+                az ad signed-in-user show --query userPrincipalName -o tsv || echo "No delegated user (expected for OIDC SP)"
 
 
             - name: Smoke test server connectivity
