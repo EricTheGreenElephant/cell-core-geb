@@ -85,44 +85,54 @@ jobs:
               run: |
                 az webapp stop -g "$RG" -n "cellcore-streamlit-web" || true
 
-            - name: Drop and recreate DEV database
+            - name: Rebuild DEV database (rename old -> create new)
               shell: bash
               run: |
                 set -euo pipefail
 
-                # Write SQL to a file (no heredoc terminator problems)
                 python - <<'PY'
-                import os, pathlib
+                import os, pathlib, datetime
 
                 db = os.environ["DB_NAME"]
+                # unique suffix so reruns don't collide
+                suffix = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
+                old = f"{db}__old__{suffix}"
+
+                def esc(s: str) -> str:
+                  return s.replace("'", "''")
+
                 sql = f"""
-                DECLARE @db sysname = N'{db.replace("'", "''")}';
+                DECLARE @db sysname = N'{esc(db)}';
+                DECLARE @old sysname = N'{esc(old)}';
 
                 IF DB_ID(@db) IS NOT NULL
                 BEGIN
-                  DECLARE @kill nvarchar(max) = N'';
-                  SELECT @kill = @kill + N'KILL ' + CAST(session_id AS nvarchar(10)) + N';'
-                  FROM sys.dm_exec_sessions
-                  WHERE database_id = DB_ID(@db)
-                    AND session_id <> @@SPID;
-
-                  IF (@kill <> N'')
-                    EXEC (@kill);
-
-                  DECLARE @drop nvarchar(max) =
-                    N'DROP DATABASE [' + REPLACE(@db, ']', ']]') + N']';
-                  EXEC (@drop);
+                  -- Rename the existing DB to free up the original name immediately
+                  DECLARE @rename nvarchar(max) = N'ALTER DATABASE [' + REPLACE(@db, ']', ']]') + N'] MODIFY NAME = [' + REPLACE(@old, ']', ']]') + N'];';
+                  EXEC (@rename);
                 END;
 
-                DECLARE @create nvarchar(max) =
-                  N'CREATE DATABASE [' + REPLACE(@db, ']', ']]') + N']';
+                -- Create fresh DB with the original name
+                DECLARE @create nvarchar(max) = N'CREATE DATABASE [' + REPLACE(@db, ']', ']]') + N'];';
                 EXEC (@create);
+
+                -- Optional: try to drop the old one (best-effort). If it fails, it’s still renamed and harmless.
+                IF DB_ID(@old) IS NOT NULL
+                BEGIN
+                  BEGIN TRY
+                    DECLARE @drop nvarchar(max) = N'DROP DATABASE [' + REPLACE(@old, ']', ']]') + N'];';
+                    EXEC (@drop);
+                  END TRY
+                  BEGIN CATCH
+                    PRINT 'Could not drop old database (still in use). It has been renamed to: ' + @old;
+                  END CATCH
+                END
                 """
                 pathlib.Path("/tmp/rebuild.sql").write_text(sql, encoding="utf-8")
                 PY
 
-                # Run the file
                 sqlcmd -S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 180 -b -I -i /tmp/rebuild.sql
+
 
 
             - name: Define run_folder function
