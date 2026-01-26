@@ -85,59 +85,56 @@ jobs:
               run: |
                 az webapp stop -g "$RG" -n "cellcore-streamlit-web" || true
 
-            - name: Drop and recreate DEV database
+            - name: Drop and recreate DEV database (Azure CLI)
               shell: bash
               run: |
                 set -euo pipefail
 
-                python - <<'PY'
-                import os, pathlib
+                SERVER_FQDN="${DB_SERVER}"
+                SERVER="${SERVER_FQDN%%.database.windows.net}"
 
-                db = os.environ["DB_NAME"].replace("'", "''")
+                echo "Server short name: $SERVER"
+                echo "Database name: $DB_NAME"
 
-                sql = f"""
-                SET NOCOUNT ON;
+                echo "Deleting database (if it exists)..."
+                if az sql db show -g "$RG" -s "$SERVER" -n "$DB_NAME" >/dev/null 2>&1; then
+                  az sql db delete -g "$RG" -s "$SERVER" -n "$DB_NAME" --yes
+                else
+                  echo "DB not found in Azure control plane; skipping delete."
+                fi
 
-                DECLARE @db sysname = N'{db}';
+                echo "Waiting for DB to be fully gone..."
+                for i in {1..60}; do
+                  if az sql db show -g "$RG" -s "$SERVER" -n "$DB_NAME" >/dev/null 2>&1; then
+                    echo "Still exists (attempt $i/60). Sleeping 5s..."
+                    sleep 5
+                  else
+                    echo "DB is gone."
+                    break
+                  fi
+                done
 
-                PRINT 'Target DB: ' + @db;
+                if az sql db show -g "$RG" -s "$SERVER" -n "$DB_NAME" >/dev/null 2>&1; then
+                  echo "ERROR: DB still exists after waiting. Aborting."
+                  exit 1
+                fi
 
-                -- Reliable existence check
-                IF EXISTS (SELECT 1 FROM sys.databases WHERE name = @db)
-                BEGIN
-                  PRINT 'Database exists. Dropping...';
-                  EXEC (N'DROP DATABASE [' + REPLACE(@db, ']', ']]') + N']');
-                  PRINT 'DROP issued.';
-                END
-                ELSE
-                BEGIN
-                  PRINT 'Database not found in sys.databases.';
-                END
+                echo "Creating database..."
+                # Pick the SKU you actually use. Examples:
+                # --service-objective S0   (DTU model)
+                # --compute-model Serverless --family Gen5 --capacity 2  (vCore example)
+                az sql db create -g "$RG" -s "$SERVER" -n "$DB_NAME" --service-objective S0
 
-                -- Re-check (and fail loudly if it still exists)
-                IF EXISTS (SELECT 1 FROM sys.databases WHERE name = @db)
-                BEGIN
-                  PRINT 'Database still exists after DROP. Likely active connections or permission/visibility issue.';
-                  SELECT name, state_desc FROM sys.databases WHERE name = @db;
-                  THROW 50002, 'DROP DATABASE did not remove the database. Stop all connections (App Service/ETL) and retry.', 1;
-                END
-
-                PRINT 'Creating database...';
-                EXEC (N'CREATE DATABASE [' + REPLACE(@db, ']', ']]') + N']');
-                PRINT 'CREATE issued.';
-
-                -- Confirm it exists now
-                SELECT name, state_desc FROM sys.databases WHERE name = @db;
-                """
-                pathlib.Path("/tmp/rebuild.sql").write_text(sql, encoding="utf-8")
-                PY
-
-                echo "=== SQL being executed ==="
-                cat /tmp/rebuild.sql
-                echo "=========================="
-
-                sqlcmd -S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 180 -b -I -i /tmp/rebuild.sql
-
+                echo "Waiting for DB to become Online..."
+                for i in {1..60}; do
+                  state=$(az sql db show -g "$RG" -s "$SERVER" -n "$DB_NAME" --query status -o tsv 2>/dev/null || true)
+                  echo "Status: $state"
+                  if [[ "$state" == "Online" ]]; then
+                    echo "DB is Online."
+                    break
+                  fi
+                  sleep 5
+                done
 
 
             - name: Define run_folder function
