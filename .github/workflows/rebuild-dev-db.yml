@@ -83,14 +83,31 @@ jobs:
             - name: Drop and recreate DEV database
               shell: bash
               run: |
-                sqlcmd -S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 60 -b -I -Q "
-                    IF DB_ID(N'$DB_NAME') IS NOT NULL
+                sqlcmd -S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 120 -b -I \
+                  -Q "
+                  DECLARE @db sysname = N'$(DB_NAME)';
+
+                  IF DB_ID(@db) IS NOT NULL
+                  BEGIN
+                    -- Kill active sessions in the target DB (Azure SQL-friendly)
+                    DECLARE @kill nvarchar(max) = N'';
+                    SELECT @kill = @kill + N'KILL ' + CAST(session_id AS nvarchar(10)) + N';'
+                    FROM sys.dm_exec_sessions
+                    WHERE database_id = DB_ID(@db)
+                      AND session_id <> @@SPID;
+
+                    IF (@kill <> N'')
                     BEGIN
-                        ALTER DATABASE [$DB_NAME] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-                        DROP DATABASE [$DB_NAME];
-                    END;
-                    CREATE DATABASE [$DB_NAME]
-                " -v DB_NAME="$DB_NAME"
+                      EXEC (@kill);
+                    END
+
+                    DROP DATABASE [$([DB_NAME])];
+                  END
+
+                  CREATE DATABASE [$([DB_NAME])];
+                  " \
+                  -v DB_NAME="$DB_NAME"
+
 
             - name: Define run_folder function
               shell: bash
