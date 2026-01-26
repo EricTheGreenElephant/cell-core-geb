@@ -180,6 +180,30 @@ jobs:
                 done
                 EOF
                 chmod +x /tmp/run_folder.sh
+
+            - name: Bootstrap GitHub OIDC user in fresh DB (required after recreate)
+              shell: bash
+              run: |
+                set -euo pipefail
+
+                # Replace this with the exact Enterprise Application display name you used in master
+                # (the one you added to dbmanager), e.g. github-oidc-cellcore
+                PRINCIPAL_NAME="github-oidc-cellcore"
+
+                # Create user in the NEW database and grant rights
+                # Start with db_owner to keep it simple; later you can tighten it down.
+                sqlcmd -S "tcp:$DB_SERVER,1433" -d "$DB_NAME" -G -P "$TOKEN_FILE" -C -l 60 -b -I -Q "
+                  SET NOCOUNT ON;
+
+                  IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'${PRINCIPAL_NAME}')
+                  BEGIN
+                    CREATE USER [${PRINCIPAL_NAME}] FROM EXTERNAL PROVIDER;
+                  END;
+
+                  -- ensure permissions
+                  ALTER ROLE db_owner ADD MEMBER [${PRINCIPAL_NAME}];
+                "
+
             
             - name: Apply migrations
               shell: bash
