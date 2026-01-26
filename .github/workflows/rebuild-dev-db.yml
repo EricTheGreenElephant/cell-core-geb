@@ -91,31 +91,44 @@ jobs:
                 set -euo pipefail
 
                 python - <<'PY'
-                import os
-                import pathlib
+                import os, pathlib
 
-                db = os.environ["DB_NAME"]
+                db = os.environ["DB_NAME"].replace("'", "''")
 
                 sql = f"""
                 SET NOCOUNT ON;
 
-                PRINT 'Dropping database if it exists: {db}';
+                DECLARE @db sysname = N'{db}';
 
-                IF DB_ID(N'{db}') IS NOT NULL
+                PRINT 'Target DB: ' + @db;
+
+                -- Reliable existence check
+                IF EXISTS (SELECT 1 FROM sys.databases WHERE name = @db)
                 BEGIN
-                    DROP DATABASE [{db}];
-                    PRINT 'Database dropped.';
+                  PRINT 'Database exists. Dropping...';
+                  EXEC (N'DROP DATABASE [' + REPLACE(@db, ']', ']]') + N']');
+                  PRINT 'DROP issued.';
                 END
                 ELSE
                 BEGIN
-                    PRINT 'Database did not exist.';
+                  PRINT 'Database not found in sys.databases.';
                 END
 
-                PRINT 'Creating database: {db}';
-                CREATE DATABASE [{db}];
-                PRINT 'Database created.';
-                """
+                -- Re-check (and fail loudly if it still exists)
+                IF EXISTS (SELECT 1 FROM sys.databases WHERE name = @db)
+                BEGIN
+                  PRINT 'Database still exists after DROP. Likely active connections or permission/visibility issue.';
+                  SELECT name, state_desc FROM sys.databases WHERE name = @db;
+                  THROW 50002, 'DROP DATABASE did not remove the database. Stop all connections (App Service/ETL) and retry.', 1;
+                END
 
+                PRINT 'Creating database...';
+                EXEC (N'CREATE DATABASE [' + REPLACE(@db, ']', ']]') + N']');
+                PRINT 'CREATE issued.';
+
+                -- Confirm it exists now
+                SELECT name, state_desc FROM sys.databases WHERE name = @db;
+                """
                 pathlib.Path("/tmp/rebuild.sql").write_text(sql, encoding="utf-8")
                 PY
 
@@ -123,16 +136,8 @@ jobs:
                 cat /tmp/rebuild.sql
                 echo "=========================="
 
-                sqlcmd \
-                  -S "tcp:$DB_SERVER,1433" \
-                  -d master \
-                  -G \
-                  -P "$TOKEN_FILE" \
-                  -C \
-                  -l 180 \
-                  -b \
-                  -I \
-                  -i /tmp/rebuild.sql
+                sqlcmd -S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 180 -b -I -i /tmp/rebuild.sql
+
 
 
             - name: Define run_folder function
