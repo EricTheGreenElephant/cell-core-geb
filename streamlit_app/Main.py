@@ -14,15 +14,16 @@ if not user:
     st.write("You must be logged in to use application.")
     st.stop()
 
-user_id, access_map = ensure_user_and_access()
+#Uncomment after testing
+# user_id, access_map = ensure_user_and_access()
 
 # 5️ App content (only runs if signed in)
 st.title("CellCore Development")
 st.write(f"Welcome, **{user['name'] or user['email'] or 'friend'}**!")
 
 # show who/what (comment out in prod)
-with st.expander("Debug: identity & access", expanded=False):
-    st.write({"user_id": user_id, "access": access_map, "group_oids": st.session_state.get("group_oids")})
+# with st.expander("Debug: identity & access", expanded=False):
+#     st.write({"user_id": user_id, "access": access_map, "group_oids": st.session_state.get("group_oids")})
 
 # Example: simple authorization gate by Entra Object ID (best practice)
 # ALLOWED_OIDS = {""}  # replace with real OIDs
