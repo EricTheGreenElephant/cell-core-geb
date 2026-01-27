@@ -14,7 +14,7 @@ venv/
 # Data / artifacts / caches
 etl/data/
 etl/.sheet_cache.json
-*.xlsm
+# *.xlsm
 *.xlsx
 *.csv
 *.parquet
