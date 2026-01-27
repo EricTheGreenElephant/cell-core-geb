@@ -15,7 +15,7 @@ if not user:
     st.stop()
 
 #Uncomment after testing
-# user_id, access_map = ensure_user_and_access()
+user_id, access_map = ensure_user_and_access()
 
 # 5️ App content (only runs if signed in)
 st.title("CellCore Development")
