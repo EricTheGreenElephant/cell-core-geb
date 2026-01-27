@@ -12,7 +12,7 @@ import streamlit as st
 
 def _db_debug_banner():
     # show only non-secret config
-    st.warning({
+    st.write({
         "DB_AUTH_METHOD": os.getenv("DB_AUTH_METHOD"),
         "DB_SERVER": os.getenv("DB_SERVER"),
         "DB_NAME": os.getenv("DB_NAME"),

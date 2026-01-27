@@ -41,10 +41,10 @@ st.header("Database Connection Test")
 
 if st.button("Test Database Connection"):
     try:
-        rows = run_query("SELECT TOP (5) name, create_date FROM sys.tables ORDER BY create_date DESC;")
-        st.success("✅ Connected successfully using Managed Identity!")
-        st.write("Here are some tables SQL sees:")
-        st.table(rows)
+        run_query("SELECT TOP (5) name, create_date FROM sys.tables ORDER BY create_date DESC;")
+        # st.success("✅ Connected successfully using Managed Identity!")
+        # st.write("Here are some tables SQL sees:")
+        # st.table(rows)
     except Exception as e:
         st.error(f"❌ Database connection failed:\n\n{e}")
 
