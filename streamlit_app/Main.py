@@ -14,6 +14,7 @@ if not user:
     st.write("You must be logged in to use application.")
     st.stop()
 
+#Uncomment after testing
 user_id, access_map = ensure_user_and_access()
 
 # 5️ App content (only runs if signed in)
@@ -21,8 +22,8 @@ st.title("CellCore Development")
 st.write(f"Welcome, **{user['name'] or user['email'] or 'friend'}**!")
 
 # show who/what (comment out in prod)
-with st.expander("Debug: identity & access", expanded=False):
-    st.write({"user_id": user_id, "access": access_map, "group_oids": st.session_state.get("group_oids")})
+# with st.expander("Debug: identity & access", expanded=False):
+#     st.write({"user_id": user_id, "access": access_map, "group_oids": st.session_state.get("group_oids")})
 
 # Example: simple authorization gate by Entra Object ID (best practice)
 # ALLOWED_OIDS = {""}  # replace with real OIDs
@@ -40,10 +41,10 @@ st.success("You are authorized 🎉")
 
 # if st.button("Test Database Connection"):
 #     try:
-#         rows = run_query("SELECT TOP (5) name, create_date FROM sys.tables ORDER BY create_date DESC;")
-#         st.success("✅ Connected successfully using Managed Identity!")
-#         st.write("Here are some tables SQL sees:")
-#         st.table(rows)
+#         run_query("SELECT TOP (5) name, create_date FROM sys.tables ORDER BY create_date DESC;")
+#         # st.success("✅ Connected successfully using Managed Identity!")
+#         # st.write("Here are some tables SQL sees:")
+#         # st.table(rows)
 #     except Exception as e:
 #         st.error(f"❌ Database connection failed:\n\n{e}")
-# …rest of your app
+

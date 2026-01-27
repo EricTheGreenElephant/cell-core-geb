@@ -13,9 +13,16 @@ jobs:
 
         env:
             RG: rg-cellcore-dev
+            MIGRATIONS_DIR: db/migrations
+            SEED_DIR: db/seed
+            VIEWS_DIR: db/views
+            POSTSEED_DIR: db/postseed
         
         steps:
             - name: Checkout repo
+              uses: actions/checkout@v4
+
+            - name: Azure login (OIDC)
               uses: azure/login@v2
               with:
                 client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -61,7 +68,7 @@ jobs:
             - name: Acquire AAD token for Azure SQL
               shell: bash
               run: |
-                set -e
+                set -euo pipefail
                 TOKEN=$(az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv)
                 echo "SQLCMDACCESS_TOKEN=$TOKEN" >> $GITHUB_ENV
                 TOKEN_FILE=/tmp/sqltoken
@@ -71,25 +78,72 @@ jobs:
             - name: Smoke test server connectivity
               shell: bash
               run: |
-                sqlcmd -S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 30 -b -Q "SELECT @@VERSION;"
+                sqlcmd -S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 30 -b -Q "SELECT @@VERSION AS version; SELECT SUSER_SNAME() AS whoami;"
 
-            - name: Drop and recreate DEV database
+            - name: Stop Web App (prevents DB reconnection during rebuild)
               shell: bash
               run: |
-                sqlcmd _S "tcp:$DB_SERVER,1433" -d master -G -P "$TOKEN_FILE" -C -l 60 -b -Q "
-                    IF DB_ID(N'$DB_NAME') IS NOT NULL
-                    BEGIN
-                        ALTER DATABASE [$DB_NAME] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-                        DROP DATABASE [$DB_NAME];
-                    END;
-                    CREATE DATABASE [$DB_NAME]
-                "
+                az webapp stop -g "$RG" -n "cellcore-streamlit-web" || true
+
+            # Uncomment when a db drop and recreate is necessary
+            
+            # - name: Drop and recreate DEV database (Azure CLI)
+            #   shell: bash
+            #   run: |
+            #     set -euo pipefail
+
+            #     SERVER_FQDN="${DB_SERVER}"
+            #     SERVER="${SERVER_FQDN%%.database.windows.net}"
+
+            #     echo "Server short name: $SERVER"
+            #     echo "Database name: $DB_NAME"
+
+            #     echo "Deleting database (if it exists)..."
+            #     if az sql db show -g "$RG" -s "$SERVER" -n "$DB_NAME" >/dev/null 2>&1; then
+            #       az sql db delete -g "$RG" -s "$SERVER" -n "$DB_NAME" --yes
+            #     else
+            #       echo "DB not found in Azure control plane; skipping delete."
+            #     fi
+
+            #     echo "Waiting for DB to be fully gone..."
+            #     for i in {1..60}; do
+            #       if az sql db show -g "$RG" -s "$SERVER" -n "$DB_NAME" >/dev/null 2>&1; then
+            #         echo "Still exists (attempt $i/60). Sleeping 5s..."
+            #         sleep 5
+            #       else
+            #         echo "DB is gone."
+            #         break
+            #       fi
+            #     done
+
+            #     if az sql db show -g "$RG" -s "$SERVER" -n "$DB_NAME" >/dev/null 2>&1; then
+            #       echo "ERROR: DB still exists after waiting. Aborting."
+            #       exit 1
+            #     fi
+
+            #     echo "Creating database..."
+            #     # Pick the SKU you actually use. Examples:
+            #     # --service-objective S0   (DTU model)
+            #     # --compute-model Serverless --family Gen5 --capacity 2  (vCore example)
+            #     az sql db create -g "$RG" -s "$SERVER" -n "$DB_NAME" --service-objective S0
+
+            #     echo "Waiting for DB to become Online..."
+            #     for i in {1..60}; do
+            #       state=$(az sql db show -g "$RG" -s "$SERVER" -n "$DB_NAME" --query status -o tsv 2>/dev/null || true)
+            #       echo "Status: $state"
+            #       if [[ "$state" == "Online" ]]; then
+            #         echo "DB is Online."
+            #         break
+            #       fi
+            #       sleep 5
+            #     done
+
 
             - name: Define run_folder function
               shell: bash
               run: |
                 cat <<'EOF' > /tmp/run_folder.sh
-                #!/user/bin/env bash
+                #!/usr/bin/env bash
                 set -euo pipefail
 
                 FOLDER="$1"
@@ -128,14 +182,15 @@ jobs:
                 done
                 EOF
                 chmod +x /tmp/run_folder.sh
+
             
             - name: Apply migrations
               shell: bash
-              run: /tmp/run_folder.sh "db/migrations"
+              run: /tmp/run_folder.sh "$MIGRATIONS_DIR"
 
             - name: Apply seeds (DEV)
               shell: bash
-              run: /tmp/run_folder.sh "db/seed"
+              run: /tmp/run_folder.sh "$SEED_DIR"
 
             - name: Load group OIDs from secrets
               shell: bash
@@ -154,24 +209,30 @@ jobs:
               shell: bash
               run: |
                 sqlcmd -S "tcp:$DB_SERVER,1433" -d "$DB_NAME" -G -P "$TOKEN_FILE" -C -b -I \
-                    -v PROD_READ_OID="${PROD_READ_OID:-}" \
-                        PROD_WRITE_OID="${PROD_WRITE_OID:-}" \
-                        LOG_READ_OID="${LOG_READ_OID:-}" \
-                        LOG_WRITE_OID="${LOG_WRITE_OID:-}" \
-                        QM_READ_OID="${QM_READ_OID:-}" \
-                        QM_WRITE_OID="${QM_WRITE_OID:-}" \
-                        SALES_READ_OID="${SALES_READ_OID:-}" \
-                        SALES_WRITE_OID="${SALES_WRITE_OID:-}" \
-                        GLOBAL_ADMIN_OID="${GLOBAL_ADMIN_OID:-}" \
-                    -i db/seed/31_seed_group_area_rights.sql
+                  -v PROD_READ_OID="${PROD_READ_OID:-}" \
+                  -v PROD_WRITE_OID="${PROD_WRITE_OID:-}" \
+                  -v LOG_READ_OID="${LOG_READ_OID:-}" \
+                  -v LOG_WRITE_OID="${LOG_WRITE_OID:-}" \
+                  -v QM_READ_OID="${QM_READ_OID:-}" \
+                  -v QM_WRITE_OID="${QM_WRITE_OID:-}" \
+                  -v SALES_READ_OID="${SALES_READ_OID:-}" \
+                  -v SALES_WRITE_OID="${SALES_WRITE_OID:-}" \
+                  -v GLOBAL_ADMIN_OID="${GLOBAL_ADMIN_OID:-}" \
+                  -i db/seed/31_seed_group_area_rights.sql
 
             - name: Apply views
               shell: bash
-              run: /tmp/run_folder.sh "db/views"
+              run: /tmp/run_folder.sh "$VIEWS_DIR"
 
             - name: Apply postseed
               shell: bash
-              run: /tmp/run_folder.sh "db/postseed"
+              run: /tmp/run_folder.sh "$POSTSEED_DIR"
+
+            - name: Start Web App
+              if: always()
+              shell: bash
+              run: |
+                az webapp start -g "$RG" -n "cellcore-streamlit-web" || true
 
             - name: Close temp firewall hole
               if: always()
