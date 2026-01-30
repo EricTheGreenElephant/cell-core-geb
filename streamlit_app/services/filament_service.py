@@ -64,6 +64,29 @@ def insert_filament_acclimatization(db: Session, filament_id: int, user_id: int)
     db.commit()
 
 @transactional
+def get_mountable_filaments(db: Session) -> list[dict]:
+    sql = """
+        SELECT 
+            f.id, f.filament_id, f.serial_number, loc.location_name,
+            COALESCE(fm.remaining_weight, f.weight_grams) AS weight_grams
+        FROM filaments f
+        JOIN storage_locations loc ON f.location_id = loc.id
+        LEFT JOIN filament_mounting fm 
+            ON f.id = fm.filament_tracking_id
+        WHERE
+            NOT EXISTS (
+                SELECT 1
+                FROM filament_mounting fm2
+                WHERE fm2.filament_tracking_id = f.id
+                AND fm2.status = 'In Use'
+            )
+            AND COALESCE(fm.remaining_weight, f.weight_grams) >= 300;
+    """
+    result = db.execute(text(sql))
+    cols = result.keys()
+    return [dict(zip(cols, row)) for row in result.fetchall()]
+
+@transactional
 def get_acclimatized_filaments(db: Session) -> list[dict]:
     sql = """
         SELECT f.id, f.filament_id, f.serial_number, f.weight_grams,
@@ -117,7 +140,8 @@ def insert_filament_mount(
         filament_id: int,
         printer_id: int,
         mounted_by: int,
-        acclimatization_id: int
+        # acclimatization_id: int
+        weight_grams: float
 ):
     filament = db.get(Filament, filament_id)
     if not filament:
@@ -127,17 +151,18 @@ def insert_filament_mount(
         filament_tracking_id=filament_id,
         printer_id=printer_id,
         mounted_by=mounted_by,
-        remaining_weight=filament.weight_grams,
+        # remaining_weight=filament.weight_grams,
+        remaining_weight=weight_grams,
         mounted_at=datetime.now(timezone.utc)
     )
     db.add(mounting)
 
-    stmt = (
-        update(FilamentAcclimatization)
-        .where(FilamentAcclimatization.id == acclimatization_id)
-        .values(status='Complete')
-    )
-    db.execute(stmt)
+    # stmt = (
+    #     update(FilamentAcclimatization)
+    #     .where(FilamentAcclimatization.id == acclimatization_id)
+    #     .values(status='Complete')
+    # )
+    # db.execute(stmt)
     db.commit()
 
 @transactional

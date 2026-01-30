@@ -1,6 +1,7 @@
 import streamlit as st
 import time
 from services.filament_service import (
+    get_mountable_filaments,
     get_acclimatized_filaments,
     get_available_printers,
     insert_filament_mount
@@ -18,18 +19,25 @@ def render_mount_form():
     - On submission, filament and printer are added to filament_mounting table
         creating new id. 
     """
-    st.subheader("Mount Acclimatized Filament")
+    # st.subheader("Mount Acclimatized Filament")
+    st.subheader("Mount Filament")
 
     with get_session() as db:
-        filaments = get_acclimatized_filaments(db)
+        # filaments = get_acclimatized_filaments(db)
+        filaments = get_mountable_filaments(db)
         printers: list[PrinterOut] = get_available_printers(db)
 
     if not filaments:
-        st.info("No filaments have completed acclimatization.")
+        # st.info("No filaments have completed acclimatization.")
+        st.info("No filaments are available.")
         return
     
+    # filament_options = {
+    #     f"#{f['filament_id']} | {f['serial_number']} ({f['weight_grams']}g)": (f["id"], f["acclimatization_id"])
+    #     for f in filaments
+    # }
     filament_options = {
-        f"#{f['filament_id']} | {f['serial_number']} ({f['weight_grams']}g)": (f["id"], f["acclimatization_id"])
+        f"#{f['filament_id']} | {f['serial_number']} ({f['weight_grams']}g)": (f["id"], f["weight_grams"])
         for f in filaments
     }
 
@@ -48,10 +56,14 @@ def render_mount_form():
         if submitted:
             try: 
                 user_id = st.session_state.get("user_id")
-                filament_id, acclimatization_id = filament_options[selected_filament]
+                # filament_id, acclimatization_id = filament_options[selected_filament]
+                filament_id, weight_grams = filament_options[selected_filament]
                 printer_id = printer_options[selected_printer]
+                
                 with get_session() as db:
-                    insert_filament_mount(db, filament_id, printer_id, user_id, acclimatization_id)
+                    # insert_filament_mount(db, filament_id, printer_id, user_id, acclimatization_id)
+                    insert_filament_mount(db, filament_id, printer_id, user_id, weight_grams)
+
                 st.success("Filament mounted successfully!")
                 time.sleep(1.5)
                 st.rerun()
