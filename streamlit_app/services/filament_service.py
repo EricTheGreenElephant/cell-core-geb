@@ -80,7 +80,7 @@ def get_mountable_filaments(db: Session) -> list[dict]:
                 WHERE fm2.filament_tracking_id = f.id
                 AND fm2.status = 'In Use'
             )
-            AND COALESCE(fm.remaining_weight, f.weight_grams) >= 300;
+            AND COALESCE(fm.remaining_weight, f.weight_grams) >= 165;
     """
     result = db.execute(text(sql))
     cols = result.keys()
