@@ -69,6 +69,7 @@ def render_harvest_form():
                 col1, col2, col_spacer = st.columns([0.5, 0.5, 1])
                 with col1:
                     submitted = st.form_submit_button("✅ Harvest Product", width='stretch')
+
                 with col2:
                     cancel = st.form_submit_button("❌ Cancel Product", width='stretch')
 
@@ -85,7 +86,7 @@ def render_harvest_form():
                         mount_id = mount_options[selected_mount]
                         user_id = st.session_state.get("user_id")
                         with get_session() as db:
-                            insert_product_harvest(
+                            product_id = insert_product_harvest(
                                 db,
                                 request_id=unit['id'], 
                                 filament_mount_id=mount_id, 
@@ -93,12 +94,13 @@ def render_harvest_form():
                                 lid_id=lid_id, 
                                 seal_id=seal_id
                             )
-                        st.success("Product marked as harvested.")
+                        st.success(f"Product, {product_id["id"]}, marked as harvested.")
                         time.sleep(1.5)
                         st.rerun()
                     except Exception as e:
                         st.error("Error fulfilling request.")
                         st.exception(e)
+                
                 elif cancel:
                     try:
                         with get_session() as db:

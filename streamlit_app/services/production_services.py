@@ -119,6 +119,7 @@ def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int,
     )
     
     db.commit()
+    return {"id": tracking.product_id}
 
 @transactional
 def cancel_product_request(db: Session, request_id: int):
