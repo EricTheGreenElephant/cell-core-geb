@@ -30,7 +30,7 @@ def get_label_data_by_product_id(db: Session, product_id: int):
     
     return dict(result)
 
-def get_harvested(db: Session) -> list[dict]:
+def get_harvested(db: Session, selected_option: str) -> list[dict]:
     sql = """
         SELECT
             pt.id,

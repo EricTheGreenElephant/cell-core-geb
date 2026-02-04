@@ -83,8 +83,10 @@ QR_LABEL_MAP = [
         },
         'qr_required': True,
         'qr_specs': {
-            'qr_position': (457, 333),
-            'qr_size': 135,
+            # 'qr_position': (457, 333),
+            'qr_position': (440, 315),
+            # 'qr_size': 135,
+            'qr_size': 170,
             'qr_data': ""
         },
         'print_size': 50
