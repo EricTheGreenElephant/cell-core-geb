@@ -67,13 +67,14 @@ def generate_label_with_overlays(
     bg = Image.new("RGBA", composed.size, (255, 255, 255, 255))
     # flattened = Image.alpha_composite(bg, base)
     flattened = Image.alpha_composite(bg, composed).convert("RGB")
+    return flattened
 
     # rgb_base = flattened.convert("RGB")
 
-    output = BytesIO()
-    # base.save(output, format="PNG") 
-    # rgb_base.save(output, format="PDF")
-    flattened.save(output, format="PDF")
-    # rgb_base.save(output, format="PDF", resolution=TARGET_DPI)
-    output.seek(0)
-    return output
+    # output = BytesIO()
+    # # base.save(output, format="PNG") 
+    # # rgb_base.save(output, format="PDF")
+    # flattened.save(output, format="PDF")
+    # # rgb_base.save(output, format="PDF", resolution=TARGET_DPI)
+    # output.seek(0)
+    # return output

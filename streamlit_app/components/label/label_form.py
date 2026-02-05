@@ -1,6 +1,8 @@
 import streamlit as st
 import base64
+import copy
 from datetime import datetime
+from io import BytesIO
 from components.label.label_generator import generate_label_with_overlays
 from services.label_services import get_label_data_by_product_id, get_harvested
 from db.orm_session import get_session
@@ -128,6 +130,9 @@ def render_label_form():
                     return
             else:    
                 product_data = get_harvested(db, selected_option)
+                if not product_data:
+                    st.warning("Product not found.")
+                    
                 product_options = {
                     f"{p['product_id']} | {p['reference_number']} | {p['product_type']}": product_data.index(p)
                     for p in product_data
@@ -155,76 +160,114 @@ def render_label_form():
     if product_sku:
         label_choices = label_validation(product_sku)
         
-        label_choice = st.selectbox(
-            "Choose label",
+        # label_choice = st.selectbox(
+        #     "Choose label",
+        #     options=label_choices,
+        #     index=0
+        # )
+        selected_labels = st.multiselect(
+            "Choose label(s)",
             options=label_choices,
-            index=0
+            default=label_choices[:1] if label_choices else []
         )
 
-        label_specs, qr_required, qr_specs, print_size = label_spec_finder(label_choice)
-
-        if label_choice == "CSmini_v3":
+        if "CSmini_v3" in selected_labels:
             selected_product_ids = st.multiselect(
                 "Choose Product IDs to display:",
                 options=product_ids
             )
 
-            if len(product_ids) < 3:
+            if len(selected_product_ids) < 3:
                 st.warning("Your label contains less than 3 CS minis.")
-            if len(product_ids) > 3:
+            if len(selected_product_ids) > 3:
                 st.warning("Your label contains more than 3 CS minis.")
 
-            product_id = ', '.join(str(x) for x in selected_product_ids)
-            st.write(product_id)
+            display_product_id = ', '.join(str(x) for x in selected_product_ids)
+            st.write(display_product_id)
 
-        if details_required and label_choice:
-            product_specs = SKU_DATA_SPECS[product_sku]
-            product_type = product_specs["product_type"]
-            surface_area = product_specs["surface_area"]
-            qr_specs['qr_data'] = str(product_id)
-            label_specs['surface_area']['text'] = f"{surface_area} cm\u00b2"
-            label_specs['product_id']['text'] = str(product_id)
-            label_specs['expiration_formatted']['text'] = expiration_formatted
-            if "product_type" in label_specs:
-                label_specs['product_type']['text'] = product_type
-        
-        label_specs['product_sku']['text'] = product_sku
-        background_path = f"streamlit_app/assets/labels/{label_choice}.png"
+        generate = st.button("Generate Label", type="primary", use_container_width=True)
 
-    generate = st.button("Generate Label", type="primary", use_container_width=True)
+        if generate and selected_labels:
+            images = []
+
+            for label_choice in selected_labels:
+
+                label_specs, qr_required, qr_specs, print_size = label_spec_finder(label_choice)
+
+                label_specs = copy.deepcopy(label_specs)
+                qr_specs = copy.deepcopy(qr_specs)
+
+                if label_choice == "CSmini_v3":
+                    product_id = display_product_id
+                #     selected_product_ids = st.multiselect(
+                #         "Choose Product IDs to display:",
+                #         options=product_ids
+                #     )
+
+                #     if len(product_ids) < 3:
+                #         st.warning("Your label contains less than 3 CS minis.")
+                #     if len(product_ids) > 3:
+                #         st.warning("Your label contains more than 3 CS minis.")
+
+                #     product_id = ', '.join(str(x) for x in selected_product_ids)
+                #     st.write(product_id)
+
+                if details_required and label_choice:
+                    product_specs = SKU_DATA_SPECS[product_sku]
+                    product_type = product_specs["product_type"]
+                    surface_area = product_specs["surface_area"]
+                    qr_specs['qr_data'] = str(product_id)
+                    label_specs['surface_area']['text'] = f"{surface_area} cm\u00b2"
+                    label_specs['product_id']['text'] = str(product_id)
+                    label_specs['expiration_formatted']['text'] = expiration_formatted
+                    if "product_type" in label_specs:
+                        label_specs['product_type']['text'] = product_type
+                
+                label_specs['product_sku']['text'] = product_sku
+                background_path = f"streamlit_app/assets/labels/{label_choice}.png"
+
+    # generate = st.button("Generate Label", type="primary", use_container_width=True)
     
-    if generate and label_choice:
-        label_img = generate_label_with_overlays(
-            background_path=background_path,
-            fields=label_specs,
-            qr_specs=qr_specs,
-            qr_required=qr_required,
-            print_size=print_size
-        )
+    # if generate and label_choice:
 
-        st.success("Label generated.")
+                label_img = generate_label_with_overlays(
+                    background_path=background_path,
+                    fields=label_specs,
+                    qr_specs=qr_specs,
+                    qr_required=qr_required,
+                    print_size=print_size
+                )
 
-        # --- Inline PDF preview(iframe) ---
-        pdf_b64 = base64.b64encode(label_img.getvalue()).decode("utf-8")
-        st.markdown(
-            f"""
-            <iframe
-                src="data:application/pdf;base64,{pdf_b64}"
-                width="100%"
-                height="700"
-                style="border:1px solid #ddd; border-radius:8px;"
-            ></iframe>
-            """,
-            unsafe_allow_html=True,
-        )
+                images.append(label_img)
 
-        st.markdown(
-            f"""
-            <p style="margin-top: 0.5rem;">
-                <a href="data:application/pdf;base64,{pdf_b64}" target="_blank">
-                    Open label in new tab
-                </a>
-            </p>
-            """,
-            unsafe_allow_html=True,
-        )
+            pdf_out = BytesIO()
+            images[0].save(pdf_out, format="PDF", save_all=True, append_images=images[1:])
+            pdf_out.seek(0)
+
+            pdf_bytes = pdf_out.getvalue()
+            pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
+            # --- Inline PDF preview(iframe) ---
+
+            # pdf_b64 = base64.b64encode(label_img.getvalue()).decode("utf-8")
+            st.markdown(
+                f"""
+                <iframe
+                    src="data:application/pdf;base64,{pdf_b64}"
+                    width="100%"
+                    height="700"
+                    style="border:1px solid #ddd; border-radius:8px;"
+                ></iframe>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            st.markdown(
+                f"""
+                <p style="margin-top: 0.5rem;">
+                    <a href="data:application/pdf;base64,{pdf_b64}" target="_blank">
+                        Open label in new tab
+                    </a>
+                </p>
+                """,
+                unsafe_allow_html=True,
+            )

@@ -31,6 +31,10 @@ def get_label_data_by_product_id(db: Session, product_id: int):
     return dict(result)
 
 def get_harvested(db: Session, selected_option: str) -> list[dict]:
+    if selected_option == "Pull Harvested":
+        stage_code = 'Printed'
+    else:
+        stage_code = 'HarvestQCComplete'
     sql = """
         SELECT
             pt.id,
@@ -47,8 +51,8 @@ def get_harvested(db: Session, selected_option: str) -> list[dict]:
         JOIN product_harvest ph ON pt.harvest_id = ph.id
         JOIN product_requests pr ON ph.request_id = pr.id
         JOIN lifecycle_stages ls ON pt.current_stage_id = ls.id
-        WHERE ls.stage_code = 'Printed';
+        WHERE ls.stage_code = :stage_code;
     """
-    result = db.execute(text(sql))
+    result = db.execute(text(sql), {'stage_code': stage_code})
     cols = result.keys()
     return [dict(zip(cols, row)) for row in result.fetchall()]
