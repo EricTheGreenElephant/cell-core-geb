@@ -23,12 +23,8 @@ def get_label_data_by_product_id(db: Session, product_id: int):
         """
     )
 
-    result = db.execute(query, {"product_id": product_id}).mappings().first()
+    return [dict(r) for r in db.execute(query, {"product_id": product_id}).mappings().all()]
 
-    if not result:
-        return None
-    
-    return dict(result)
 
 def get_harvested(db: Session, selected_option: str) -> list[dict]:
     if selected_option == "Pull Harvested":
@@ -53,6 +49,4 @@ def get_harvested(db: Session, selected_option: str) -> list[dict]:
         JOIN lifecycle_stages ls ON pt.current_stage_id = ls.id
         WHERE ls.stage_code = :stage_code;
     """
-    result = db.execute(text(sql), {'stage_code': stage_code})
-    cols = result.keys()
-    return [dict(zip(cols, row)) for row in result.fetchall()]
+    return [dict(r) for r in db.execute(text(sql), {'stage_code': stage_code}).mappings().all()]
