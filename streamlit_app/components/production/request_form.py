@@ -25,9 +25,19 @@ def render_product_request_form():
             "pack_qty": int(pack_qty or 1),
         }
     
-    with st.form("new_product_request_form"):
+    with st.form("new_product_request_form", clear_on_submit=True):
         label = st.selectbox("Select Product (SKU)", list(label_map.keys()))
-        quantity = st.number_input("Quantity to Print", min_value=1, step=1)
+        quantity = st.number_input(
+            "Quantity to Print", 
+            min_value=1, 
+            step=1,
+            help="CS minis will print in bundles, i.e. 1 = 3 minis. Choose override to print only 1 mini."
+        )
+        override = st.checkbox(
+            "Print mini in 1s", 
+            value=False, 
+            help="Override will change quantity to 1 = 1 for minis."
+        )
         notes = st.text_area("Notes (optional)", max_chars=250).strip()
 
         submitted = st.form_submit_button("Submit Request")
@@ -41,7 +51,7 @@ def render_product_request_form():
             sku_id = label_map[label]
             meta = meta_map[sku_id]
             pack_qty = meta["pack_qty"]
-            is_bundle = meta["is_bundle"]
+            is_bundle = meta["is_bundle"] if not override else False
 
             expanded_qty = quantity * pack_qty if is_bundle else quantity
 
