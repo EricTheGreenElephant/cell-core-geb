@@ -45,6 +45,7 @@ class HarvestedProductOut(BaseModel):
 class ProductTrackingRead(BaseModel):
     id: int
     product_id: int
+    product_code: Optional[str] = None
     sku_id: Optional[int] = None 
     sku: Optional[str] = None
     current_status_id: Optional[int]

@@ -74,8 +74,9 @@ class ProductTracking(Base):
     __tablename__ = 'product_tracking'
     id = Column(Integer, primary_key=True)
     harvest_id = Column(Integer, ForeignKey('product_harvest.id'), unique=True, nullable=False)
+    product_code = Column(String(20), unique=True, nullable=True, index=True)
     sku_id = Column(Integer, ForeignKey('product_skus.id'), nullable=False)
-    product_type_id = Column(Integer, ForeignKey('product_skus.id'), nullable=True)
+    product_type_id = Column(Integer, ForeignKey('product_types.id'), nullable=True)
     product_id = Column(BigInteger, unique=True, nullable=False, index=True, server_default=text("NEXT VALUE FOR dbo.product_id_seq"))
     current_status_id = Column(Integer, ForeignKey("product_statuses.id"), nullable=True)
     previous_stage_id = Column(Integer, ForeignKey('lifecycle_stages.id'), nullable=True)
