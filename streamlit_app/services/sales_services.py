@@ -2,6 +2,7 @@ import streamlit as st
 from datetime import datetime, timezone
 from sqlalchemy import text, select
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.exc import IntegrityError
 from schemas.sales_schemas import SalesOrderInput
 from schemas.audit_schemas import FieldChangeAudit
 from models.sales_models import Order, OrderItem
@@ -46,6 +47,7 @@ def get_sales_ready_inventory(db: Session):
         """
             SELECT 
                 pt.id,
+                psku.id AS sku_id,
                 psku.sku,
                 psku.name AS sku_name,
                 pr.lot_number,
@@ -70,6 +72,44 @@ def get_sales_ready_inventory(db: Session):
     result = db.execute(query).fetchall()
     return [dict(row._mapping) for row in result]
 
+def customer_exists(db: Session, customer_name: str) -> bool:
+    row = db.execute(
+        text("SELECT 1 FROM customers WHERE customer_name = :name"),
+        {"name": customer_name},
+    ).first()
+    return row is not None 
+
+def create_customer(db: Session, customer_name: str) -> int:
+    """
+    Inserts a customer and returns the new customer's id.
+    
+    Raises:
+        ValueError if duplicate
+    """
+    name = (customer_name or "").strip()
+    if not name:
+        raise ValueError("Customer name cannot be empty.")
+    
+    if customer_exists(db, name):
+        raise ValueError("That customer already exists.")
+    
+    try:
+        row = db.execute(
+            text("""
+                INSERT INTO customers (customer_name)
+                OUTPUT INSERTED.id
+                VALUES (:name)
+            """),
+            {"name": name},
+        ).first()
+
+        db.flush()
+
+        return int(row[0]) if row else None
+
+    except IntegrityError:
+        raise ValueError("That customer already exists.")
+    
 def get_customers(db: Session):
     rows = db.execute(text("SELECT id, customer_name FROM customers ORDER BY customer_name")).fetchall()
     return [dict(row._mapping) for row in rows]
