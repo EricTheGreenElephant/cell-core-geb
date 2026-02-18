@@ -94,7 +94,7 @@ def render_harvest_form():
                                 lid_id=lid_id, 
                                 seal_id=seal_id
                             )
-                        st.success(f"Product, {product_id["id"]} | {product_id["product_code"]}, marked as harvested.")
+                        st.success(f"Product, {product_id['id']} | {product_id['product_code']}, marked as harvested.")
                         time.sleep(1.5)
                         st.rerun()
                     except Exception as e:
