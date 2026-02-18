@@ -22,6 +22,7 @@ SELECT pt.id,
     qc.inspection_result AS qc_result,
     qc.weight_grams,
     qc.visual_pass,
+    qc.notes AS qc_notes,
     qc_user.display_name AS qc_inspected_by,
 
     f.serial_number as filament,

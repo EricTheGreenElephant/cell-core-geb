@@ -1,3 +1,4 @@
+import string
 from sqlalchemy.orm import Session
 from sqlalchemy import text, select, or_
 from datetime import datetime
@@ -9,8 +10,45 @@ from services.tracking_service import generate_tracking_id, record_materials_pos
 from utils.db_transaction import transactional
 
 
-def generate_lot_number() -> str:
-    return f"LOT-{datetime.now().strftime('%Y%d%m%H%S')}"
+_ALPHABET = string.digits + string.ascii_uppercase
+
+def to_base36(n: int) -> str:
+    if n < 0:
+        raise ValueError("n must be non-negative")
+    if n == 0:
+        return "0"
+    out = []
+    while n:
+        n, r = divmod(n, 36)
+        out.append(_ALPHABET[r])
+    return "".join(reversed(out))
+
+def generate_lot_number(db: Session) -> str:
+    yy = f"{datetime.now().year % 100:02d}"
+    batch_number = db.execute(text("SELECT NEXT VALUE FOR dbo.seq_batch_number")).scalar_one()
+    cc = to_base36(int(batch_number)).rjust(2, "0")
+    return f"{yy}{cc}"
+
+def allocate_seq_for_lot(db: Session, lot_number: str) -> int:
+    row = db.execute(
+        text("EXEC dbo.AllocateNextSeqForLot @lot_number=:lot"),
+        {"lot": lot_number},
+    ).mappings().one()
+
+    return int(row["item_seq"])
+
+def build_product_code(db: Session, request_id: int) -> str:
+    lot = db.execute(
+        text("SELECT lot_number FROM dbo.product_requests WHERE id=:rid"),
+        {"rid": request_id},
+    ).scalar_one()
+
+    if not lot or len(lot) < 4:
+        raise ValueError("Request lot_number (YYCC) is missing/invalid")
+    
+    seq = allocate_seq_for_lot(db, lot)
+
+    return f"{lot}{seq:04d}"
 
 @transactional
 def get_requestable_skus(db: Session) -> list[tuple[int, str, str]]:
@@ -37,7 +75,7 @@ def get_requestable_skus(db: Session) -> list[tuple[int, str, str]]:
 
 @transactional
 def insert_product_request(db: Session, data: ProductRequestCreate):
-    lot = generate_lot_number()
+    lot = generate_lot_number(db)
     for _ in range(data.quantity):
         request = ProductRequest(
             requested_by=data.requested_by,
@@ -98,13 +136,16 @@ def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int,
     sku_id = db.scalar(text("SELECT sku_id FROM product_requests WHERE id = :rid"), {"rid": request_id})
     product_type_id = db.scalar(text("SELECT product_type_id FROM product_skus WHERE id = :sid"), {"sid": sku_id})
 
+    product_code = build_product_code(db, request_id)
+
     # === Insert Product Tracking Record ===
     tracking = ProductTracking(
         harvest_id=harvest.id,
         sku_id=sku_id,
         product_type_id=product_type_id,
         current_stage_id=1,
-        current_status_id=pending_status_id
+        current_status_id=pending_status_id,
+        product_code=product_code,
     )
     db.add(tracking)
     db.flush()
@@ -119,6 +160,7 @@ def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int,
     )
     
     db.commit()
+    return {"id": tracking.product_id, "product_code": tracking.product_code}
 
 @transactional
 def cancel_product_request(db: Session, request_id: int):
