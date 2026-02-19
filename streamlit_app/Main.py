@@ -3,7 +3,7 @@ from utils.auth import get_current_user
 from utils.auth_ui import render_account_box
 from utils.access_bootstrap import ensure_user_and_access
 
-st.set_page_config(page_title="CellCore Production Dashboard", layout="wide")
+st.set_page_config(page_title="Elephactory Production Dashboard", layout="wide")
 
 render_account_box(expanded=True, home_after_logout="/")
 
@@ -18,7 +18,7 @@ if not user:
 user_id, access_map = ensure_user_and_access()
 
 # 5️ App content (only runs if signed in)
-st.title("CellCore Development")
+st.title("Elephactory Development")
 st.write(f"Welcome, **{user['name'] or user['email'] or 'friend'}**!")
 
 # show who/what (comment out in prod)

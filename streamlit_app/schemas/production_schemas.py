@@ -8,6 +8,7 @@ class ProductRequestCreate(BaseModel):
     sku_id: int
     quantity: int
     notes: Optional[str] = ""
+    is_tech_transfer: bool = False 
 
 
 class ProductRequestOut(BaseModel):
@@ -24,6 +25,8 @@ class ProductRequestOut(BaseModel):
     diameter_mm: Optional[float] = None
     average_weight_g: Optional[float] = None
     weight_buffer_g: Optional[float] = None
+
+    is_tech_transfer: bool = False 
 
     model_config = ConfigDict(from_attributes=True)
 

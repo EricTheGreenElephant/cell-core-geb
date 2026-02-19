@@ -23,7 +23,7 @@ def render_qc_edit_form():
     selected = options[selected_label]
 
     weight = st.number_input("Weight (g)", min_value=0.0, format="%.2f", value=float(selected["weight_grams"]))
-    pressure = st.number_input("Pressure Drop", min_value=0.0, format="%.2f", value=float(selected["pressure_drop"]))
+    pressure = st.number_input("Pressure Drop", min_value=0.0, format="%.3f", value=float(selected["pressure_drop"]))
     visual_pass = st.radio("Visual Pass", [True, False], index=0 if selected["visual_pass"] else 1)
     result = st.selectbox("Inspection Result", ["Passed", "B-Ware", "Quarantine", "Waste"], index=["Passed", "B-Ware", "Quarantine", "Waste"].index(selected["inspection_result"]))
     notes = st.text_area("Notes", max_chars=255, value=selected["notes"] or "").strip()

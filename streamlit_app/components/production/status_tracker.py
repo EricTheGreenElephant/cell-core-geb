@@ -17,7 +17,8 @@ def render_status_tracker():
 
     try:
         status_data = load_product_status_data()
-        st.dataframe(status_data, width='stretch')
+        st.dataframe(status_data, width='stretch', column_config={"pressure_drop": st.column_config.NumberColumn(format="%.3f")})
+        
     except Exception as e:
         st.error("Could not load product status.")
         st.exception(e)

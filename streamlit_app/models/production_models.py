@@ -52,6 +52,7 @@ class ProductRequest(Base):
     status = Column(String, default="Pending")
     requested_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     notes = Column(String)
+    is_tech_transfer = Column(Boolean, nullable=False, default=False) 
 
     sku = relationship("ProductSKU", back_populates="requests", foreign_keys=[sku_id])
 
@@ -83,6 +84,7 @@ class ProductTracking(Base):
     current_stage_id = Column(Integer, ForeignKey('lifecycle_stages.id'), nullable=False)
     location_id = Column(Integer, ForeignKey('storage_locations.id'), nullable=True)
     last_updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    was_tech_transfer = Column(Boolean, nullable=False, default=False)
 
     sku = relationship("ProductSKU", back_populates="trackings", foreign_keys=[sku_id])
     stage = relationship('LifecycleStages', foreign_keys=[current_stage_id])
