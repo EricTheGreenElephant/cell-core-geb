@@ -81,7 +81,8 @@ def insert_product_request(db: Session, data: ProductRequestCreate):
             requested_by=data.requested_by,
             sku_id=data.sku_id,
             lot_number=lot,
-            notes=data.notes
+            notes=data.notes,
+            is_tech_transfer=bool(getattr(data, "is_tech_transfer", False)),
         )
         db.add(request)
     db.commit()
@@ -97,6 +98,7 @@ def get_pending_requests(db: Session) -> list[dict]:
             pr.lot_number,
             pr.status,
             pr.requested_at,
+            pr.is_tech_transfer,  
             sps.average_weight_g,
             sps.weight_buffer_g
         FROM product_requests pr
@@ -133,7 +135,14 @@ def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int,
     )
 
     # === Derive the SKU for this unit (direct via request) ===
-    sku_id = db.scalar(text("SELECT sku_id FROM product_requests WHERE id = :rid"), {"rid": request_id})
+    req = db.execute(
+        text("SELECT sku_id, is_tech_transfer FROM product_requests WHERE id = :rid"),
+        {"rid": request_id},
+    ).mappings().one()
+
+    sku_id = int(req["sku_id"])
+    is_tt = bool(req.get("is_tech_transfer", 0))
+
     product_type_id = db.scalar(text("SELECT product_type_id FROM product_skus WHERE id = :sid"), {"sid": sku_id})
 
     product_code = build_product_code(db, request_id)
@@ -146,6 +155,7 @@ def insert_product_harvest(db: Session, request_id: int, filament_mount_id: int,
         current_stage_id=1,
         current_status_id=pending_status_id,
         product_code=product_code,
+        was_tech_transfer=is_tt,
     )
     db.add(tracking)
     db.flush()

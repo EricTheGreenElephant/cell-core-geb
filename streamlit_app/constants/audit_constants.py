@@ -9,6 +9,7 @@ ALLOWED_AUDIT_TABLES = {
     "product_quality_control",
     "product_tracking",
     "product_print_specs",
+    "product_skus",
     "treatment_batches",
     "treatment_batch_products",
     "post_treatment_inspections",
