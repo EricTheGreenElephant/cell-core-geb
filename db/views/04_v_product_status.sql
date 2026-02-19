@@ -12,6 +12,7 @@ SELECT pt.id,
 
     COALESCE(ptype_pt.name,  ptype_req.name) AS product_type,
     COALESCE(sku_pt.sku,     sku_req.sku)    AS sku,
+    pt.was_tech_transfer,
 
     ph.id AS harvest_id,
     pr.lot_number,

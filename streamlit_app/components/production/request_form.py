@@ -27,6 +27,11 @@ def render_product_request_form():
     
     with st.form("new_product_request_form", clear_on_submit=True):
         label = st.selectbox("Select Product (SKU)", list(label_map.keys()))
+        is_tech_transfer = st.checkbox(
+            "Tech Transfer run",
+            value=False,
+            help="Marks these printed units as Tech Transfer permanently.",
+        )
         quantity = st.number_input(
             "Quantity to Print", 
             min_value=1, 
@@ -70,7 +75,8 @@ def render_product_request_form():
                             requested_by=user_id,
                             sku_id=sku_id,
                             quantity=int(expanded_qty),
-                            notes=notes
+                            notes=notes,
+                            is_tech_transfer=bool(is_tech_transfer),
                         )
                         insert_product_request(db, payload)
 

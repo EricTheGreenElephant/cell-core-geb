@@ -21,7 +21,9 @@ def render_harvest_form():
         return
 
     for unit in pending:
-        with st.expander(f"🧾 **Request #{unit['id']}** | {unit['sku']} - {unit['sku_name']} (Lot: {unit['lot_number']})"):
+        tt = bool(unit.get("is_tech_transfer", 0))
+        tt_badge = "| Tech Transfer" if tt else ""
+        with st.expander(f"🧾 **Request #{unit['id']}** | {unit['sku']} - {unit['sku_name']} (Lot: {unit['lot_number']}) {tt_badge}"):
             st.markdown(f"**Requested by:** {unit['requested_by']}  \n**Date:** {unit['requested_at']}")
 
             # Calculate required weight with tolerated buffer weight and additional buffer  
