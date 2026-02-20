@@ -99,9 +99,15 @@ def render_harvest_form():
                         st.success(f"Product, {product_id['id']} | {product_id['product_code']}, marked as harvested.")
                         time.sleep(1.5)
                         st.rerun()
+                    # except Exception as e:
+                    #     st.error("Error fulfilling request.")
+                    #     st.exception(e)
                     except Exception as e:
                         st.error("Error fulfilling request.")
                         st.exception(e)
+                        if getattr(e, "__cause__", None):
+                            st.write("Underlying error:")
+                            st.exception(e.__cause__)
                 
                 elif cancel:
                     try:
